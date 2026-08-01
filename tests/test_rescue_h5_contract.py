@@ -85,6 +85,42 @@ class RescueH5ContractTests(unittest.TestCase):
         ):
             self.assertIn(marker, script)
 
+    def test_role_aware_community_creation_entry(self):
+        html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
+        script = (ROOT / "app" / "rescue" / "app.js").read_text(encoding="utf-8")
+        for marker in (
+            'id="open-community-form"',
+            'id="community-section-title"',
+            'id="community-section-description"',
+            'id="community-submit"',
+        ):
+            self.assertIn(marker, html)
+        for marker in (
+            "function normalizedRole(role)",
+            "function renderCommunityEntry()",
+            'byId("open-community-form").addEventListener("click"',
+            'isAdminRole(state.user && state.user.role)',
+        ):
+            self.assertIn(marker, script)
+
+    def test_live_version_update_contract(self):
+        html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
+        script = (ROOT / "app" / "rescue" / "app.js").read_text(encoding="utf-8")
+        styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
+        for marker in (
+            'data-app-version="20260802-community-quality"',
+            'id="version-update"',
+            'id="reload-version"',
+        ):
+            self.assertIn(marker, html)
+        for marker in (
+            "function checkForUpdate()",
+            'fetch(window.location.pathname, { cache: "no-store" })',
+            'document.addEventListener("visibilitychange"',
+        ):
+            self.assertIn(marker, script)
+        self.assertIn(".version-update", styles)
+
     def test_rescue_app_maps_business_errors_and_blocks_duplicate_submit(self):
         script = (ROOT / "app" / "rescue" / "app.js").read_text(encoding="utf-8")
         for text in ("daily_cat_limit_reached", "task_already_claimed", "invalid_credentials", "submitting", "uploadImage"):
