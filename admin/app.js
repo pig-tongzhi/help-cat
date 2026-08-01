@@ -3,6 +3,7 @@
 
   var API_BASE = window.HELPCAT_API_BASE || "/help-cat-api";
   var TOKEN_KEY = "help_cat_admin_token";
+  var H5_TOKEN_KEY = "help_cat_token";
   var token = sessionStorage.getItem(TOKEN_KEY) || "";
   var profile = null;
   var state = { cats: [], communities: [], users: [], section: "overview", busy: false };
@@ -57,10 +58,11 @@
     target.classList.toggle("error", Boolean(isError));
     target.hidden = !message;
   }
-  function clearSession() {
+  function clearSession(clearSharedToken) {
     token = "";
     profile = null;
     sessionStorage.removeItem(TOKEN_KEY);
+    if (clearSharedToken) sessionStorage.removeItem(H5_TOKEN_KEY);
   }
   function showLogin(message) {
     document.title = "帮帮小猫 · 管理员登录";
@@ -224,6 +226,19 @@
     request(route, { method: "POST", body: review ? { approved: true } : undefined }).then(function () { toast("小区状态已更新"); return loadAll(); }).catch(function (error) { showGlobal(errorText(error), true); }).finally(function () { state.busy = false; });
   }
 
+  function logout() {
+    if (state.busy) return;
+    state.busy = true;
+    request("/api/v1/auth/logout", { method: "POST" }).catch(function () {
+      return null;
+    }).then(function () {
+      clearSession(true);
+      showLogin("已安全退出");
+    }).finally(function () {
+      state.busy = false;
+    });
+  }
+
   byId("login-form").addEventListener("submit", function (event) {
     event.preventDefault();
     if (state.busy) return;
@@ -238,7 +253,7 @@
       byId("login-submit").disabled = false;
     });
   });
-  byId("logout").addEventListener("click", function () { clearSession(); showLogin("已安全退出"); });
+  byId("logout").addEventListener("click", logout);
   byId("refresh").addEventListener("click", loadAll);
   byId("cat-search").addEventListener("input", renderCats);
   byId("user-search").addEventListener("input", renderUsers);

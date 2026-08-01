@@ -38,6 +38,13 @@ class CommercialFrontendContractTests(unittest.TestCase):
         self.assertNotIn("API Token", html)
         self.assertNotIn("localStorage.setItem(\"help-cat-demo-v2\"", script)
 
+    def test_admin_logout_revokes_server_session_and_clears_shared_h5_token(self):
+        script = (ROOT / "admin" / "app.js").read_text(encoding="utf-8")
+        self.assertIn('var H5_TOKEN_KEY = "help_cat_token"', script)
+        self.assertIn('request("/api/v1/auth/logout", { method: "POST" })', script)
+        self.assertIn("sessionStorage.removeItem(H5_TOKEN_KEY)", script)
+        self.assertIn('byId("logout").addEventListener("click", logout)', script)
+
 
 if __name__ == "__main__":
     unittest.main()

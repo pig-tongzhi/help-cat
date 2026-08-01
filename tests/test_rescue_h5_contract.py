@@ -109,7 +109,7 @@ class RescueH5ContractTests(unittest.TestCase):
         script = (ROOT / "app" / "rescue" / "app.js").read_text(encoding="utf-8")
         styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
         for marker in (
-            'data-app-version="20260802-community-quality"',
+            'data-app-version="20260802-community-quality-r2"',
             'id="version-update"',
             'id="reload-version"',
         ):
@@ -117,6 +117,8 @@ class RescueH5ContractTests(unittest.TestCase):
         for marker in (
             "function checkForUpdate()",
             'fetch(window.location.pathname, { cache: "no-store" })',
+            "if (!response.ok)",
+            "if (match && match[1] !== current)",
             'document.addEventListener("visibilitychange"',
         ):
             self.assertIn(marker, script)
@@ -129,9 +131,9 @@ class RescueH5ContractTests(unittest.TestCase):
 
     def test_rescue_assets_are_versioned_in_dependency_order(self):
         html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
-        self.assertIn('styles.css?v=20260802-community-quality', html)
-        api_index = html.index('api.js?v=20260802-community-quality')
-        app_index = html.index('app.js?v=20260802-community-quality')
+        self.assertIn('styles.css?v=20260802-community-quality-r2', html)
+        api_index = html.index('api.js?v=20260802-community-quality-r2')
+        app_index = html.index('app.js?v=20260802-community-quality-r2')
         self.assertLess(api_index, app_index)
 
 
