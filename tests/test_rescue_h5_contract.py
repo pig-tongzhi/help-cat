@@ -64,9 +64,68 @@ class RescueH5ContractTests(unittest.TestCase):
 
     def test_rescue_page_contains_auth_and_three_step_cat_flow(self):
         html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
-        for text in ("登录", "注册", "cat-community", "cat-photo-file", "accept=\"image/*\"", "capture=\"environment\"", "use-current-location", "location-fallback", "下一步", "上一步"):
+        for text in ("登录", "注册", "cat-community", "cat-photo-file", 'accept="image/*"', "use-current-location", "location-fallback", "下一步", "上一步"):
             self.assertIn(text, html)
+        self.assertNotIn('capture=', html)
         self.assertNotIn("admin-tools", html)
+
+    def test_admin_roles_get_same_session_management_entry(self):
+        html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
+        script = (ROOT / "app" / "rescue" / "app.js").read_text(encoding="utf-8")
+        self.assertIn('id="admin-console-action"', html)
+        self.assertIn('id="admin-console-action" type="button" hidden', html)
+        for marker in (
+            "function normalizedRole(role)",
+            "function isAdminRole(role)",
+            "var value = normalizedRole(role)",
+            'byId("admin-console-action").hidden = !admin',
+            'sessionStorage.setItem("help_cat_admin_token", api.token())',
+            'window.location.assign("/help-cat/admin/")',
+            'role === "SUPER_ADMIN" ? "超级管理员"',
+            '"超级管理员账号 · 新建档案将直接公开"',
+        ):
+            self.assertIn(marker, script)
+
+    def test_role_aware_community_creation_entry(self):
+        html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
+        script = (ROOT / "app" / "rescue" / "app.js").read_text(encoding="utf-8")
+        for marker in (
+            'id="open-community-form"',
+            'id="community-section-title"',
+            'id="community-section-description"',
+            'id="community-submit"',
+        ):
+            self.assertIn(marker, html)
+        for marker in (
+            "function normalizedRole(role)",
+            "function renderCommunityEntry()",
+            'byId("open-community-form").addEventListener("click"',
+            'isAdminRole(state.user && state.user.role)',
+        ):
+            self.assertIn(marker, script)
+
+    def test_live_version_update_contract(self):
+        html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
+        script = (ROOT / "app" / "rescue" / "app.js").read_text(encoding="utf-8")
+        version_script = (ROOT / "app" / "rescue" / "version.js").read_text(encoding="utf-8")
+        styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
+        for marker in (
+            'data-app-version="20260802-community-quality-r3"',
+            'id="version-update"',
+            'id="reload-version"',
+        ):
+            self.assertIn(marker, html)
+        for marker in ("function checkForUpdate()", "window.HelpCatVersion.checkForUpdate"):
+            self.assertIn(marker, script)
+        for marker in (
+            'fetchPage(path, { cache: "no-store" })',
+            "if (!response.ok)",
+            "if (match && match[1] !== current)",
+        ):
+            self.assertIn(marker, version_script)
+        self.assertIn('document.addEventListener("visibilitychange"', script)
+        self.assertLess(html.index('version.js?v='), html.index('app.js?v='))
+        self.assertIn(".version-update", styles)
 
     def test_rescue_app_maps_business_errors_and_blocks_duplicate_submit(self):
         script = (ROOT / "app" / "rescue" / "app.js").read_text(encoding="utf-8")
@@ -75,10 +134,12 @@ class RescueH5ContractTests(unittest.TestCase):
 
     def test_rescue_assets_are_versioned_in_dependency_order(self):
         html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
-        self.assertIn('styles.css?v=20260801-responsive', html)
-        api_index = html.index('api.js?v=20260801-responsive')
-        app_index = html.index('app.js?v=20260801-responsive')
-        self.assertLess(api_index, app_index)
+        self.assertIn('styles.css?v=20260802-community-quality-r3', html)
+        api_index = html.index('api.js?v=20260802-community-quality-r3')
+        version_index = html.index('version.js?v=20260802-community-quality-r3')
+        app_index = html.index('app.js?v=20260802-community-quality-r3')
+        self.assertLess(api_index, version_index)
+        self.assertLess(version_index, app_index)
 
 
 if __name__ == "__main__":

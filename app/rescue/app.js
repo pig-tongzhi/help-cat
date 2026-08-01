@@ -75,6 +75,13 @@
     toast.timer = window.setTimeout(function () { target.hidden = true; }, 2800);
   }
 
+  function checkForUpdate() {
+    var current = document.documentElement.dataset.appVersion || "";
+    return window.HelpCatVersion.checkForUpdate(fetch, window.location.pathname, current, function () {
+      byId("version-update").hidden = false;
+    });
+  }
+
   function loadPublicData() {
     showStatus("正在同步社区救助数据…", false);
     return Promise.all([
@@ -168,18 +175,51 @@
     if (state.communities.some(function (item) { return item.id === catValue; })) byId("cat-community").value = catValue;
   }
 
+  function normalizedRole(role) {
+    var value = String(role || "USER").toUpperCase();
+    return ["ADMIN", "SUPER_ADMIN"].indexOf(value) >= 0 ? value : "USER";
+  }
+
+  function isAdminRole(role) {
+    var value = normalizedRole(role);
+    return value === "ADMIN" || value === "SUPER_ADMIN";
+  }
+
+  function renderCommunityEntry() {
+    var admin = Boolean(state.user && isAdminRole(state.user.role));
+    byId("community-section-title").textContent = admin ? "新增小区" : "没有找到小区？";
+    byId("community-section-description").textContent = admin
+      ? "新增后立即开放，可直接用于猫咪档案。"
+      : "提交建议后由管理员审核，审核通过后可用于猫咪档案。";
+    byId("community-submit").textContent = admin ? "新增并开放" : "提交小区建议";
+    byId("open-community-form").textContent = admin
+      ? "没有找到小区？新增并开放小区"
+      : "没有找到小区？提交小区建议";
+  }
+
   function renderAccount() {
     var signedIn = Boolean(state.user);
-    var name = signedIn ? (state.user.username || (state.user.role === "ADMIN" ? "管理员" : "志愿者")) : "志愿者账户";
+    var role = normalizedRole(signedIn ? state.user.role : "USER");
+    var admin = isAdminRole(role);
+    var fallbackName = role === "SUPER_ADMIN" ? "超级管理员" : (admin ? "管理员" : "志愿者");
+    var name = signedIn ? (state.user.username || fallbackName) : "志愿者账户";
     var initial = name.slice(0, 1) || "志";
     byId("profile-avatar").textContent = initial;
     byId("profile-label").textContent = signedIn ? name : "登录";
     byId("account-avatar").textContent = initial;
     byId("account-name").textContent = name;
-    byId("account-description").textContent = signedIn ? (state.user.role === "ADMIN" ? "管理员账号 · 新建档案将直接公开" : "志愿者账号 · 可提交档案并领取任务") : "登录后可以提交档案、查看审核状态和领取任务。";
+    byId("account-description").textContent = !signedIn
+      ? "登录后可以提交档案、查看审核状态和领取任务。"
+      : role === "SUPER_ADMIN"
+        ? "超级管理员账号 · 新建档案将直接公开"
+        : role === "ADMIN"
+          ? "管理员账号 · 新建档案将直接公开"
+          : "志愿者账号 · 可提交档案并领取任务";
+    byId("admin-console-action").hidden = !admin;
     byId("account-action").textContent = signedIn ? "退出登录" : "登录 / 注册";
     byId("account-card").classList.toggle("guest-state", !signedIn);
     byId("signed-in-content").hidden = !signedIn;
+    renderCommunityEntry();
     if (signedIn) renderSubmissions();
   }
 
@@ -344,7 +384,7 @@
     }).then(function () {
       event.target.reset();
       byId("community-street").value = "银湖街道";
-      toast(state.user.role === "ADMIN" ? "小区已创建并开放" : "小区建议已提交，等待管理员审核");
+      toast(isAdminRole(state.user && state.user.role) ? "小区已创建并开放" : "小区建议已提交，等待管理员审核");
       return Promise.all([loadPublicData(), loadSubmissions()]);
     }).catch(function (error) {
       toast(errorText(error));
@@ -495,6 +535,19 @@
     byId("cat-message").textContent = "";
     updateCatStep();
   });
+  byId("open-community-form").addEventListener("click", function () {
+    closeSheets();
+    navigate("profile");
+    window.setTimeout(function () { byId("community-name").focus(); }, 30);
+  });
+  byId("admin-console-action").addEventListener("click", function () {
+    if (!state.user || !isAdminRole(state.user.role) || !api.token()) {
+      openAuth();
+      return;
+    }
+    sessionStorage.setItem("help_cat_admin_token", api.token());
+    window.location.assign("/help-cat/admin/");
+  });
   byId("account-action").addEventListener("click", function () {
     if (!state.user) { openAuth(); return; }
     api.logout().then(function () {
@@ -515,11 +568,16 @@
   });
   byId("use-current-location").addEventListener("click", useCurrentLocation);
   byId("cat-photo-file").addEventListener("change", previewPhoto);
+  byId("reload-version").addEventListener("click", function () { window.location.reload(); });
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible") checkForUpdate();
+  });
   document.addEventListener("keydown", function (event) { if (event.key === "Escape") closeSheets(); });
 
   var initialView = window.location.hash.replace("#", "");
   if (["home", "cats", "tasks", "profile"].indexOf(initialView) >= 0) state.view = initialView;
   renderApp();
+  checkForUpdate();
   api.restoreSession().then(function (user) {
     state.user = user;
     renderAccount();
