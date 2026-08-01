@@ -75,6 +75,18 @@
     toast.timer = window.setTimeout(function () { target.hidden = true; }, 2800);
   }
 
+  function checkForUpdate() {
+    var current = document.documentElement.dataset.appVersion || "";
+    return fetch(window.location.pathname, { cache: "no-store" })
+      .then(function (response) { return response.text(); })
+      .then(function (html) {
+        var match = html.match(/data-app-version="([^"]+)"/);
+        byId("version-update").hidden = !match || match[1] === current;
+      }).catch(function () {
+        return null;
+      });
+  }
+
   function loadPublicData() {
     showStatus("正在同步社区救助数据…", false);
     return Promise.all([
@@ -561,11 +573,16 @@
   });
   byId("use-current-location").addEventListener("click", useCurrentLocation);
   byId("cat-photo-file").addEventListener("change", previewPhoto);
+  byId("reload-version").addEventListener("click", function () { window.location.reload(); });
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible") checkForUpdate();
+  });
   document.addEventListener("keydown", function (event) { if (event.key === "Escape") closeSheets(); });
 
   var initialView = window.location.hash.replace("#", "");
   if (["home", "cats", "tasks", "profile"].indexOf(initialView) >= 0) state.view = initialView;
   renderApp();
+  checkForUpdate();
   api.restoreSession().then(function (user) {
     state.user = user;
     renderAccount();
