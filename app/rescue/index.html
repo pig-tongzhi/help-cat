@@ -96,11 +96,11 @@
           <div class="section-title profile-section-title"><div><span class="section-kicker">MY SUBMISSIONS</span><h2>我的提交</h2></div><button class="text-button" id="refresh-submissions" type="button">刷新</button></div>
           <div class="submission-list" id="submission-list"></div>
           <section class="community-suggestion-card">
-            <div><span class="section-kicker">COMMUNITY REQUEST</span><h2>没有找到小区？</h2><p>提交小区建议，管理员审核通过后即可关联猫咪档案。</p></div>
+            <div><span class="section-kicker">COMMUNITY REQUEST</span><h2 id="community-section-title">没有找到小区？</h2><p id="community-section-description">提交建议后由管理员审核，审核通过后可用于猫咪档案。</p></div>
             <form id="community-form">
               <label>小区名称<input id="community-name" maxlength="120" required placeholder="例如：聚源福小区"></label>
               <label>所属街道<input id="community-street" maxlength="80" required value="银湖街道"></label>
-              <button class="button secondary" type="submit">提交小区建议</button>
+              <button class="button secondary" id="community-submit" type="submit">提交小区建议</button>
             </form>
           </section>
         </div>
@@ -158,6 +158,7 @@
         <legend class="sr-only">小区和位置</legend>
         <label>搜索小区<input id="cat-community-search" type="search" placeholder="输入小区名称筛选"></label>
         <label>所属小区<select id="cat-community" required><option value="">请选择已审核小区</option></select></label>
+        <button class="inline-link" id="open-community-form" type="button">没有找到小区？提交小区建议</button>
         <label>活动位置<div class="location-control"><input id="cat-location" maxlength="240" required placeholder="例如：3 幢北侧绿化带附近"><button class="button secondary compact" id="use-current-location" type="button">获取当前位置</button></div></label>
         <div class="location-fallback" id="location-fallback" role="status">当前地址可能无法使用浏览器定位，请直接填写小区内的模糊位置；精确坐标不会公开。</div>
       </fieldset>

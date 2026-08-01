@@ -75,8 +75,9 @@ class RescueH5ContractTests(unittest.TestCase):
         self.assertIn('id="admin-console-action"', html)
         self.assertIn('id="admin-console-action" type="button" hidden', html)
         for marker in (
+            "function normalizedRole(role)",
             "function isAdminRole(role)",
-            'role === "ADMIN" || role === "SUPER_ADMIN"',
+            "var value = normalizedRole(role)",
             'byId("admin-console-action").hidden = !admin',
             'sessionStorage.setItem("help_cat_admin_token", api.token())',
             'window.location.assign("/help-cat/admin/")',
