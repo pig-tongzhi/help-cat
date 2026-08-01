@@ -107,21 +107,24 @@ class RescueH5ContractTests(unittest.TestCase):
     def test_live_version_update_contract(self):
         html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
         script = (ROOT / "app" / "rescue" / "app.js").read_text(encoding="utf-8")
+        version_script = (ROOT / "app" / "rescue" / "version.js").read_text(encoding="utf-8")
         styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
         for marker in (
-            'data-app-version="20260802-community-quality-r2"',
+            'data-app-version="20260802-community-quality-r3"',
             'id="version-update"',
             'id="reload-version"',
         ):
             self.assertIn(marker, html)
+        for marker in ("function checkForUpdate()", "window.HelpCatVersion.checkForUpdate"):
+            self.assertIn(marker, script)
         for marker in (
-            "function checkForUpdate()",
-            'fetch(window.location.pathname, { cache: "no-store" })',
+            'fetchPage(path, { cache: "no-store" })',
             "if (!response.ok)",
             "if (match && match[1] !== current)",
-            'document.addEventListener("visibilitychange"',
         ):
-            self.assertIn(marker, script)
+            self.assertIn(marker, version_script)
+        self.assertIn('document.addEventListener("visibilitychange"', script)
+        self.assertLess(html.index('version.js?v='), html.index('app.js?v='))
         self.assertIn(".version-update", styles)
 
     def test_rescue_app_maps_business_errors_and_blocks_duplicate_submit(self):
@@ -131,10 +134,12 @@ class RescueH5ContractTests(unittest.TestCase):
 
     def test_rescue_assets_are_versioned_in_dependency_order(self):
         html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
-        self.assertIn('styles.css?v=20260802-community-quality-r2', html)
-        api_index = html.index('api.js?v=20260802-community-quality-r2')
-        app_index = html.index('app.js?v=20260802-community-quality-r2')
-        self.assertLess(api_index, app_index)
+        self.assertIn('styles.css?v=20260802-community-quality-r3', html)
+        api_index = html.index('api.js?v=20260802-community-quality-r3')
+        version_index = html.index('version.js?v=20260802-community-quality-r3')
+        app_index = html.index('app.js?v=20260802-community-quality-r3')
+        self.assertLess(api_index, version_index)
+        self.assertLess(version_index, app_index)
 
 
 if __name__ == "__main__":

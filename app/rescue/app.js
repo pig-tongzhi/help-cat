@@ -77,17 +77,9 @@
 
   function checkForUpdate() {
     var current = document.documentElement.dataset.appVersion || "";
-    return fetch(window.location.pathname, { cache: "no-store" })
-      .then(function (response) {
-        if (!response.ok) throw new Error("version_check_failed");
-        return response.text();
-      })
-      .then(function (html) {
-        var match = html.match(/data-app-version="([^"]+)"/);
-        if (match && match[1] !== current) byId("version-update").hidden = false;
-      }).catch(function () {
-        return null;
-      });
+    return window.HelpCatVersion.checkForUpdate(fetch, window.location.pathname, current, function () {
+      byId("version-update").hidden = false;
+    });
   }
 
   function loadPublicData() {

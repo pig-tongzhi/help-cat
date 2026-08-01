@@ -227,16 +227,7 @@
   }
 
   function logout() {
-    if (state.busy) return;
-    state.busy = true;
-    request("/api/v1/auth/logout", { method: "POST" }).catch(function () {
-      return null;
-    }).then(function () {
-      clearSession(true);
-      showLogin("已安全退出");
-    }).finally(function () {
-      state.busy = false;
-    });
+    return window.HelpCatAdminSession.logout(request, clearSession, showLogin, state);
   }
 
   byId("login-form").addEventListener("submit", function (event) {

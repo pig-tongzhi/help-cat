@@ -23,6 +23,7 @@ class CommercialFrontendContractTests(unittest.TestCase):
     def test_admin_console_has_governance_surfaces_and_api_calls(self):
         html = (ROOT / "admin" / "index.html").read_text(encoding="utf-8")
         script = (ROOT / "admin" / "app.js").read_text(encoding="utf-8")
+        session_script = (ROOT / "admin" / "session.js").read_text(encoding="utf-8")
         for text in ("猫咪档案库", "小区管理", "公开", "隐藏", "归档", "审核"):
             self.assertIn(text, html)
         for route in ("/api/v1/cats", "/api/v1/communities", "/review", "/visibility", "/archive"):
@@ -39,11 +40,15 @@ class CommercialFrontendContractTests(unittest.TestCase):
         self.assertNotIn("localStorage.setItem(\"help-cat-demo-v2\"", script)
 
     def test_admin_logout_revokes_server_session_and_clears_shared_h5_token(self):
+        html = (ROOT / "admin" / "index.html").read_text(encoding="utf-8")
         script = (ROOT / "admin" / "app.js").read_text(encoding="utf-8")
+        session_script = (ROOT / "admin" / "session.js").read_text(encoding="utf-8")
         self.assertIn('var H5_TOKEN_KEY = "help_cat_token"', script)
-        self.assertIn('request("/api/v1/auth/logout", { method: "POST" })', script)
+        self.assertIn('request("/api/v1/auth/logout", { method: "POST" })', session_script)
         self.assertIn("sessionStorage.removeItem(H5_TOKEN_KEY)", script)
         self.assertIn('byId("logout").addEventListener("click", logout)', script)
+        self.assertIn('window.HelpCatAdminSession.logout(request, clearSession, showLogin, state)', script)
+        self.assertLess(html.index('session.js?v='), html.index('app.js?v='))
 
 
 if __name__ == "__main__":
