@@ -92,9 +92,9 @@ class RescueH5ContractTests(unittest.TestCase):
 
     def test_rescue_assets_are_versioned_in_dependency_order(self):
         html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
-        self.assertIn('styles.css?v=20260801-responsive', html)
-        api_index = html.index('api.js?v=20260801-responsive')
-        app_index = html.index('app.js?v=20260801-responsive')
+        self.assertIn('styles.css?v=20260802-mobile-admin', html)
+        api_index = html.index('api.js?v=20260802-mobile-admin')
+        app_index = html.index('app.js?v=20260802-mobile-admin')
         self.assertLess(api_index, app_index)
 
 
