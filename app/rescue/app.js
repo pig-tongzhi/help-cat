@@ -168,15 +168,29 @@
     if (state.communities.some(function (item) { return item.id === catValue; })) byId("cat-community").value = catValue;
   }
 
+  function isAdminRole(role) {
+    return role === "ADMIN" || role === "SUPER_ADMIN";
+  }
+
   function renderAccount() {
     var signedIn = Boolean(state.user);
-    var name = signedIn ? (state.user.username || (state.user.role === "ADMIN" ? "管理员" : "志愿者")) : "志愿者账户";
+    var role = signedIn ? state.user.role : "";
+    var admin = isAdminRole(role);
+    var fallbackName = role === "SUPER_ADMIN" ? "超级管理员" : (admin ? "管理员" : "志愿者");
+    var name = signedIn ? (state.user.username || fallbackName) : "志愿者账户";
     var initial = name.slice(0, 1) || "志";
     byId("profile-avatar").textContent = initial;
     byId("profile-label").textContent = signedIn ? name : "登录";
     byId("account-avatar").textContent = initial;
     byId("account-name").textContent = name;
-    byId("account-description").textContent = signedIn ? (state.user.role === "ADMIN" ? "管理员账号 · 新建档案将直接公开" : "志愿者账号 · 可提交档案并领取任务") : "登录后可以提交档案、查看审核状态和领取任务。";
+    byId("account-description").textContent = !signedIn
+      ? "登录后可以提交档案、查看审核状态和领取任务。"
+      : role === "SUPER_ADMIN"
+        ? "超级管理员账号 · 新建档案将直接公开"
+        : role === "ADMIN"
+          ? "管理员账号 · 新建档案将直接公开"
+          : "志愿者账号 · 可提交档案并领取任务";
+    byId("admin-console-action").hidden = !admin;
     byId("account-action").textContent = signedIn ? "退出登录" : "登录 / 注册";
     byId("account-card").classList.toggle("guest-state", !signedIn);
     byId("signed-in-content").hidden = !signedIn;
@@ -494,6 +508,14 @@
     state.catStep = Math.max(1, state.catStep - 1);
     byId("cat-message").textContent = "";
     updateCatStep();
+  });
+  byId("admin-console-action").addEventListener("click", function () {
+    if (!state.user || !isAdminRole(state.user.role) || !api.token()) {
+      openAuth();
+      return;
+    }
+    sessionStorage.setItem("help_cat_admin_token", api.token());
+    window.location.assign("/help-cat/admin/");
   });
   byId("account-action").addEventListener("click", function () {
     if (!state.user) { openAuth(); return; }

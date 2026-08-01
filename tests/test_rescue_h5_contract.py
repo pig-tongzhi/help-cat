@@ -69,6 +69,22 @@ class RescueH5ContractTests(unittest.TestCase):
         self.assertNotIn('capture=', html)
         self.assertNotIn("admin-tools", html)
 
+    def test_admin_roles_get_same_session_management_entry(self):
+        html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
+        script = (ROOT / "app" / "rescue" / "app.js").read_text(encoding="utf-8")
+        self.assertIn('id="admin-console-action"', html)
+        self.assertIn('id="admin-console-action" type="button" hidden', html)
+        for marker in (
+            "function isAdminRole(role)",
+            'role === "ADMIN" || role === "SUPER_ADMIN"',
+            'byId("admin-console-action").hidden = !admin',
+            'sessionStorage.setItem("help_cat_admin_token", api.token())',
+            'window.location.assign("/help-cat/admin/")',
+            'role === "SUPER_ADMIN" ? "超级管理员"',
+            '"超级管理员账号 · 新建档案将直接公开"',
+        ):
+            self.assertIn(marker, script)
+
     def test_rescue_app_maps_business_errors_and_blocks_duplicate_submit(self):
         script = (ROOT / "app" / "rescue" / "app.js").read_text(encoding="utf-8")
         for text in ("daily_cat_limit_reached", "task_already_claimed", "invalid_credentials", "submitting", "uploadImage"):

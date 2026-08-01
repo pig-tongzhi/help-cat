@@ -86,7 +86,10 @@
         <div class="account-card guest-state" id="account-card">
           <div class="account-avatar" id="account-avatar">志</div>
           <div class="account-copy"><strong id="account-name">志愿者账户</strong><p id="account-description">登录后可以提交档案、查看审核状态和领取任务。</p></div>
-          <button class="button primary small" id="account-action" type="button">登录 / 注册</button>
+          <div class="account-actions">
+            <button class="button secondary small" id="admin-console-action" type="button" hidden>进入管理后台</button>
+            <button class="button primary small" id="account-action" type="button">登录 / 注册</button>
+          </div>
         </div>
 
         <div id="signed-in-content" hidden>
