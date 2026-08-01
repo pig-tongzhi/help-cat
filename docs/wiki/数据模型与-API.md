@@ -140,4 +140,3 @@
 - Alembic 位于 `server/helpcat/migrations/`。
 - `ensure_schema()` 为早期 SQLite 试运行提供小范围向前兼容补列，不应替代正式生产迁移。
 - 迁移 PostgreSQL 前必须先做数据备份、双向数量校验、业务抽样和回滚演练。
-
