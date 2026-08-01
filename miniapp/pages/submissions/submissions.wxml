@@ -1,0 +1,1 @@
+<view class="page"><view class="title">我的提交</view><view class="item" wx:for="{{items}}" wx:key="id"><text class="name">{{item.nickname || item.name}}</text><text>{{item.review_status || item.status}}</text></view></view>

@@ -1,0 +1,15 @@
+{
+  "pages": [
+    "pages/home/home",
+    "pages/cats/new",
+    "pages/submissions/submissions",
+    "pages/tasks/tasks"
+  ],
+  "window": {
+    "navigationBarTitleText": "帮帮小猫",
+    "navigationBarBackgroundColor": "#20352d",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#f4f0e7"
+  },
+  "sitemapLocation": "sitemap.json"
+}

@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#f4f6f3">
+  <meta name="description" content="帮帮小猫管理后台，用于猫咪、小区和用户权限治理。">
+  <title>帮帮小猫 · 管理后台</title>
+  <link rel="stylesheet" href="styles.css?v=20260731-access">
+</head>
+<body>
+  <section class="login-view" id="login-view">
+    <div class="login-brand"><span class="brand-mark" aria-hidden="true"><i></i></span><div><strong>帮帮小猫</strong><small>HELP CAT ADMIN</small></div></div>
+    <div class="login-card">
+      <span class="eyebrow">SECURE CONSOLE</span>
+      <h1>管理员登录</h1>
+      <p>登录后管理猫咪档案、小区审核和用户权限。</p>
+      <form id="login-form">
+        <label>账号<input id="login-username" autocomplete="username" required placeholder="请输入管理员账号"></label>
+        <label>密码<input id="login-password" type="password" autocomplete="current-password" required placeholder="请输入密码"></label>
+        <p class="form-message" id="login-message" role="alert"></p>
+        <button class="button primary full" id="login-submit" type="submit">登录后台</button>
+      </form>
+      <div class="security-note"><span aria-hidden="true"></span>用户账号无权进入管理后台，权限变更会记录审计日志。</div>
+    </div>
+  </section>
+
+  <div class="admin-shell" id="admin-shell" hidden>
+    <aside class="sidebar">
+      <a class="side-brand" href="#overview"><span class="brand-mark" aria-hidden="true"><i></i></span><span><strong>帮帮小猫</strong><small>管理后台</small></span></a>
+      <nav aria-label="后台导航">
+        <button class="side-nav active" type="button" data-section="overview"><span class="nav-dot overview-dot"></span>总览</button>
+        <button class="side-nav" type="button" data-section="cats"><span class="nav-dot cat-dot"></span>猫咪档案</button>
+        <button class="side-nav" type="button" data-section="communities"><span class="nav-dot community-dot"></span>小区管理</button>
+        <button class="side-nav" id="users-nav" type="button" data-section="users" hidden><span class="nav-dot user-dot"></span>用户与权限</button>
+      </nav>
+      <div class="sidebar-foot"><span class="live-dot"></span><span>服务运行中</span></div>
+    </aside>
+
+    <main class="admin-main">
+      <header class="topbar">
+        <div><span class="eyebrow">HELP CAT GOVERNANCE</span><h1 id="page-title">管理总览</h1><p>杭州 · 富阳区 · 银湖街道</p></div>
+        <div class="account-menu"><span class="account-avatar" id="account-avatar">管</span><div><strong id="account-name">管理员</strong><small id="account-role">ADMIN</small></div><button class="text-button" id="logout" type="button">退出</button></div>
+      </header>
+
+      <div class="global-message" id="global-message" role="status" hidden></div>
+
+      <section class="admin-section active" data-admin-section="overview">
+        <div class="summary">
+          <article><span class="metric-symbol cat-symbol"></span><div><strong id="cat-count">0</strong><small>猫咪档案</small></div></article>
+          <article><span class="metric-symbol community-symbol"></span><div><strong id="community-count">0</strong><small>小区</small></div></article>
+          <article class="pending-card"><span class="metric-symbol review-symbol"></span><div><strong id="pending-count">0</strong><small>待审核事项</small></div></article>
+          <article id="user-summary" hidden><span class="metric-symbol user-symbol"></span><div><strong id="user-count">0</strong><small>平台注册用户</small></div></article>
+        </div>
+        <div class="welcome-panel"><div><span class="eyebrow">TODAY'S GOVERNANCE</span><h2>让每一条社区信息<br>都真实、清晰、可追溯</h2><p>优先处理待审核档案；隐藏和归档不会物理删除数据。</p></div><button class="button primary" type="button" data-section-link="cats">处理待审核档案</button></div>
+      </section>
+
+      <section class="admin-section" data-admin-section="cats" hidden>
+        <div class="section-heading"><div><span class="eyebrow">CAT ARCHIVE</span><h2>猫咪档案库</h2><p>审核、公开、隐藏或归档社区猫咪档案。</p></div><button class="button secondary" id="refresh" type="button">刷新数据</button></div>
+        <label class="search-box">搜索猫咪<input id="cat-search" placeholder="名称、编号或位置"></label>
+        <div id="cats" class="list"></div>
+      </section>
+
+      <section class="admin-section" data-admin-section="communities" hidden>
+        <div class="section-heading"><div><span class="eyebrow">COMMUNITY GOVERNANCE</span><h2>小区管理</h2><p>新增小区会立即开放，居民建议需要管理员审核。</p></div></div>
+        <form class="inline-form" id="community-form"><label>小区名称<input id="community-name" required placeholder="例如：聚源福小区"></label><label>所属街道<input id="community-street" required value="银湖街道"></label><button class="button primary" type="submit">新增小区</button></form>
+        <div id="communities" class="list"></div>
+      </section>
+
+      <section class="admin-section users-panel" id="users-panel" data-admin-section="users" hidden>
+        <div class="section-heading"><div><span class="eyebrow">ACCESS CONTROL</span><h2>用户与权限</h2><p>只有唯一超级管理员可以授予或撤销普通管理员权限。</p></div><span class="secure-chip">权限变更已审计</span></div>
+        <label class="search-box">搜索用户<input id="user-search" placeholder="用户名或昵称"></label>
+        <p class="panel-message" id="user-message" role="status"></p>
+        <div id="users" class="list"></div>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+  <script src="app.js?v=20260731-access"></script>
+</body>
+</html>

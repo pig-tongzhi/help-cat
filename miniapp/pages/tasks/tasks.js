@@ -1,0 +1,2 @@
+const api = require("../../utils/api.js");
+Page({ data: { items: [] }, onShow() { api.request("/api/v1/tasks").then((data) => this.setData({ items: data.items || [] })); }, claim(e) { api.ensureLogin().then(() => api.request("/api/v1/tasks/" + e.currentTarget.dataset.id + "/claim", { method: "POST" })).then(() => { wx.showToast({ title: "已领取" }); this.onShow(); }).catch(() => wx.showToast({ title: "请先登录或任务已被领取", icon: "none" })); } });
