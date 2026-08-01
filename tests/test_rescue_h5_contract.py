@@ -64,8 +64,9 @@ class RescueH5ContractTests(unittest.TestCase):
 
     def test_rescue_page_contains_auth_and_three_step_cat_flow(self):
         html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
-        for text in ("登录", "注册", "cat-community", "cat-photo-file", "accept=\"image/*\"", "capture=\"environment\"", "use-current-location", "location-fallback", "下一步", "上一步"):
+        for text in ("登录", "注册", "cat-community", "cat-photo-file", 'accept="image/*"', "use-current-location", "location-fallback", "下一步", "上一步"):
             self.assertIn(text, html)
+        self.assertNotIn('capture=', html)
         self.assertNotIn("admin-tools", html)
 
     def test_rescue_app_maps_business_errors_and_blocks_duplicate_submit(self):
