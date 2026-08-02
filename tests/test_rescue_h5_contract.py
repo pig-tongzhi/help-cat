@@ -104,6 +104,34 @@ class RescueH5ContractTests(unittest.TestCase):
         ):
             self.assertIn(marker, script)
 
+    def test_cat_flow_supports_inline_candidate_correction_and_bounded_pages(self):
+        html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
+        script = (ROOT / "app" / "rescue" / "app.js").read_text(encoding="utf-8")
+        for marker in (
+            'data-community-mode="existing"',
+            'data-community-mode="new"',
+            'aria-pressed="true"',
+            'id="cat-community-candidate-name"',
+            'id="cat-community-candidate-street"',
+            'id="cat-community-candidate-note"',
+            'id="load-more-cats"',
+            'id="load-more-communities"',
+            'community-form.js?v=',
+        ):
+            self.assertIn(marker, html)
+        for marker in (
+            "buildCatCommunityPayload",
+            "buildCommunityEditPayload",
+            'data-edit-community',
+            'data-community-correction-form',
+            'community_review_blocker',
+            'next_cursor',
+            'limit=24',
+        ):
+            self.assertIn(marker, script)
+        self.assertLess(html.index('api.js?v='), html.index('community-form.js?v='))
+        self.assertLess(html.index('community-form.js?v='), html.index('app.js?v='))
+
     def test_live_version_update_contract(self):
         html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
         script = (ROOT / "app" / "rescue" / "app.js").read_text(encoding="utf-8")

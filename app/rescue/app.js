@@ -2,6 +2,7 @@
   "use strict";
 
   var api = window.HelpCatApi;
+  var communityForm = window.HelpCatCommunityForm;
   var state = {
     user: null,
     communities: [],
@@ -11,6 +12,8 @@
     view: "home",
     authMode: "login",
     catStep: 1,
+    catCommunityMode: "existing",
+    cursors: { communities: null, cats: null },
     location: null,
     submitting: false
   };
@@ -23,6 +26,8 @@
     task_already_claimed: "这个任务刚刚已被其他志愿者领取。",
     community_exists: "这个小区已经存在或正在审核。",
     community_not_found: "所选小区不存在或尚未审核通过。",
+    stale_community_version: "小区信息刚刚已更新，已为你刷新最新内容，请重新确认。",
+    community_not_editable: "当前小区状态不能再修改。",
     unsupported_image_type: "仅支持 JPEG、PNG 或 WebP 图片。",
     image_too_large: "图片过大，请压缩后重新选择。",
     image_content_mismatch: "图片内容无法识别，请重新选择。",
@@ -39,7 +44,8 @@
     return errorMessages[error && error.code] || (error && error.message) || "操作失败，请稍后重试。";
   }
   function communityName(id) {
-    var item = state.communities.find(function (community) { return community.id === id; });
+    var all = state.communities.concat(state.submissions.communities || []);
+    var item = all.find(function (community) { return community.id === id; });
     return item ? item.name : "社区范围内";
   }
   function photoUrl(cat) {
@@ -56,10 +62,10 @@
     }[value] || "unknown";
   }
   function reviewLabel(value) {
-    return { APPROVED: "已通过", PENDING_REVIEW: "待审核", REJECTED: "未通过" }[value] || value;
+    return { APPROVED: "已通过", ACTIVE: "已开放", PENDING_REVIEW: "待审核", NEEDS_CHANGES: "待补充", MERGED: "已合并", REJECTED: "未通过", HIDDEN: "未开放", ARCHIVED: "已归档" }[value] || value;
   }
   function reviewTone(value) {
-    return { APPROVED: "approved", ACTIVE: "approved", PENDING_REVIEW: "pending", REJECTED: "rejected" }[value] || "pending";
+    return { APPROVED: "approved", ACTIVE: "approved", PENDING_REVIEW: "pending", NEEDS_CHANGES: "attention", MERGED: "merged", REJECTED: "rejected", HIDDEN: "rejected", ARCHIVED: "muted" }[value] || "pending";
   }
   function showStatus(message, isError) {
     var target = byId("app-status");
@@ -85,18 +91,41 @@
   function loadPublicData() {
     showStatus("正在同步社区救助数据…", false);
     return Promise.all([
-      api.request("/api/v1/communities"),
-      api.request("/api/v1/cats"),
+      api.request("/api/v1/communities?limit=24"),
+      api.request("/api/v1/cats?limit=24"),
       api.request("/api/v1/tasks")
     ]).then(function (results) {
       state.communities = results[0].items || [];
       state.cats = results[1].items || [];
+      state.cursors.communities = results[0].next_cursor || null;
+      state.cursors.cats = results[1].next_cursor || null;
       state.tasks = results[2].items || [];
       showStatus("", false);
       renderApp();
     }).catch(function (error) {
       showStatus(errorText(error), true);
       renderApp();
+    });
+  }
+
+  function loadMoreCollection(type, button) {
+    var cursor = state.cursors[type];
+    if (!cursor || state.submitting) return Promise.resolve();
+    state.submitting = true;
+    button.disabled = true;
+    button.textContent = "正在加载…";
+    var path = type === "cats" ? "/api/v1/cats" : "/api/v1/communities";
+    return api.request(path + "?limit=24&cursor=" + encodeURIComponent(cursor)).then(function (payload) {
+      state[type] = communityForm.appendUnique(state[type], payload.items || []);
+      state.cursors[type] = payload.next_cursor || null;
+      if (type === "cats") renderCats();
+      else renderCommunityOptions();
+    }).catch(function (error) {
+      toast(errorText(error));
+    }).finally(function () {
+      state.submitting = false;
+      button.disabled = false;
+      button.textContent = type === "cats" ? "加载更多猫咪" : "加载更多已审核小区";
     });
   }
 
@@ -149,6 +178,7 @@
     byId("cat-result-count").textContent = "共 " + cats.length + " 只已审核猫咪";
     byId("home-cats").innerHTML = state.cats.length ? state.cats.slice(0, 3).map(catCard).join("") : emptyCard("还没有公开档案", "登录后可以提交第一只社区猫咪。");
     byId("cat-list").innerHTML = cats.length ? cats.map(catCard).join("") : emptyCard("没有找到匹配档案", "试试更换名称或小区筛选条件。");
+    byId("load-more-cats").hidden = !state.cursors.cats;
   }
 
   function renderTasks() {
@@ -173,6 +203,7 @@
     byId("cat-community").innerHTML = catOptions;
     if (state.communities.some(function (item) { return item.id === filterValue; })) byId("community-filter").value = filterValue;
     if (state.communities.some(function (item) { return item.id === catValue; })) byId("cat-community").value = catValue;
+    byId("load-more-communities").hidden = !state.cursors.communities;
   }
 
   function normalizedRole(role) {
@@ -228,10 +259,21 @@
     var items = [];
     state.submissions.communities.forEach(function (community) {
       var review = community.status === "ACTIVE" ? "APPROVED" : community.status;
-      items.push('<article class="submission-item"><span class="submission-type">小区建议</span><div><strong>' + escapeHtml(community.name) + '</strong><p>' + escapeHtml(community.street) + '</p></div><span class="review-status ' + reviewTone(review) + '">' + escapeHtml(reviewLabel(review)) + '</span></article>');
+      var editable = ["PENDING_REVIEW", "NEEDS_CHANGES"].indexOf(community.status) >= 0;
+      var meta = communityForm.statusMeta(community.status);
+      items.push('<article class="submission-item community-submission"><span class="submission-type">小区建议</span><div class="submission-main"><strong>' + escapeHtml(community.name) + '</strong><p>' + escapeHtml(community.street) + (community.review_note ? ' · ' + escapeHtml(community.review_note) : '') + '</p>' +
+        (editable ? '<button class="inline-link correction-toggle" type="button" data-edit-community="' + escapeHtml(community.id) + '">修改并重新提交</button>' : '') +
+        '</div><span class="review-status ' + escapeHtml(meta.tone) + '">' + escapeHtml(meta.label) + '</span>' +
+        (editable ? '<form class="community-correction" data-community-correction-form="' + escapeHtml(community.id) + '" hidden>' +
+          '<label>小区名称<input name="name" maxlength="120" required value="' + escapeHtml(community.name) + '"></label>' +
+          '<label>所属街道<input name="street" maxlength="80" required value="' + escapeHtml(community.street) + '"></label>' +
+          '<label>补充说明<textarea name="note" maxlength="500">' + escapeHtml(community.review_note || '') + '</textarea></label>' +
+          '<input name="version" type="hidden" value="' + escapeHtml(community.version) + '">' +
+          '<button class="button secondary compact" type="submit">保存并重新提交</button></form>' : '') + '</article>');
     });
     state.submissions.cats.forEach(function (cat) {
-      items.push('<article class="submission-item"><span class="submission-type">猫咪档案</span><div><strong>' + escapeHtml(cat.nickname) + '</strong><p>' + escapeHtml(communityName(cat.community_id)) + ' · ' + escapeHtml(cat.code) + '</p></div><span class="review-status ' + reviewTone(cat.review_status) + '">' + escapeHtml(reviewLabel(cat.review_status)) + '</span></article>');
+      var blocker = cat.community_review_blocker ? '<small class="submission-blocker">小区信息待审核或修正，猫咪档案暂不会公开</small>' : '';
+      items.push('<article class="submission-item"><span class="submission-type">猫咪档案</span><div><strong>' + escapeHtml(cat.nickname) + '</strong><p>' + escapeHtml(communityName(cat.community_id)) + ' · ' + escapeHtml(cat.code) + '</p>' + blocker + '</div><span class="review-status ' + reviewTone(cat.review_status) + '">' + escapeHtml(reviewLabel(cat.review_status)) + '</span></article>');
     });
     byId("submission-list").innerHTML = items.length ? items.join("") : emptyCard("还没有提交记录", "完成猫咪建档或小区建议后会显示在这里。");
   }
@@ -307,10 +349,33 @@
   function openCatSheet() {
     if (!requireLogin()) return;
     state.catStep = 1;
+    setCatCommunityMode(state.catCommunityMode || "existing");
     state.location = null;
     byId("cat-message").textContent = "";
     updateCatStep();
     openSheet("cat-sheet");
+  }
+
+  function setCatCommunityMode(mode) {
+    state.catCommunityMode = mode === "new" ? "new" : "existing";
+    document.querySelectorAll("[data-community-mode]").forEach(function (button) {
+      var active = button.dataset.communityMode === state.catCommunityMode;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
+    document.querySelectorAll("[data-community-panel]").forEach(function (panel) {
+      panel.hidden = panel.dataset.communityPanel !== state.catCommunityMode;
+    });
+    byId("cat-message").textContent = "";
+  }
+
+  function currentCatCommunityPayload() {
+    return communityForm.buildCatCommunityPayload(state.catCommunityMode, {
+      communityId: byId("cat-community").value,
+      name: byId("cat-community-candidate-name").value,
+      street: byId("cat-community-candidate-street").value,
+      note: byId("cat-community-candidate-note").value
+    });
   }
 
   function updateCatStep() {
@@ -332,9 +397,12 @@
       return false;
     }
     if (state.catStep === 2) {
-      if (!byId("cat-community").value) {
-        byId("cat-message").textContent = "请选择已经审核通过的小区。";
-        byId("cat-community").focus();
+      try {
+        currentCatCommunityPayload();
+      } catch (error) {
+        var newMode = state.catCommunityMode === "new";
+        byId("cat-message").textContent = newMode ? "请填写小区名称和所属街道。" : "请选择已经审核通过的小区。";
+        byId(newMode ? "cat-community-candidate-name" : "cat-community").focus();
         return false;
       }
       if (!byId("cat-location").value.trim()) {
@@ -406,10 +474,10 @@
       var locationNote = byId("cat-location").value.trim();
       var notes = byId("cat-notes").value.trim();
       if (notes) locationNote = (locationNote + "；" + notes).slice(0, 240);
+      var communityPayload = currentCatCommunityPayload();
       return api.request("/api/v1/cats", {
         method: "POST",
-        body: {
-          community_id: byId("cat-community").value,
+        body: Object.assign({
           nickname: byId("cat-name").value.trim(),
           living_status: byId("cat-living").value,
           health_status: byId("cat-health").value,
@@ -417,11 +485,12 @@
           photo_asset_id: asset ? asset.id : null,
           latitude: state.location ? state.location.latitude : null,
           longitude: state.location ? state.location.longitude : null
-        }
+        }, communityPayload)
       });
     }).then(function (cat) {
       var approved = cat.review_status === "APPROVED";
       byId("cat-form").reset();
+      setCatCommunityMode("existing");
       byId("photo-preview").hidden = true;
       state.location = null;
       closeSheets();
@@ -449,6 +518,40 @@
       return loadPublicData();
     }).finally(function () {
       state.submitting = false;
+    });
+  }
+
+  function submitCommunityCorrection(form) {
+    if (state.submitting) return;
+    state.submitting = true;
+    var button = form.querySelector("button[type=submit]");
+    button.disabled = true;
+    var payload;
+    try {
+      payload = communityForm.buildCommunityEditPayload({
+        name: form.elements.name.value,
+        street: form.elements.street.value,
+        note: form.elements.note.value,
+        version: form.elements.version.value
+      });
+    } catch (error) {
+      state.submitting = false;
+      button.disabled = false;
+      toast("请完整填写小区名称和所属街道");
+      return;
+    }
+    api.request("/api/v1/communities/" + encodeURIComponent(form.dataset.communityCorrectionForm), {
+      method: "PATCH",
+      body: payload
+    }).then(function () {
+      toast("小区信息已重新提交审核");
+      return Promise.all([loadPublicData(), loadSubmissions()]);
+    }).catch(function (error) {
+      toast(errorText(error));
+      if (error.status === 409) return loadSubmissions();
+    }).finally(function () {
+      state.submitting = false;
+      button.disabled = false;
     });
   }
 
@@ -511,6 +614,17 @@
     if (event.target.closest("[data-close-sheet]") || event.target === byId("sheet-backdrop")) { closeSheets(); return; }
     var authMode = event.target.closest("[data-auth-mode]");
     if (authMode) { setAuthMode(authMode.dataset.authMode); return; }
+    var communityMode = event.target.closest("[data-community-mode]");
+    if (communityMode) { setCatCommunityMode(communityMode.dataset.communityMode); return; }
+    var editCommunity = event.target.closest("[data-edit-community]");
+    if (editCommunity) {
+      var correction = document.querySelector('[data-community-correction-form="' + editCommunity.dataset.editCommunity + '"]');
+      if (correction) {
+        correction.hidden = !correction.hidden;
+        editCommunity.textContent = correction.hidden ? "修改并重新提交" : "收起修改";
+      }
+      return;
+    }
     var claim = event.target.closest(".claim-task");
     if (claim) { claimTask(claim.dataset.taskId, claim); return; }
     if (event.target.closest("#home-add-cat") || event.target.closest("#floating-add-cat")) { openCatSheet(); return; }
@@ -519,6 +633,13 @@
       byId("photo-preview").hidden = true;
       byId("photo-preview").innerHTML = "";
     }
+  });
+
+  document.addEventListener("submit", function (event) {
+    var correction = event.target.closest("[data-community-correction-form]");
+    if (!correction) return;
+    event.preventDefault();
+    submitCommunityCorrection(correction);
   });
 
   byId("profile-button").addEventListener("click", function () { navigate("profile"); });
@@ -558,6 +679,8 @@
     });
   });
   byId("refresh-submissions").addEventListener("click", loadSubmissions);
+  byId("load-more-cats").addEventListener("click", function (event) { loadMoreCollection("cats", event.currentTarget); });
+  byId("load-more-communities").addEventListener("click", function (event) { loadMoreCollection("communities", event.currentTarget); });
   byId("cat-search").addEventListener("input", renderCats);
   byId("community-filter").addEventListener("change", renderCats);
   byId("cat-community-search").addEventListener("input", function (event) {

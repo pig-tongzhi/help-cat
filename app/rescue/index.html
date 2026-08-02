@@ -72,6 +72,7 @@
         </div>
         <div class="result-summary"><span id="cat-result-count">正在加载档案…</span><span class="privacy-label">精确位置不会公开</span></div>
         <div class="cat-grid" id="cat-list"></div>
+        <div class="load-more-row"><button class="button secondary" id="load-more-cats" type="button" hidden>加载更多猫咪</button></div>
       </section>
 
       <section class="view" data-view="tasks" aria-labelledby="tasks-title" hidden>
@@ -156,9 +157,24 @@
       </fieldset>
       <fieldset class="form-step" data-form-step="2" hidden>
         <legend class="sr-only">小区和位置</legend>
-        <label>搜索小区<input id="cat-community-search" type="search" placeholder="输入小区名称筛选"></label>
-        <label>所属小区<select id="cat-community" required><option value="">请选择已审核小区</option></select></label>
-        <button class="inline-link" id="open-community-form" type="button">没有找到小区？提交小区建议</button>
+        <div class="community-mode-switch" role="group" aria-label="小区填写方式">
+          <button class="active" type="button" data-community-mode="existing" aria-pressed="true">选择已有小区</button>
+          <button type="button" data-community-mode="new" aria-pressed="false">填写新小区</button>
+        </div>
+        <div class="community-mode-panel" data-community-panel="existing">
+          <label>搜索小区<input id="cat-community-search" type="search" placeholder="输入小区名称筛选"></label>
+          <label>所属小区<select id="cat-community"><option value="">请选择已审核小区</option></select></label>
+          <div class="load-more-row compact-row"><button class="inline-link" id="load-more-communities" type="button" hidden>加载更多已审核小区</button></div>
+        </div>
+        <div class="community-mode-panel candidate-panel" data-community-panel="new" hidden>
+          <div class="field-grid">
+            <label>小区名称<input id="cat-community-candidate-name" maxlength="120" placeholder="例如：新湖家园"></label>
+            <label>所属街道<input id="cat-community-candidate-street" maxlength="80" value="银湖街道"></label>
+          </div>
+          <label>小区补充说明<textarea id="cat-community-candidate-note" maxlength="500" placeholder="例如：北门、楼盘别名或附近明显标志"></textarea></label>
+          <p class="candidate-hint">小区会和猫咪档案一起提交。管理员可核准名称、退回补充或合并到已有小区，猫咪不会变成“未归属”。</p>
+        </div>
+        <button class="inline-link" id="open-community-form" type="button">管理我单独提交的小区建议</button>
         <label>活动位置<div class="location-control"><input id="cat-location" maxlength="240" required placeholder="例如：3 幢北侧绿化带附近"><button class="button secondary compact" id="use-current-location" type="button">获取当前位置</button></div></label>
         <div class="location-fallback" id="location-fallback" role="status">当前地址可能无法使用浏览器定位，请直接填写小区内的模糊位置；精确坐标不会公开。</div>
       </fieldset>
@@ -180,6 +196,7 @@
   </aside>
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
   <script src="api.js?v=20260802-community-quality-r3"></script>
+  <script src="community-form.js?v=20260802-community-quality-r3"></script>
   <script src="version.js?v=20260802-community-quality-r3"></script>
   <script src="app.js?v=20260802-community-quality-r3"></script>
 </body>
