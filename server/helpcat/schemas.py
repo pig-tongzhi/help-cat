@@ -26,7 +26,7 @@ class CommunityEdit(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     street: str = Field(min_length=1, max_length=80)
     note: str = Field(default="", max_length=500)
-    version: Optional[int] = Field(default=None, ge=1)
+    version: int = Field(ge=1)
 
 
 class CommunityReview(BaseModel):
@@ -41,6 +41,8 @@ class CommunityReview(BaseModel):
             raise ValueError("community_review_action_required")
         if self.action is not None and self.approved is not None:
             raise ValueError("one_community_review_action_required")
+        if self.action is not None and self.version is None:
+            raise ValueError("community_version_required")
         if self.action is None:
             self.action = "approve" if self.approved else "reject"
             if not self.approved and not self.note:
@@ -50,6 +52,15 @@ class CommunityReview(BaseModel):
 
 class CommunityMerge(BaseModel):
     target_community_id: str = Field(min_length=1, max_length=32)
+    version: int = Field(ge=1)
+
+
+class CommunityArchive(BaseModel):
+    version: int = Field(ge=1)
+
+
+class CatCommunityReassign(BaseModel):
+    community_id: str = Field(min_length=1, max_length=32)
     version: int = Field(ge=1)
 
 

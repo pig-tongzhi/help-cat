@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, text as sql_text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -39,6 +39,15 @@ class Session(Base):
 
 class Community(Base):
     __tablename__ = "communities"
+    __table_args__ = (
+        Index(
+            "uq_communities_live_location_name",
+            "city", "district", "normalized_name",
+            unique=True,
+            sqlite_where=sql_text("status NOT IN ('MERGED','REJECTED','ARCHIVED','HIDDEN')"),
+            postgresql_where=sql_text("status NOT IN ('MERGED','REJECTED','ARCHIVED','HIDDEN')"),
+        ),
+    )
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
     city: Mapped[str] = mapped_column(String(40), default="杭州市")
     district: Mapped[str] = mapped_column(String(40), default="富阳区")
@@ -57,6 +66,7 @@ class Community(Base):
 
 class Cat(Base):
     __tablename__ = "cats"
+    __table_args__ = (UniqueConstraint("created_by", "idempotency_key", name="uq_cats_actor_idempotency"),)
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
     community_id: Mapped[str] = mapped_column(ForeignKey("communities.id"), index=True)
     community: Mapped[Community] = relationship(foreign_keys=[community_id])
@@ -71,6 +81,8 @@ class Cat(Base):
     review_status: Mapped[str] = mapped_column(String(20), default="PENDING_REVIEW", index=True)
     visibility_status: Mapped[str] = mapped_column(String(20), default="ACTIVE", index=True)
     created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    idempotency_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
 

@@ -16,6 +16,7 @@ class CommercialMigrationTests(unittest.TestCase):
             self.assertIn("revoked_at", {item["name"] for item in inspect(engine).get_columns("sessions")})
             cat_columns = {item["name"] for item in inspect(engine).get_columns("cats")}
             self.assertTrue({"latitude", "longitude"}.issubset(cat_columns))
+            self.assertTrue({"version", "idempotency_key"}.issubset(cat_columns))
 
     def test_bootstrap_schema_adds_and_backfills_community_candidate_fields(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -53,6 +54,22 @@ class CommercialMigrationTests(unittest.TestCase):
         self.assertIn('down_revision = "001_initial"', migration)
         for column in ("normalized_name", "review_note", "merged_into_id", "version"):
             self.assertIn(column, migration)
+
+    def test_integrity_migration_declares_foreign_key_unique_live_name_and_idempotency(self):
+        migration = Path("server/helpcat/migrations/versions/003_scale_integrity.py").read_text(encoding="utf-8")
+        for marker in (
+            "fk_communities_merged_into_id",
+            "uq_communities_live_location_name",
+            "uq_cats_actor_idempotency",
+            "idempotency_key",
+            "batch_alter_table",
+        ):
+            self.assertIn(marker, migration)
+
+    def test_alembic_environment_honors_deployment_database_url(self):
+        environment = Path("server/helpcat/migrations/env.py").read_text(encoding="utf-8")
+        self.assertIn('os.getenv("HELPCAT_DATABASE_URL")', environment)
+        self.assertIn('config.set_main_option("sqlalchemy.url"', environment)
 
 
 if __name__ == "__main__":

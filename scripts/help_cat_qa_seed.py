@@ -300,7 +300,10 @@ def seed_full_flow(config, passwords):
         communities["archived"] = _record_entity(created, "community_ids", client.json(
             "POST", "/api/v1/communities", {"name": entities["communities"]["archived"]["name"], "street": "银湖街道"}, tokens["admin"], 201,
         ))
-        communities["archived"] = client.json("POST", "/api/v1/communities/%s/archive" % communities["archived"]["id"], token=tokens["admin"])
+        communities["archived"] = client.json(
+            "POST", "/api/v1/communities/%s/archive" % communities["archived"]["id"],
+            {"version": communities["archived"]["version"]}, tokens["admin"],
+        )
 
         def create_cat(key, actor, location, health="良好", photo_asset_id=None):
             payload = {

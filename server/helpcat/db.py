@@ -43,6 +43,10 @@ def ensure_schema(engine):
         statements.append("ALTER TABLE cats ADD COLUMN longitude FLOAT")
     if "photo_asset_id" not in cat_columns:
         statements.append("ALTER TABLE cats ADD COLUMN photo_asset_id VARCHAR(32)")
+    if "idempotency_key" not in cat_columns:
+        statements.append("ALTER TABLE cats ADD COLUMN idempotency_key VARCHAR(64)")
+    if "version" not in cat_columns:
+        statements.append("ALTER TABLE cats ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
     if "normalized_name" not in community_columns:
         statements.append("ALTER TABLE communities ADD COLUMN normalized_name VARCHAR(120) NOT NULL DEFAULT ''")
     if "review_note" not in community_columns:
@@ -68,5 +72,24 @@ def ensure_schema(engine):
                 {"normalized_name": normalized_name, "id": row["id"]},
             )
         connection.execute(text("UPDATE communities SET version = 1 WHERE version IS NULL OR version < 1"))
+        connection.execute(text("UPDATE cats SET version = 1 WHERE version IS NULL OR version < 1"))
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_communities_normalized_name ON communities (normalized_name)"))
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_communities_merged_into_id ON communities (merged_into_id)"))
+        connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_cats_actor_idempotency ON cats (created_by, idempotency_key)"))
+        connection.execute(text("""
+            CREATE TRIGGER IF NOT EXISTS fk_communities_merged_into_id_insert
+            BEFORE INSERT ON communities
+            WHEN NEW.merged_into_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM communities WHERE id = NEW.merged_into_id)
+            BEGIN SELECT RAISE(ABORT, 'merged community target does not exist'); END
+        """))
+        connection.execute(text("""
+            CREATE TRIGGER IF NOT EXISTS fk_communities_merged_into_id_update
+            BEFORE UPDATE OF merged_into_id ON communities
+            WHEN NEW.merged_into_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM communities WHERE id = NEW.merged_into_id)
+            BEGIN SELECT RAISE(ABORT, 'merged community target does not exist'); END
+        """))
+        connection.execute(text("""
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_communities_live_location_name
+            ON communities (city, district, normalized_name)
+            WHERE status NOT IN ('MERGED','REJECTED','ARCHIVED','HIDDEN')
+        """))
