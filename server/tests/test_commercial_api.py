@@ -9,7 +9,7 @@ from pathlib import Path
 from sqlalchemy import select
 
 from server.helpcat.app import create_app
-from server.helpcat.models import AuditLog, User
+from server.helpcat.models import AuditLog, Cat, Community, User
 
 
 class CommercialApiTests(unittest.TestCase):
@@ -166,6 +166,52 @@ class CommercialApiTests(unittest.TestCase):
         status, body = self.request("POST", "/api/v1/cats", self.user_token, {"community_id": community["id"], "nickname": "猫3", "location_note": "东门"})
         self.assertEqual(status, 429)
         self.assertEqual(body["code"], "daily_cat_limit_reached")
+
+    def test_user_creates_cat_with_pending_community_atomically(self):
+        payload = {
+            "community_candidate": {"name": "新湖家园", "street": "银湖街道", "note": "北门"},
+            "nickname": "团团",
+            "location_note": "北门绿化带",
+        }
+        status, cat = self.request("POST", "/api/v1/cats", self.user_token, payload)
+        self.assertEqual(status, 201)
+        self.assertEqual(cat["community_status"], "PENDING_REVIEW")
+        self.assertEqual(cat["community_review_blocker"], "COMMUNITY_PENDING_REVIEW")
+        with self.app.state.session_factory() as db:
+            communities = db.scalars(select(Community).where(Community.name == "新湖家园")).all()
+            cats = db.scalars(select(Cat).where(Cat.nickname == "团团")).all()
+            logs = db.scalars(select(AuditLog).where(AuditLog.entity_id.in_([cat["community_id"], cat["id"]]))).all()
+            self.assertEqual(len(communities), 1)
+            self.assertEqual(len(cats), 1)
+            self.assertEqual(communities[0].id, cats[0].community_id)
+            self.assertEqual(len(logs), 2)
+
+    def test_cat_requires_exactly_one_community_source(self):
+        base = {"nickname": "团团", "location_note": "北门绿化带"}
+        status, _ = self.request("POST", "/api/v1/cats", self.user_token, base)
+        self.assertEqual(status, 422)
+        _, community = self.request("POST", "/api/v1/communities", self.admin_token, {"name": "已审核小区", "street": "银湖街道"})
+        status, _ = self.request(
+            "POST",
+            "/api/v1/cats",
+            self.user_token,
+            dict(base, community_id=community["id"], community_candidate={"name": "候选小区", "street": "银湖街道"}),
+        )
+        self.assertEqual(status, 422)
+
+    def test_failed_photo_validation_rolls_back_inline_candidate(self):
+        payload = {
+            "community_candidate": {"name": "不应残留的小区", "street": "银湖街道"},
+            "nickname": "团团",
+            "location_note": "北门绿化带",
+            "photo_asset_id": "not-owned",
+        }
+        status, body = self.request("POST", "/api/v1/cats", self.user_token, payload)
+        self.assertEqual(status, 403)
+        self.assertEqual(body["code"], "photo_asset_forbidden")
+        with self.app.state.session_factory() as db:
+            self.assertIsNone(db.scalar(select(Community).where(Community.name == "不应残留的小区")))
+            self.assertIsNone(db.scalar(select(Cat).where(Cat.nickname == "团团")))
 
     def test_admin_can_approve_hide_and_archive_cat(self):
         _, community = self.request("POST", "/api/v1/communities", self.admin_token, {"name": "管理小区", "street": "银湖街道"})

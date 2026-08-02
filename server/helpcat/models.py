@@ -59,6 +59,7 @@ class Cat(Base):
     __tablename__ = "cats"
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
     community_id: Mapped[str] = mapped_column(ForeignKey("communities.id"), index=True)
+    community: Mapped[Community] = relationship(foreign_keys=[community_id])
     code: Mapped[str] = mapped_column(String(40), unique=True, index=True)
     nickname: Mapped[str] = mapped_column(String(80))
     living_status: Mapped[str] = mapped_column(String(80), default="")

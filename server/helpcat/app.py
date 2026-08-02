@@ -26,10 +26,13 @@ def error(status, code, message=None):
 
 
 def cat_payload(cat):
+    community_status = cat.community.status if cat.community else None
     return {"id": cat.id, "community_id": cat.community_id, "code": cat.code, "nickname": cat.nickname,
             "living_status": cat.living_status, "health_status": cat.health_status, "location_note": cat.location_note,
             "review_status": cat.review_status, "visibility_status": cat.visibility_status, "created_by": cat.created_by,
-            "photo_asset_id": cat.photo_asset_id, "latitude": cat.latitude, "longitude": cat.longitude}
+            "photo_asset_id": cat.photo_asset_id, "latitude": cat.latitude, "longitude": cat.longitude,
+            "community_status": community_status,
+            "community_review_blocker": None if community_status == "ACTIVE" else "COMMUNITY_" + community_status}
 
 
 def community_payload(item):
@@ -250,9 +253,11 @@ def create_app(database_url=None, storage_root=None, fake_admin_openids=None):
     @app.post("/api/v1/cats", status_code=201)
     def create_cat(payload: CatCreate, actor=Depends(current_user), db: DbSession = Depends(db_session)):
         actor_id, role = actor
-        community = db.get(Community, payload.community_id)
-        if not community or community.status != "ACTIVE":
-            error(404, "community_not_found")
+        photo_asset = None
+        if payload.photo_asset_id:
+            photo_asset = db.get(MediaAsset, payload.photo_asset_id)
+            if not photo_asset or photo_asset.created_by != actor_id:
+                error(403, "photo_asset_forbidden")
         if role not in {"ADMIN", "SUPER_ADMIN"}:
             today = datetime.now(ZoneInfo("Asia/Shanghai")).date().isoformat()
             quota = db.scalar(select(DailyCatQuota).where(DailyCatQuota.user_id == actor_id, DailyCatQuota.quota_date == today).with_for_update())
@@ -268,11 +273,35 @@ def create_app(database_url=None, storage_root=None, fake_admin_openids=None):
                 db.rollback()
                 error(429, "daily_cat_limit_reached")
             quota.used_count += 1
-        photo_asset = None
-        if payload.photo_asset_id:
-            photo_asset = db.get(MediaAsset, payload.photo_asset_id)
-            if not photo_asset or photo_asset.created_by != actor_id:
-                error(403, "photo_asset_forbidden")
+
+        if payload.community_id:
+            community = db.get(Community, payload.community_id)
+            if not community or community.status != "ACTIVE":
+                error(404, "community_not_found")
+        else:
+            candidate = payload.community_candidate
+            try:
+                normalized_name = normalize_community_name(candidate.name)
+            except ValueError:
+                error(422, "invalid_community_name")
+            community = db.scalar(
+                select(Community).where(
+                    Community.normalized_name == normalized_name,
+                    Community.status.in_(["ACTIVE", "PENDING_REVIEW", "NEEDS_CHANGES"]),
+                ).order_by(Community.status == "ACTIVE", Community.updated_at.desc())
+            )
+            if not community:
+                community = Community(
+                    name=candidate.name.strip(),
+                    normalized_name=normalized_name,
+                    street=candidate.street.strip(),
+                    review_note=candidate.note.strip(),
+                    status="ACTIVE" if role in {"ADMIN", "SUPER_ADMIN"} else "PENDING_REVIEW",
+                    created_by=actor_id,
+                )
+                db.add(community)
+                db.flush()
+                audit(db, actor_id, "CREATE", "community", community.id, after=community_payload(community))
         review_status = "APPROVED" if role in {"ADMIN", "SUPER_ADMIN"} else "PENDING_REVIEW"
         cat = Cat(community_id=community.id, code="HC-" + secrets.token_hex(4).upper(), nickname=payload.nickname.strip(),
                   living_status=payload.living_status.strip(), health_status=payload.health_status.strip(), location_note=payload.location_note.strip(),
