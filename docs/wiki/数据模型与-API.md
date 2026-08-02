@@ -24,7 +24,11 @@
 | 字段 | 说明 |
 |---|---|
 | `city`、`district`、`street`、`name` | 行政和小区信息 |
-| `status` | PENDING_REVIEW / ACTIVE / HIDDEN / ARCHIVED |
+| `normalized_name` | 规范化比较键，用于识别空格、全半角、大小写和常见标点差异 |
+| `status` | PENDING_REVIEW / NEEDS_CHANGES / ACTIVE / MERGED / REJECTED / ARCHIVED；HIDDEN 仅作旧协议兼容 |
+| `review_note` | 候选补充说明或最近审核说明 |
+| `merged_into_id` | 合并后的目标 ACTIVE 小区 ID |
+| `version` | 乐观锁版本，从 1 开始，每次编辑/审核/合并递增 |
 | `created_by`、`reviewed_by` | 创建者和审核者 |
 | `created_at`、`updated_at` | 时间戳 |
 
@@ -57,6 +61,7 @@
 - 认证请求使用 `Authorization: Bearer <token>`。
 - 错误响应包含稳定 `code` 和可选 `message`。
 - H5 根据错误 code 映射用户可读中文，不依赖 HTTP 文本。
+- 分页集合保留顶层 `items`，同时返回 `next_cursor`；`limit` 默认 24、最大 100。
 
 ## 健康与认证
 
@@ -73,19 +78,20 @@
 
 | 方法 | 路径 | 权限 | 作用 |
 |---|---|---|---|
-| GET | `/communities` | 公开 | 只返回 ACTIVE 小区，支持 `q` |
-| GET | `/admin/communities` | ADMIN+ | 返回全部小区 |
+| GET | `/communities` | 公开 | 只返回 ACTIVE，支持 `q`、`cursor`、`limit` |
+| GET | `/admin/communities` | ADMIN+ | 返回候选/正式小区分页 |
 | POST | `/communities` | 登录 | USER 待审；ADMIN+ 直接开放 |
-| PATCH | `/communities/{id}` | ADMIN+ | 修改名称和街道 |
-| POST | `/communities/{id}/review` | ADMIN+ | 通过变 ACTIVE，不通过变 HIDDEN |
+| PATCH | `/communities/{id}` | 创建者/ADMIN+ | 创建者改本人待审/待补充候选；ADMIN+ 治理；带 `version` |
+| POST | `/communities/{id}/review` | ADMIN+ | `approve` / `request_changes` / `reject`，带原因和 `version` |
+| POST | `/communities/{id}/merge` | ADMIN+ | 合并到 ACTIVE 目标并事务改挂关联猫咪 |
 | POST | `/communities/{id}/archive` | ADMIN+ | 归档 |
 
 ## 猫咪
 
 | 方法 | 路径 | 权限 | 作用 |
 |---|---|---|---|
-| GET | `/cats` | 公开/可选管理员 Token | 访客仅看 APPROVED+ACTIVE；管理员看全部 |
-| POST | `/cats` | 登录 | USER 待审且有每日配额；ADMIN+ 直接通过 |
+| GET | `/cats` | 公开/可选管理员 Token | 游标分页；访客还要求关联小区 ACTIVE；管理员看全部 |
+| POST | `/cats` | 登录 | `community_id` 或 `community_candidate` 二选一；USER 待审且有每日配额 |
 | POST | `/cats/{id}/review` | ADMIN+ | 审核通过或拒绝 |
 | POST | `/cats/{id}/visibility` | ADMIN+ | 公开或隐藏 |
 | POST | `/cats/{id}/archive` | ADMIN+ | 归档 |
@@ -128,6 +134,13 @@
 | `super_admin_immutable` | 不能修改唯一超级管理员 |
 | `community_exists` | 小区已存在或正在审核 |
 | `community_not_found` | 小区不存在或未开放 |
+| `invalid_community_name` | 规范化后小区名称为空 |
+| `stale_community_version` | 候选已被更新，客户端版本过期 |
+| `community_not_editable` | 当前候选状态不可修改 |
+| `review_note_required` | 退回补充或驳回缺少原因 |
+| `community_merge_target_invalid` | 合并目标不是另一个 ACTIVE 小区 |
+| `community_not_active` | 关联小区未开放，猫咪不能审核公开 |
+| `invalid_cursor` | 分页游标无效 |
 | `daily_cat_limit_reached` | 普通用户达到每日建档上限 |
 | `task_already_claimed` | 任务已被领取 |
 | `unsupported_image_type` | 不支持的图片 MIME |
@@ -137,6 +150,6 @@
 ## 数据库迁移
 
 - SQLAlchemy 模型是运行时数据结构来源。
-- Alembic 位于 `server/helpcat/migrations/`。
+- Alembic 位于 `server/helpcat/migrations/`；`002_community_candidates` 添加候选治理字段和索引并回填旧行。
 - `ensure_schema()` 为早期 SQLite 试运行提供小范围向前兼容补列，不应替代正式生产迁移。
 - 迁移 PostgreSQL 前必须先做数据备份、双向数量校验、业务抽样和回滚演练。
