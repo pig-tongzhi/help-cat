@@ -13,8 +13,9 @@
     authMode: "login",
     catStep: 1,
     catCommunityMode: "existing",
-    cursors: { communities: null, cats: null },
+    cursors: { communities: null, cats: null, tasks: null, submissionCats: null, submissionCommunities: null },
     location: null,
+    catIdempotencyKey: null,
     submitting: false
   };
 
@@ -43,10 +44,10 @@
   function errorText(error) {
     return errorMessages[error && error.code] || (error && error.message) || "操作失败，请稍后重试。";
   }
-  function communityName(id) {
+  function communityName(id, fallback) {
     var all = state.communities.concat(state.submissions.communities || []);
     var item = all.find(function (community) { return community.id === id; });
-    return item ? item.name : "社区范围内";
+    return item ? item.name : (fallback || "社区范围内");
   }
   function photoUrl(cat) {
     return cat.photo_asset_id ? api.API_BASE + "/api/v1/media/" + encodeURIComponent(cat.photo_asset_id) : "";
@@ -93,13 +94,14 @@
     return Promise.all([
       api.request("/api/v1/communities?limit=24"),
       api.request("/api/v1/cats?limit=24"),
-      api.request("/api/v1/tasks")
+      api.request("/api/v1/tasks?limit=24")
     ]).then(function (results) {
       state.communities = results[0].items || [];
       state.cats = results[1].items || [];
       state.cursors.communities = results[0].next_cursor || null;
       state.cursors.cats = results[1].next_cursor || null;
       state.tasks = results[2].items || [];
+      state.cursors.tasks = results[2].next_cursor || null;
       showStatus("", false);
       renderApp();
     }).catch(function (error) {
@@ -114,25 +116,42 @@
     state.submitting = true;
     button.disabled = true;
     button.textContent = "正在加载…";
-    var path = type === "cats" ? "/api/v1/cats" : "/api/v1/communities";
-    return api.request(path + "?limit=24&cursor=" + encodeURIComponent(cursor)).then(function (payload) {
+    var path = type === "cats" ? "/api/v1/cats" : type === "tasks" ? "/api/v1/tasks" : "/api/v1/communities";
+    var params = ["limit=24", "cursor=" + encodeURIComponent(cursor)];
+    if (type === "cats") {
+      var query = byId("cat-search").value.trim();
+      var communityId = byId("community-filter").value;
+      if (query) params.push("q=" + encodeURIComponent(query));
+      if (communityId) params.push("community_id=" + encodeURIComponent(communityId));
+    }
+    return api.request(path + "?" + params.join("&")).then(function (payload) {
       state[type] = communityForm.appendUnique(state[type], payload.items || []);
       state.cursors[type] = payload.next_cursor || null;
       if (type === "cats") renderCats();
+      else if (type === "tasks") renderTasks();
       else renderCommunityOptions();
     }).catch(function (error) {
       toast(errorText(error));
     }).finally(function () {
       state.submitting = false;
       button.disabled = false;
-      button.textContent = type === "cats" ? "加载更多猫咪" : "加载更多已审核小区";
+      button.textContent = type === "cats" ? "加载更多猫咪" : type === "tasks" ? "加载更多任务" : "加载更多已审核小区";
     });
   }
 
-  function loadSubmissions() {
+  function loadSubmissions(append) {
     if (!state.user) return Promise.resolve();
-    return api.request("/api/v1/me/submissions").then(function (payload) {
-      state.submissions = { cats: payload.cats || [], communities: payload.communities || [] };
+    var params = ["limit=24"];
+    if (append && state.cursors.submissionCats) params.push("cat_cursor=" + encodeURIComponent(state.cursors.submissionCats));
+    if (append && state.cursors.submissionCommunities) params.push("community_cursor=" + encodeURIComponent(state.cursors.submissionCommunities));
+    return api.request("/api/v1/me/submissions?" + params.join("&")).then(function (payload) {
+      state.submissions = {
+        cats: append ? communityForm.appendUnique(state.submissions.cats, payload.cats || []) : payload.cats || [],
+        communities: append ? communityForm.appendUnique(state.submissions.communities, payload.communities || []) : payload.communities || []
+      };
+      var next = payload.next_cursor || {};
+      state.cursors.submissionCats = next.cats || null;
+      state.cursors.submissionCommunities = next.communities || null;
       renderSubmissions();
     }).catch(function (error) {
       if (error.status === 401) state.user = null;
@@ -149,7 +168,7 @@
       (image ? '<img data-cat-photo src="' + escapeHtml(image) + '" alt="' + escapeHtml(cat.nickname) + '的照片" loading="lazy">' : '') +
       '<span class="health-badge ' + healthTone(cat.health_status) + '">' + escapeHtml(healthLabel(cat.health_status)) + '</span></div>' +
       '<div class="cat-card-body"><div class="cat-title"><h3>' + escapeHtml(cat.nickname) + '</h3><span>' + escapeHtml(cat.code) + '</span></div>' +
-      '<p class="cat-community">' + escapeHtml(communityName(cat.community_id)) + '</p>' +
+      '<p class="cat-community">' + escapeHtml(communityName(cat.community_id, cat.community_name)) + '</p>' +
       '<p class="cat-meta">' + escapeHtml(cat.living_status || "居住情况待观察") + ' · ' + escapeHtml(cat.location_note || "位置已保护") + '</p></div></article>';
   }
 
@@ -172,6 +191,27 @@
     });
   }
 
+  function searchCatsFromServer() {
+    var query = byId("cat-search").value.trim();
+    var communityId = byId("community-filter").value;
+    var sequence = (searchCatsFromServer.sequence || 0) + 1;
+    searchCatsFromServer.sequence = sequence;
+    var params = ["limit=24"];
+    if (query) params.push("q=" + encodeURIComponent(query));
+    if (communityId) params.push("community_id=" + encodeURIComponent(communityId));
+    api.request("/api/v1/cats?" + params.join("&")).then(function (payload) {
+      if (sequence !== searchCatsFromServer.sequence) return;
+      state.cats = payload.items || [];
+      state.cursors.cats = payload.next_cursor || null;
+      renderCats();
+    }).catch(function (error) { toast(errorText(error)); });
+  }
+
+  function scheduleCatSearch() {
+    window.clearTimeout(scheduleCatSearch.timer);
+    scheduleCatSearch.timer = window.setTimeout(searchCatsFromServer, 240);
+  }
+
   function renderCats() {
     var cats = filteredCats();
     byId("metric-cats").textContent = String(state.cats.length);
@@ -187,6 +227,7 @@
     var content = state.tasks.length ? state.tasks.map(taskCard).join("") : emptyCard("暂时没有开放任务", "有新的救助行动时会在这里及时发布。");
     byId("task-list").innerHTML = content;
     byId("home-tasks").innerHTML = state.tasks.length ? state.tasks.slice(0, 2).map(taskCard).join("") : content;
+    byId("load-more-tasks").hidden = !state.cursors.tasks;
   }
 
   function renderCommunityOptions() {
@@ -261,7 +302,8 @@
       var review = community.status === "ACTIVE" ? "APPROVED" : community.status;
       var editable = ["PENDING_REVIEW", "NEEDS_CHANGES"].indexOf(community.status) >= 0;
       var meta = communityForm.statusMeta(community.status);
-      items.push('<article class="submission-item community-submission"><span class="submission-type">小区建议</span><div class="submission-main"><strong>' + escapeHtml(community.name) + '</strong><p>' + escapeHtml(community.street) + (community.review_note ? ' · ' + escapeHtml(community.review_note) : '') + '</p>' +
+      var mergedTarget = community.status === "MERGED" && community.merged_into_name ? ' · 已合并至' + escapeHtml(community.merged_into_name) : '';
+      items.push('<article class="submission-item community-submission"><span class="submission-type">小区建议</span><div class="submission-main"><strong>' + escapeHtml(community.name) + '</strong><p>' + escapeHtml(community.street) + (community.review_note ? ' · ' + escapeHtml(community.review_note) : '') + mergedTarget + '</p>' +
         (editable ? '<button class="inline-link correction-toggle" type="button" data-edit-community="' + escapeHtml(community.id) + '">修改并重新提交</button>' : '') +
         '</div><span class="review-status ' + escapeHtml(meta.tone) + '">' + escapeHtml(meta.label) + '</span>' +
         (editable ? '<form class="community-correction" data-community-correction-form="' + escapeHtml(community.id) + '" hidden>' +
@@ -273,9 +315,10 @@
     });
     state.submissions.cats.forEach(function (cat) {
       var blocker = cat.community_review_blocker ? '<small class="submission-blocker">小区信息待审核或修正，猫咪档案暂不会公开</small>' : '';
-      items.push('<article class="submission-item"><span class="submission-type">猫咪档案</span><div><strong>' + escapeHtml(cat.nickname) + '</strong><p>' + escapeHtml(communityName(cat.community_id)) + ' · ' + escapeHtml(cat.code) + '</p>' + blocker + '</div><span class="review-status ' + reviewTone(cat.review_status) + '">' + escapeHtml(reviewLabel(cat.review_status)) + '</span></article>');
+      items.push('<article class="submission-item"><span class="submission-type">猫咪档案</span><div><strong>' + escapeHtml(cat.nickname) + '</strong><p>' + escapeHtml(communityName(cat.community_id, cat.community_name)) + ' · ' + escapeHtml(cat.code) + '</p>' + blocker + '</div><span class="review-status ' + reviewTone(cat.review_status) + '">' + escapeHtml(reviewLabel(cat.review_status)) + '</span></article>');
     });
     byId("submission-list").innerHTML = items.length ? items.join("") : emptyCard("还没有提交记录", "完成猫咪建档或小区建议后会显示在这里。");
+    byId("load-more-submissions").hidden = !(state.cursors.submissionCats || state.cursors.submissionCommunities);
   }
 
   function renderView() {
@@ -302,7 +345,8 @@
     state.view = ["home", "cats", "tasks", "profile"].indexOf(view) >= 0 ? view : "home";
     renderView();
     window.history.replaceState(null, "", "#" + state.view);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    var reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    window.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
     if (state.view === "profile" && state.user) loadSubmissions();
   }
 
@@ -466,6 +510,11 @@
     event.preventDefault();
     if (!requireLogin() || state.submitting || !validateCatStep()) return;
     state.submitting = true;
+    if (!state.catIdempotencyKey) {
+      state.catIdempotencyKey = window.crypto && window.crypto.randomUUID
+        ? window.crypto.randomUUID()
+        : "cat-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2);
+    }
     byId("cat-submit").disabled = true;
     byId("cat-message").textContent = "正在提交档案…";
     var file = byId("cat-photo-file").files && byId("cat-photo-file").files[0];
@@ -477,6 +526,7 @@
       var communityPayload = currentCatCommunityPayload();
       return api.request("/api/v1/cats", {
         method: "POST",
+        headers: { "Idempotency-Key": state.catIdempotencyKey },
         body: Object.assign({
           nickname: byId("cat-name").value.trim(),
           living_status: byId("cat-living").value,
@@ -493,6 +543,7 @@
       setCatCommunityMode("existing");
       byId("photo-preview").hidden = true;
       state.location = null;
+      state.catIdempotencyKey = null;
       closeSheets();
       toast(approved ? "档案已创建并公开" : "档案已提交，等待管理员审核");
       return Promise.all([loadPublicData(), loadSubmissions()]);
@@ -678,16 +729,26 @@
       toast("已安全退出登录");
     });
   });
-  byId("refresh-submissions").addEventListener("click", loadSubmissions);
+  byId("refresh-submissions").addEventListener("click", function () { loadSubmissions(false); });
+  byId("load-more-submissions").addEventListener("click", function () { loadSubmissions(true); });
   byId("load-more-cats").addEventListener("click", function (event) { loadMoreCollection("cats", event.currentTarget); });
+  byId("load-more-tasks").addEventListener("click", function (event) { loadMoreCollection("tasks", event.currentTarget); });
   byId("load-more-communities").addEventListener("click", function (event) { loadMoreCollection("communities", event.currentTarget); });
-  byId("cat-search").addEventListener("input", renderCats);
-  byId("community-filter").addEventListener("change", renderCats);
+  byId("cat-search").addEventListener("input", scheduleCatSearch);
+  byId("community-filter").addEventListener("change", searchCatsFromServer);
   byId("cat-community-search").addEventListener("input", function (event) {
     var query = event.target.value.trim().toLowerCase();
     Array.prototype.forEach.call(byId("cat-community").options, function (option, index) {
       option.hidden = index > 0 && query && option.textContent.toLowerCase().indexOf(query) < 0;
     });
+    window.clearTimeout(event.currentTarget.searchTimer);
+    event.currentTarget.searchTimer = window.setTimeout(function () {
+      if (!query) return;
+      api.request("/api/v1/communities?limit=24&q=" + encodeURIComponent(query)).then(function (payload) {
+        state.communities = communityForm.appendUnique(state.communities, payload.items || []);
+        renderCommunityOptions();
+      }).catch(function (error) { toast(errorText(error)); });
+    }, 240);
   });
   byId("use-current-location").addEventListener("click", useCurrentLocation);
   byId("cat-photo-file").addEventListener("change", previewPhoto);

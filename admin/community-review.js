@@ -50,5 +50,26 @@
     return result;
   }
 
-  return { buildActionRequest: buildActionRequest, appendUnique: appendUnique };
+  function buildArchiveRequest(communityId, version) {
+    return {
+      path: "/api/v1/communities/" + encodeURIComponent(clean(communityId)) + "/archive",
+      options: { method: "POST", body: { version: versionOf(version) } }
+    };
+  }
+
+  function buildCatReassignRequest(catId, communityId, version) {
+    var target = clean(communityId);
+    if (!target) throw new Error("reassign_target_required");
+    return {
+      path: "/api/v1/cats/" + encodeURIComponent(clean(catId)) + "/community",
+      options: { method: "POST", body: { community_id: target, version: versionOf(version) } }
+    };
+  }
+
+  return {
+    buildActionRequest: buildActionRequest,
+    buildArchiveRequest: buildArchiveRequest,
+    buildCatReassignRequest: buildCatReassignRequest,
+    appendUnique: appendUnique
+  };
 }));

@@ -7,7 +7,7 @@
   var communityReview = window.HelpCatCommunityReview;
   var token = sessionStorage.getItem(TOKEN_KEY) || "";
   var profile = null;
-  var state = { cats: [], communities: [], users: [], cursors: { cats: null, communities: null }, section: "overview", busy: false };
+  var state = { cats: [], communities: [], users: [], cursors: { cats: null, communities: null, users: null }, section: "overview", busy: false };
 
   function byId(id) { return document.getElementById(id); }
   function esc(value) {
@@ -47,6 +47,8 @@
       community_not_active: "请先处理关联小区，再审核通过猫咪档案",
       review_note_required: "退回修改或驳回时必须填写原因",
       community_merge_target_invalid: "请选择另一个已开放小区作为合并目标",
+      community_reassign_target_invalid: "只能把猫咪改挂到已开放小区",
+      stale_cat_version: "猫咪档案刚刚已更新，已刷新最新内容",
       network_error: "网络连接失败，请稍后重试"
     }[error && error.code] || (error && error.message) || "操作失败，请稍后重试";
   }
@@ -111,13 +113,14 @@
   function loadAll() {
     showGlobal("正在同步管理数据…", false);
     var requests = [request("/api/v1/cats?limit=24"), request("/api/v1/admin/communities?limit=24")];
-    if (profile.role === "SUPER_ADMIN") requests.push(request("/api/v1/admin/users"));
+    if (profile.role === "SUPER_ADMIN") requests.push(request("/api/v1/admin/users?limit=24"));
     return Promise.all(requests).then(function (results) {
       state.cats = results[0].items || [];
       state.communities = results[1].items || [];
       state.cursors.cats = results[0].next_cursor || null;
       state.cursors.communities = results[1].next_cursor || null;
       state.users = results[2] ? results[2].items || [] : [];
+      state.cursors.users = results[2] ? results[2].next_cursor || null : null;
       showGlobal("", false);
       render();
     }).catch(function (error) {
@@ -135,8 +138,10 @@
     state.busy = true;
     button.disabled = true;
     button.textContent = "正在加载…";
-    var route = type === "cats" ? "/api/v1/cats" : "/api/v1/admin/communities";
-    request(route + "?limit=24&cursor=" + encodeURIComponent(cursor)).then(function (body) {
+    var route = type === "cats" ? "/api/v1/cats" : type === "users" ? "/api/v1/admin/users" : "/api/v1/admin/communities";
+    var params = ["limit=24", "cursor=" + encodeURIComponent(cursor)];
+    if (type === "cats" && byId("cat-search").value.trim()) params.push("q=" + encodeURIComponent(byId("cat-search").value.trim()));
+    request(route + "?" + params.join("&")).then(function (body) {
       state[type] = communityReview.appendUnique(state[type], body.items || []);
       state.cursors[type] = body.next_cursor || null;
       render();
@@ -145,19 +150,27 @@
     }).finally(function () {
       state.busy = false;
       button.disabled = false;
-      button.textContent = type === "cats" ? "加载更多猫咪" : "加载更多小区";
+      button.textContent = type === "cats" ? "加载更多猫咪" : type === "users" ? "加载更多用户" : "加载更多小区";
     });
   }
   function loadUsers() {
     if (!profile || profile.role !== "SUPER_ADMIN") return Promise.resolve();
-    return request("/api/v1/admin/users").then(function (body) {
+    return request("/api/v1/admin/users?limit=24").then(function (body) {
       state.users = body.items || [];
+      state.cursors.users = body.next_cursor || null;
       renderUsers();
       byId("user-count").textContent = String(state.users.length);
     });
   }
   function statusLabel(value) {
     return { APPROVED: "已通过", PENDING_REVIEW: "待审核", NEEDS_CHANGES: "待补充", MERGED: "已合并", REJECTED: "未通过", ACTIVE: "公开", HIDDEN: "隐藏", ARCHIVED: "已归档" }[value] || value;
+  }
+  function activeTargetOptions(excludeId) {
+    return state.communities.filter(function (item) {
+      return item.status === "ACTIVE" && item.id !== excludeId;
+    }).map(function (item) {
+      return '<option value="' + esc(item.id) + '">' + esc(item.name) + ' · ' + esc(item.street) + '</option>';
+    }).join("");
   }
   function renderCats() {
     var query = byId("cat-search").value.trim().toLowerCase();
@@ -166,30 +179,49 @@
     });
     byId("cats").innerHTML = cats.length ? cats.map(function (cat) {
       var blocker = cat.community_review_blocker;
-      return '<article class="list-item"><div class="entity-icon cat-entity">猫</div><div class="entity-copy"><strong>' + esc(cat.nickname) + '<small>' + esc(cat.code) + '</small></strong><p>' + esc(cat.location_note) + '</p><div class="badges"><span>' + esc(statusLabel(cat.review_status)) + '</span><span>' + esc(statusLabel(cat.visibility_status)) + '</span>' + (blocker ? '<span class="blocker-badge">小区待处理</span>' : '') + '</div></div><div class="actions">' +
-        (cat.review_status === "PENDING_REVIEW" ? (blocker ? '<button data-section-link="communities">先处理小区</button>' : '<button data-cat-action="review" data-id="' + esc(cat.id) + '">审核通过</button>') : '') +
+      var targetId = "cat-target-" + cat.id;
+      var recovery = blocker ? '<div class="reassign-workbench"><label>改挂到已开放小区<input type="search" data-target-search data-target-select="' + esc(targetId) + '" placeholder="输入小区名称搜索全部结果"><select id="' + esc(targetId) + '" data-cat-reassign-target="' + esc(cat.id) + '"><option value="">请选择目标小区</option>' + activeTargetOptions(cat.community_id) + '</select></label><button data-cat-action="reassign" data-id="' + esc(cat.id) + '" data-version="' + esc(cat.version) + '">确认改挂</button></div>' : '';
+      return '<article class="list-item"><div class="entity-icon cat-entity">猫</div><div class="entity-copy"><strong>' + esc(cat.nickname) + '<small>' + esc(cat.code) + '</small></strong><p>' + esc(cat.community_name) + ' · ' + esc(cat.location_note) + '</p><div class="badges"><span>' + esc(statusLabel(cat.review_status)) + '</span><span>' + esc(statusLabel(cat.visibility_status)) + '</span>' + (blocker ? '<span class="blocker-badge">小区待处理</span>' : '') + '</div></div><div class="actions">' +
+        (cat.review_status === "PENDING_REVIEW" ? (blocker ? '<button data-section-link="communities">查看小区状态</button>' : '<button data-cat-action="review" data-id="' + esc(cat.id) + '">审核通过</button>') : '') +
         (cat.visibility_status !== "ARCHIVED" ? '<button data-cat-action="visibility" data-id="' + esc(cat.id) + '" data-visible="' + String(cat.visibility_status === "HIDDEN") + '">' + (cat.visibility_status === "HIDDEN" ? "公开" : "隐藏") + '</button>' : '') +
-        '<button class="danger" data-cat-action="archive" data-id="' + esc(cat.id) + '" ' + (cat.visibility_status === "ARCHIVED" ? "disabled" : "") + '>归档</button></div></article>';
+        '<button class="danger" data-cat-action="archive" data-id="' + esc(cat.id) + '" ' + (cat.visibility_status === "ARCHIVED" ? "disabled" : "") + '>归档</button></div>' + recovery + '</article>';
     }).join("") : '<div class="empty-state"><strong>没有匹配的猫咪档案</strong><p>调整搜索条件或等待新的居民提交。</p></div>';
     byId("load-more-admin-cats").hidden = !state.cursors.cats;
   }
+  function searchAdminCats() {
+    var query = byId("cat-search").value.trim();
+    var sequence = (searchAdminCats.sequence || 0) + 1;
+    searchAdminCats.sequence = sequence;
+    request("/api/v1/cats?limit=24&q=" + encodeURIComponent(query)).then(function (body) {
+      if (sequence !== searchAdminCats.sequence) return;
+      state.cats = body.items || [];
+      state.cursors.cats = body.next_cursor || null;
+      renderCats();
+    }).catch(function (error) { showGlobal(errorText(error), true); });
+  }
+
+  function scheduleAdminCatSearch() {
+    window.clearTimeout(scheduleAdminCatSearch.timer);
+    scheduleAdminCatSearch.timer = window.setTimeout(searchAdminCats, 240);
+  }
   function renderCommunities() {
     byId("communities").innerHTML = state.communities.length ? state.communities.map(function (community) {
-      var linked = state.cats.filter(function (cat) { return cat.community_id === community.id; });
+      var linked = community.linked_cats || [];
       var reviewable = ["PENDING_REVIEW", "NEEDS_CHANGES"].indexOf(community.status) >= 0;
-      var targets = state.communities.filter(function (target) { return target.status === "ACTIVE" && target.id !== community.id; });
       var previews = linked.slice(0, 3).map(function (cat) {
         return '<span class="linked-cat" data-linked-cat="' + esc(cat.id) + '">' + esc(cat.nickname) + ' · ' + esc(cat.code) + '</span>';
       }).join("");
-      var workbench = reviewable ? '<div class="review-workbench"><div class="linked-cats"><strong>当前已载入关联猫咪 ' + linked.length + ' 只</strong>' + (previews || '<span class="linked-cat empty">暂无关联档案</span>') + '</div>' +
+      var mergeTargetId = "merge-target-" + community.id;
+      var workbench = reviewable ? '<div class="review-workbench"><div class="linked-cats"><strong>关联猫咪共 ' + esc(community.linked_cat_count || 0) + ' 只</strong>' + (previews || '<span class="linked-cat empty">暂无关联档案</span>') + '</div>' +
         '<label>审核说明<textarea data-review-note="' + esc(community.id) + '" maxlength="500" placeholder="退回修改或驳回时必填"></textarea></label>' +
-        '<label>合并到已开放小区<select data-merge-target="' + esc(community.id) + '"><option value="">请选择目标小区</option>' + targets.map(function (target) { return '<option value="' + esc(target.id) + '">' + esc(target.name) + '</option>'; }).join("") + '</select></label>' +
+        '<label>合并到已开放小区<input type="search" data-target-search data-target-select="' + esc(mergeTargetId) + '" placeholder="输入名称搜索全部开放小区"><select id="' + esc(mergeTargetId) + '" data-merge-target="' + esc(community.id) + '"><option value="">请选择目标小区</option>' + activeTargetOptions(community.id) + '</select></label>' +
         '<div class="review-actions"><button data-community-action="approve" data-id="' + esc(community.id) + '" data-version="' + esc(community.version) + '">核准开放</button>' +
         '<button data-community-action="request_changes" data-id="' + esc(community.id) + '" data-version="' + esc(community.version) + '">退回补充</button>' +
         '<button data-community-action="merge" data-id="' + esc(community.id) + '" data-version="' + esc(community.version) + '">合并小区</button>' +
         '<button class="danger" data-community-action="reject" data-id="' + esc(community.id) + '" data-version="' + esc(community.version) + '">驳回无效内容</button></div></div>' : '';
-      return '<article class="list-item community-review-item"><div class="entity-icon community-entity">区</div><div class="entity-copy"><strong>' + esc(community.name) + '</strong><p>' + esc(community.street) + (community.review_note ? ' · ' + esc(community.review_note) : '') + '</p><div class="badges"><span>' + esc(statusLabel(community.status)) + '</span><span>v' + esc(community.version) + '</span></div></div>' +
-        (!reviewable ? '<div class="actions"><button class="danger" data-community-action="archive" data-id="' + esc(community.id) + '" ' + (community.status === "ARCHIVED" ? "disabled" : "") + '>归档</button></div>' : '') + workbench + '</article>';
+      var merged = community.merged_into_name ? ' · 已合并至 ' + esc(community.merged_into_name) : '';
+      return '<article class="list-item community-review-item"><div class="entity-icon community-entity">区</div><div class="entity-copy"><strong>' + esc(community.name) + '</strong><p>' + esc(community.street) + (community.review_note ? ' · ' + esc(community.review_note) : '') + merged + '</p><div class="badges"><span>' + esc(statusLabel(community.status)) + '</span><span>v' + esc(community.version) + '</span></div></div>' +
+        (!reviewable ? '<div class="actions"><button class="danger" data-community-action="archive" data-id="' + esc(community.id) + '" data-version="' + esc(community.version) + '" ' + (["ARCHIVED", "MERGED"].indexOf(community.status) >= 0 ? "disabled" : "") + '>归档</button></div>' : '') + workbench + '</article>';
     }).join("") : '<div class="empty-state"><strong>暂无小区</strong><p>可以使用上方表单新增首个小区。</p></div>';
     byId("load-more-admin-communities").hidden = !state.cursors.communities;
   }
@@ -210,6 +242,7 @@
       }
       return '<article class="list-item user-item"><div class="user-avatar">' + esc(name.slice(0, 1)) + '</div><div class="entity-copy"><strong>' + esc(name) + '</strong><p>账号状态：' + esc(user.status === "ACTIVE" ? "正常" : user.status) + '</p><div class="badges"><span class="role-badge ' + esc(user.role.toLowerCase()) + '">' + esc(user.role) + '</span></div></div><div class="actions">' + control + '</div></article>';
     }).join("") : '<div class="empty-state"><strong>没有匹配用户</strong><p>请检查用户名或昵称。</p></div>';
+    byId("load-more-admin-users").hidden = !state.cursors.users;
   }
   function render() {
     byId("cat-count").textContent = String(state.cats.length);
@@ -253,9 +286,26 @@
     button.disabled = true;
     var id = encodeURIComponent(button.dataset.id);
     var action = button.dataset.catAction;
-    var route = action === "review" ? "/api/v1/cats/" + id + "/review" : action === "visibility" ? "/api/v1/cats/" + id + "/visibility" : "/api/v1/cats/" + id + "/archive";
-    var body = action === "review" ? { approved: true } : action === "visibility" ? { visible: button.dataset.visible === "true" } : undefined;
-    request(route, { method: "POST", body: body }).then(function () { toast("档案状态已更新"); return loadAll(); }).catch(function (error) { showGlobal(errorText(error), true); }).finally(function () { state.busy = false; });
+    var route;
+    var options;
+    try {
+      if (action === "reassign") {
+        var target = document.querySelector('[data-cat-reassign-target="' + button.dataset.id + '"]');
+        var built = communityReview.buildCatReassignRequest(button.dataset.id, target ? target.value : "", button.dataset.version);
+        route = built.path;
+        options = built.options;
+      } else {
+        route = action === "review" ? "/api/v1/cats/" + id + "/review" : action === "visibility" ? "/api/v1/cats/" + id + "/visibility" : "/api/v1/cats/" + id + "/archive";
+        var body = action === "review" ? { approved: true } : action === "visibility" ? { visible: button.dataset.visible === "true" } : undefined;
+        options = { method: "POST", body: body };
+      }
+    } catch (error) {
+      state.busy = false;
+      button.disabled = false;
+      showGlobal("请选择要改挂到的已开放小区", true);
+      return;
+    }
+    request(route, options).then(function () { toast(action === "reassign" ? "猫咪已改挂到新小区" : "档案状态已更新"); return loadAll(); }).catch(function (error) { showGlobal(errorText(error), true); if (error.status === 409) return loadAll(); }).finally(function () { state.busy = false; });
   }
   function actOnCommunity(button) {
     if (state.busy) return;
@@ -267,8 +317,9 @@
     var options;
     try {
       if (action === "archive") {
-        route = "/api/v1/communities/" + encodeURIComponent(id) + "/archive";
-        options = { method: "POST" };
+        var archive = communityReview.buildArchiveRequest(id, button.dataset.version);
+        route = archive.path;
+        options = archive.options;
       } else {
         var note = document.querySelector('[data-review-note="' + id + '"]');
         var target = document.querySelector('[data-merge-target="' + id + '"]');
@@ -317,7 +368,8 @@
   byId("refresh").addEventListener("click", loadAll);
   byId("load-more-admin-cats").addEventListener("click", function (event) { loadMore("cats", event.currentTarget); });
   byId("load-more-admin-communities").addEventListener("click", function (event) { loadMore("communities", event.currentTarget); });
-  byId("cat-search").addEventListener("input", renderCats);
+  byId("load-more-admin-users").addEventListener("click", function (event) { loadMore("users", event.currentTarget); });
+  byId("cat-search").addEventListener("input", scheduleAdminCatSearch);
   byId("user-search").addEventListener("input", renderUsers);
   byId("community-form").addEventListener("submit", function (event) {
     event.preventDefault();
@@ -341,6 +393,22 @@
     if (catButton) { actOnCat(catButton); return; }
     var communityButton = event.target.closest("[data-community-action]");
     if (communityButton) actOnCommunity(communityButton);
+  });
+  document.addEventListener("input", function (event) {
+    var input = event.target.closest("[data-target-search]");
+    if (!input) return;
+    window.clearTimeout(input.searchTimer);
+    input.searchTimer = window.setTimeout(function () {
+      request("/api/v1/communities?limit=24&q=" + encodeURIComponent(input.value.trim())).then(function (body) {
+        var selectTarget = byId(input.dataset.targetSelect);
+        if (!selectTarget) return;
+        var current = selectTarget.value;
+        selectTarget.innerHTML = '<option value="">请选择目标小区</option>' + (body.items || []).map(function (item) {
+          return '<option value="' + esc(item.id) + '">' + esc(item.name) + ' · ' + esc(item.street) + '</option>';
+        }).join("");
+        if (Array.prototype.some.call(selectTarget.options, function (option) { return option.value === current; })) selectTarget.value = current;
+      }).catch(function (error) { showGlobal(errorText(error), true); });
+    }, 260);
   });
 
   var initialSection = window.location.hash.replace("#", "");

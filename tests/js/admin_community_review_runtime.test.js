@@ -33,3 +33,14 @@ test("appendUnique de-duplicates paged admin results", () => {
     { id: "1", status: "new" }, { id: "2" }
   ]);
 });
+
+test("archive and cat reassignment requests are versioned", () => {
+  assert.deepEqual(review.buildArchiveRequest("c1", 4), {
+    path: "/api/v1/communities/c1/archive",
+    options: { method: "POST", body: { version: 4 } }
+  });
+  assert.deepEqual(review.buildCatReassignRequest("cat 1", "community-2", 3), {
+    path: "/api/v1/cats/cat%201/community",
+    options: { method: "POST", body: { community_id: "community-2", version: 3 } }
+  });
+});

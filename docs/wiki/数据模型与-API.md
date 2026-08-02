@@ -27,16 +27,18 @@
 | `normalized_name` | 规范化比较键，用于识别空格、全半角、大小写和常见标点差异 |
 | `status` | PENDING_REVIEW / NEEDS_CHANGES / ACTIVE / MERGED / REJECTED / ARCHIVED；HIDDEN 仅作旧协议兼容 |
 | `review_note` | 候选补充说明或最近审核说明 |
-| `merged_into_id` | 合并后的目标 ACTIVE 小区 ID |
-| `version` | 乐观锁版本，从 1 开始，每次编辑/审核/合并递增 |
+| `merged_into_id` | 合并后的目标 ACTIVE 小区 ID，数据库自外键 |
+| `version` | 乐观锁版本，从 1 开始，每次编辑/审核/合并/归档递增 |
 | `created_by`、`reviewed_by` | 创建者和审核者 |
 | `created_at`、`updated_at` | 时间戳 |
 
 ### cats
 
-关联小区，保存猫咪编号、名称、居住/健康状态、模糊位置、可选坐标、可选图片、审核状态、可见性和创建者。
+关联小区，保存猫咪编号、名称、居住/健康状态、模糊位置、可选坐标、可选图片、审核状态、可见性、创建者、乐观锁版本和可空幂等键。
 
 猫咪编号格式为随机生成的 `HC-XXXXXXXX`。
+
+`(created_by, idempotency_key)` 唯一；同一用户用同一个建档键重试时返回原猫咪。有效小区使用 `(city, district, normalized_name)` 部分唯一索引，终态记录不阻止日后创建正确的小区。
 
 ### daily_cat_quotas
 
@@ -79,29 +81,30 @@
 | 方法 | 路径 | 权限 | 作用 |
 |---|---|---|---|
 | GET | `/communities` | 公开 | 只返回 ACTIVE，支持 `q`、`cursor`、`limit` |
-| GET | `/admin/communities` | ADMIN+ | 返回候选/正式小区分页 |
+| GET | `/admin/communities` | ADMIN+ | 返回候选/正式小区分页、关联猫咪总数和最多 3 条预览 |
 | POST | `/communities` | 登录 | USER 待审；ADMIN+ 直接开放 |
 | PATCH | `/communities/{id}` | 创建者/ADMIN+ | 创建者改本人待审/待补充候选；ADMIN+ 治理；带 `version` |
 | POST | `/communities/{id}/review` | ADMIN+ | `approve` / `request_changes` / `reject`，带原因和 `version` |
 | POST | `/communities/{id}/merge` | ADMIN+ | 合并到 ACTIVE 目标并事务改挂关联猫咪 |
-| POST | `/communities/{id}/archive` | ADMIN+ | 归档 |
+| POST | `/communities/{id}/archive` | ADMIN+ | 携带 `version` 归档 |
 
 ## 猫咪
 
 | 方法 | 路径 | 权限 | 作用 |
 |---|---|---|---|
 | GET | `/cats` | 公开/可选管理员 Token | 游标分页；访客还要求关联小区 ACTIVE；管理员看全部 |
-| POST | `/cats` | 登录 | `community_id` 或 `community_candidate` 二选一；USER 待审且有每日配额 |
+| POST | `/cats` | 登录 | `community_id` 或 `community_candidate` 二选一；支持 `Idempotency-Key`；USER 待审且有每日配额 |
+| POST | `/cats/{id}/community` | ADMIN+ | 携带猫咪 `version` 改挂到 ACTIVE 小区 |
 | POST | `/cats/{id}/review` | ADMIN+ | 审核通过或拒绝 |
 | POST | `/cats/{id}/visibility` | ADMIN+ | 公开或隐藏 |
 | POST | `/cats/{id}/archive` | ADMIN+ | 归档 |
-| GET | `/me/submissions` | 登录 | 当前用户的小区和猫咪提交 |
+| GET | `/me/submissions` | 登录 | 当前用户的小区和猫咪分别游标分页 |
 
 ## 任务
 
 | 方法 | 路径 | 权限 | 作用 |
 |---|---|---|---|
-| GET | `/tasks` | 公开 | 开放任务列表 |
+| GET | `/tasks` | 公开 | 开放任务游标分页 |
 | POST | `/tasks` | ADMIN+ | 创建任务 |
 | POST | `/tasks/{id}/claim` | 登录 | 原子领取任务 |
 
@@ -118,7 +121,7 @@
 
 | 方法 | 路径 | 权限 | 作用 |
 |---|---|---|---|
-| GET | `/admin/users` | SUPER_ADMIN | 全量用户列表 |
+| GET | `/admin/users` | SUPER_ADMIN | 用户游标分页 |
 | POST | `/admin/users/{id}/role` | SUPER_ADMIN | USER 与 ADMIN 之间切换 |
 
 ## 常见错误码
@@ -136,9 +139,11 @@
 | `community_not_found` | 小区不存在或未开放 |
 | `invalid_community_name` | 规范化后小区名称为空 |
 | `stale_community_version` | 候选已被更新，客户端版本过期 |
+| `stale_cat_version` | 猫咪已被更新，改挂请求版本过期 |
 | `community_not_editable` | 当前候选状态不可修改 |
 | `review_note_required` | 退回补充或驳回缺少原因 |
 | `community_merge_target_invalid` | 合并目标不是另一个 ACTIVE 小区 |
+| `community_reassign_target_invalid` | 猫咪改挂目标不是 ACTIVE 小区 |
 | `community_not_active` | 关联小区未开放，猫咪不能审核公开 |
 | `invalid_cursor` | 分页游标无效 |
 | `daily_cat_limit_reached` | 普通用户达到每日建档上限 |
@@ -150,6 +155,7 @@
 ## 数据库迁移
 
 - SQLAlchemy 模型是运行时数据结构来源。
-- Alembic 位于 `server/helpcat/migrations/`；`002_community_candidates` 添加候选治理字段和索引并回填旧行。
+- Alembic 位于 `server/helpcat/migrations/`；`002_community_candidates` 添加候选字段，`003_scale_integrity` 增加猫咪版本/幂等键、有效小区唯一索引、幂等唯一索引和合并自外键。
+- 迁移环境读取 `HELPCAT_DATABASE_URL`；生产执行时必须提供绝对 SQLite URL。
 - `ensure_schema()` 为早期 SQLite 试运行提供小范围向前兼容补列，不应替代正式生产迁移。
 - 迁移 PostgreSQL 前必须先做数据备份、双向数量校验、业务抽样和回滚演练。

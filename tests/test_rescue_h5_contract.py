@@ -115,6 +115,8 @@ class RescueH5ContractTests(unittest.TestCase):
             'id="cat-community-candidate-street"',
             'id="cat-community-candidate-note"',
             'id="load-more-cats"',
+            'id="load-more-tasks"',
+            'id="load-more-submissions"',
             'id="load-more-communities"',
             'community-form.js?v=',
         ):
@@ -138,7 +140,7 @@ class RescueH5ContractTests(unittest.TestCase):
         version_script = (ROOT / "app" / "rescue" / "version.js").read_text(encoding="utf-8")
         styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
         for marker in (
-            'data-app-version="20260802-premium-community-r1"',
+            'data-app-version="20260802-premium-community-r2"',
             'id="version-update"',
             'id="reload-version"',
         ):
@@ -159,13 +161,15 @@ class RescueH5ContractTests(unittest.TestCase):
         script = (ROOT / "app" / "rescue" / "app.js").read_text(encoding="utf-8")
         for text in ("daily_cat_limit_reached", "task_already_claimed", "invalid_credentials", "submitting", "uploadImage"):
             self.assertIn(text, script)
+        for text in ('Idempotency-Key', 'catIdempotencyKey', 'crypto.randomUUID', 'prefers-reduced-motion'):
+            self.assertIn(text, script)
 
     def test_rescue_assets_are_versioned_in_dependency_order(self):
         html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
-        self.assertIn('styles.css?v=20260802-premium-community-r1', html)
-        api_index = html.index('api.js?v=20260802-premium-community-r1')
-        version_index = html.index('version.js?v=20260802-premium-community-r1')
-        app_index = html.index('app.js?v=20260802-premium-community-r1')
+        self.assertIn('styles.css?v=20260802-premium-community-r2', html)
+        api_index = html.index('api.js?v=20260802-premium-community-r2')
+        version_index = html.index('version.js?v=20260802-premium-community-r2')
+        app_index = html.index('app.js?v=20260802-premium-community-r2')
         self.assertLess(api_index, version_index)
         self.assertLess(version_index, app_index)
 
