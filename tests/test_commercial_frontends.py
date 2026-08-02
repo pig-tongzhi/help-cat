@@ -74,6 +74,16 @@ class CommercialFrontendContractTests(unittest.TestCase):
         self.assertLess(html.index('session.js?v='), html.index('community-review.js?v='))
         self.assertLess(html.index('community-review.js?v='), html.index('app.js?v='))
 
+    def test_admin_uses_premium_responsive_system_and_exact_motto(self):
+        html = (ROOT / "admin" / "index.html").read_text(encoding="utf-8")
+        styles = (ROOT / "admin" / "styles.css").read_text(encoding="utf-8")
+        self.assertIn('<footer class="brand-footer admin-footer"><small>安得广厦千万间，大庇天下小猫俱欢颜</small></footer>', html)
+        self.assertEqual(html.count("安得广厦千万间，大庇天下小猫俱欢颜"), 1)
+        for marker in ("#F5F5F7", "#1D1D1F", "clamp(", "min-height: 44px", "@media (prefers-reduced-motion: reduce)"):
+            self.assertIn(marker, styles)
+        for width in ("1024px", "820px", "430px", "390px", "360px"):
+            self.assertIn(width, styles)
+
 
 if __name__ == "__main__":
     unittest.main()

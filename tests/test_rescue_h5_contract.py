@@ -138,7 +138,7 @@ class RescueH5ContractTests(unittest.TestCase):
         version_script = (ROOT / "app" / "rescue" / "version.js").read_text(encoding="utf-8")
         styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
         for marker in (
-            'data-app-version="20260802-community-quality-r3"',
+            'data-app-version="20260802-premium-community-r1"',
             'id="version-update"',
             'id="reload-version"',
         ):
@@ -162,12 +162,22 @@ class RescueH5ContractTests(unittest.TestCase):
 
     def test_rescue_assets_are_versioned_in_dependency_order(self):
         html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
-        self.assertIn('styles.css?v=20260802-community-quality-r3', html)
-        api_index = html.index('api.js?v=20260802-community-quality-r3')
-        version_index = html.index('version.js?v=20260802-community-quality-r3')
-        app_index = html.index('app.js?v=20260802-community-quality-r3')
+        self.assertIn('styles.css?v=20260802-premium-community-r1', html)
+        api_index = html.index('api.js?v=20260802-premium-community-r1')
+        version_index = html.index('version.js?v=20260802-premium-community-r1')
+        app_index = html.index('app.js?v=20260802-premium-community-r1')
         self.assertLess(api_index, version_index)
         self.assertLess(version_index, app_index)
+
+    def test_rescue_uses_premium_tokens_responsive_type_and_exact_motto(self):
+        html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
+        styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
+        self.assertIn('<footer class="brand-footer"><small>安得广厦千万间，大庇天下小猫俱欢颜</small></footer>', html)
+        self.assertEqual(html.count("安得广厦千万间，大庇天下小猫俱欢颜"), 1)
+        for marker in ("#F5F5F7", "#1D1D1F", "clamp(", "min-height: 44px", "@media (prefers-reduced-motion: reduce)"):
+            self.assertIn(marker, styles)
+        for width in ("1024px", "820px", "430px", "390px", "360px"):
+            self.assertIn(width, styles)
 
 
 if __name__ == "__main__":
