@@ -4,9 +4,10 @@
   var API_BASE = window.HELPCAT_API_BASE || "/help-cat-api";
   var TOKEN_KEY = "help_cat_admin_token";
   var H5_TOKEN_KEY = "help_cat_token";
+  var communityReview = window.HelpCatCommunityReview;
   var token = sessionStorage.getItem(TOKEN_KEY) || "";
   var profile = null;
-  var state = { cats: [], communities: [], users: [], section: "overview", busy: false };
+  var state = { cats: [], communities: [], users: [], cursors: { cats: null, communities: null }, section: "overview", busy: false };
 
   function byId(id) { return document.getElementById(id); }
   function esc(value) {
@@ -42,6 +43,10 @@
       super_admin_required: "只有唯一超级管理员可以管理用户权限",
       super_admin_immutable: "唯一超级管理员的角色不能修改",
       user_not_found: "用户不存在",
+      stale_community_version: "该小区刚刚已被其他管理员更新，已刷新最新内容",
+      community_not_active: "请先处理关联小区，再审核通过猫咪档案",
+      review_note_required: "退回修改或驳回时必须填写原因",
+      community_merge_target_invalid: "请选择另一个已开放小区作为合并目标",
       network_error: "网络连接失败，请稍后重试"
     }[error && error.code] || (error && error.message) || "操作失败，请稍后重试";
   }
@@ -105,11 +110,13 @@
   }
   function loadAll() {
     showGlobal("正在同步管理数据…", false);
-    var requests = [request("/api/v1/cats"), request("/api/v1/admin/communities")];
+    var requests = [request("/api/v1/cats?limit=24"), request("/api/v1/admin/communities?limit=24")];
     if (profile.role === "SUPER_ADMIN") requests.push(request("/api/v1/admin/users"));
     return Promise.all(requests).then(function (results) {
       state.cats = results[0].items || [];
       state.communities = results[1].items || [];
+      state.cursors.cats = results[0].next_cursor || null;
+      state.cursors.communities = results[1].next_cursor || null;
       state.users = results[2] ? results[2].items || [] : [];
       showGlobal("", false);
       render();
@@ -122,6 +129,25 @@
       showGlobal(errorText(error), true);
     });
   }
+  function loadMore(type, button) {
+    var cursor = state.cursors[type];
+    if (!cursor || state.busy) return;
+    state.busy = true;
+    button.disabled = true;
+    button.textContent = "正在加载…";
+    var route = type === "cats" ? "/api/v1/cats" : "/api/v1/admin/communities";
+    request(route + "?limit=24&cursor=" + encodeURIComponent(cursor)).then(function (body) {
+      state[type] = communityReview.appendUnique(state[type], body.items || []);
+      state.cursors[type] = body.next_cursor || null;
+      render();
+    }).catch(function (error) {
+      showGlobal(errorText(error), true);
+    }).finally(function () {
+      state.busy = false;
+      button.disabled = false;
+      button.textContent = type === "cats" ? "加载更多猫咪" : "加载更多小区";
+    });
+  }
   function loadUsers() {
     if (!profile || profile.role !== "SUPER_ADMIN") return Promise.resolve();
     return request("/api/v1/admin/users").then(function (body) {
@@ -131,7 +157,7 @@
     });
   }
   function statusLabel(value) {
-    return { APPROVED: "已通过", PENDING_REVIEW: "待审核", REJECTED: "未通过", ACTIVE: "公开", HIDDEN: "隐藏", ARCHIVED: "已归档" }[value] || value;
+    return { APPROVED: "已通过", PENDING_REVIEW: "待审核", NEEDS_CHANGES: "待补充", MERGED: "已合并", REJECTED: "未通过", ACTIVE: "公开", HIDDEN: "隐藏", ARCHIVED: "已归档" }[value] || value;
   }
   function renderCats() {
     var query = byId("cat-search").value.trim().toLowerCase();
@@ -139,18 +165,33 @@
       return !query || [cat.nickname, cat.code, cat.location_note].join(" ").toLowerCase().indexOf(query) >= 0;
     });
     byId("cats").innerHTML = cats.length ? cats.map(function (cat) {
-      return '<article class="list-item"><div class="entity-icon cat-entity">猫</div><div class="entity-copy"><strong>' + esc(cat.nickname) + '<small>' + esc(cat.code) + '</small></strong><p>' + esc(cat.location_note) + '</p><div class="badges"><span>' + esc(statusLabel(cat.review_status)) + '</span><span>' + esc(statusLabel(cat.visibility_status)) + '</span></div></div><div class="actions">' +
-        (cat.review_status === "PENDING_REVIEW" ? '<button data-cat-action="review" data-id="' + esc(cat.id) + '">审核通过</button>' : '') +
+      var blocker = cat.community_review_blocker;
+      return '<article class="list-item"><div class="entity-icon cat-entity">猫</div><div class="entity-copy"><strong>' + esc(cat.nickname) + '<small>' + esc(cat.code) + '</small></strong><p>' + esc(cat.location_note) + '</p><div class="badges"><span>' + esc(statusLabel(cat.review_status)) + '</span><span>' + esc(statusLabel(cat.visibility_status)) + '</span>' + (blocker ? '<span class="blocker-badge">小区待处理</span>' : '') + '</div></div><div class="actions">' +
+        (cat.review_status === "PENDING_REVIEW" ? (blocker ? '<button data-section-link="communities">先处理小区</button>' : '<button data-cat-action="review" data-id="' + esc(cat.id) + '">审核通过</button>') : '') +
         (cat.visibility_status !== "ARCHIVED" ? '<button data-cat-action="visibility" data-id="' + esc(cat.id) + '" data-visible="' + String(cat.visibility_status === "HIDDEN") + '">' + (cat.visibility_status === "HIDDEN" ? "公开" : "隐藏") + '</button>' : '') +
         '<button class="danger" data-cat-action="archive" data-id="' + esc(cat.id) + '" ' + (cat.visibility_status === "ARCHIVED" ? "disabled" : "") + '>归档</button></div></article>';
     }).join("") : '<div class="empty-state"><strong>没有匹配的猫咪档案</strong><p>调整搜索条件或等待新的居民提交。</p></div>';
+    byId("load-more-admin-cats").hidden = !state.cursors.cats;
   }
   function renderCommunities() {
     byId("communities").innerHTML = state.communities.length ? state.communities.map(function (community) {
-      return '<article class="list-item"><div class="entity-icon community-entity">区</div><div class="entity-copy"><strong>' + esc(community.name) + '</strong><p>' + esc(community.street) + '</p><div class="badges"><span>' + esc(statusLabel(community.status)) + '</span></div></div><div class="actions">' +
-        (community.status === "PENDING_REVIEW" ? '<button data-community-action="review" data-id="' + esc(community.id) + '">审核通过</button>' : '') +
-        '<button class="danger" data-community-action="archive" data-id="' + esc(community.id) + '" ' + (community.status === "ARCHIVED" ? "disabled" : "") + '>归档</button></div></article>';
+      var linked = state.cats.filter(function (cat) { return cat.community_id === community.id; });
+      var reviewable = ["PENDING_REVIEW", "NEEDS_CHANGES"].indexOf(community.status) >= 0;
+      var targets = state.communities.filter(function (target) { return target.status === "ACTIVE" && target.id !== community.id; });
+      var previews = linked.slice(0, 3).map(function (cat) {
+        return '<span class="linked-cat" data-linked-cat="' + esc(cat.id) + '">' + esc(cat.nickname) + ' · ' + esc(cat.code) + '</span>';
+      }).join("");
+      var workbench = reviewable ? '<div class="review-workbench"><div class="linked-cats"><strong>当前已载入关联猫咪 ' + linked.length + ' 只</strong>' + (previews || '<span class="linked-cat empty">暂无关联档案</span>') + '</div>' +
+        '<label>审核说明<textarea data-review-note="' + esc(community.id) + '" maxlength="500" placeholder="退回修改或驳回时必填"></textarea></label>' +
+        '<label>合并到已开放小区<select data-merge-target="' + esc(community.id) + '"><option value="">请选择目标小区</option>' + targets.map(function (target) { return '<option value="' + esc(target.id) + '">' + esc(target.name) + '</option>'; }).join("") + '</select></label>' +
+        '<div class="review-actions"><button data-community-action="approve" data-id="' + esc(community.id) + '" data-version="' + esc(community.version) + '">核准开放</button>' +
+        '<button data-community-action="request_changes" data-id="' + esc(community.id) + '" data-version="' + esc(community.version) + '">退回补充</button>' +
+        '<button data-community-action="merge" data-id="' + esc(community.id) + '" data-version="' + esc(community.version) + '">合并小区</button>' +
+        '<button class="danger" data-community-action="reject" data-id="' + esc(community.id) + '" data-version="' + esc(community.version) + '">驳回无效内容</button></div></div>' : '';
+      return '<article class="list-item community-review-item"><div class="entity-icon community-entity">区</div><div class="entity-copy"><strong>' + esc(community.name) + '</strong><p>' + esc(community.street) + (community.review_note ? ' · ' + esc(community.review_note) : '') + '</p><div class="badges"><span>' + esc(statusLabel(community.status)) + '</span><span>v' + esc(community.version) + '</span></div></div>' +
+        (!reviewable ? '<div class="actions"><button class="danger" data-community-action="archive" data-id="' + esc(community.id) + '" ' + (community.status === "ARCHIVED" ? "disabled" : "") + '>归档</button></div>' : '') + workbench + '</article>';
     }).join("") : '<div class="empty-state"><strong>暂无小区</strong><p>可以使用上方表单新增首个小区。</p></div>';
+    byId("load-more-admin-communities").hidden = !state.cursors.communities;
   }
   function renderUsers() {
     if (!profile || profile.role !== "SUPER_ADMIN") return;
@@ -173,7 +214,7 @@
   function render() {
     byId("cat-count").textContent = String(state.cats.length);
     byId("community-count").textContent = String(state.communities.length);
-    byId("pending-count").textContent = String(state.cats.filter(function (cat) { return cat.review_status === "PENDING_REVIEW"; }).length + state.communities.filter(function (item) { return item.status === "PENDING_REVIEW"; }).length);
+    byId("pending-count").textContent = String(state.cats.filter(function (cat) { return cat.review_status === "PENDING_REVIEW"; }).length + state.communities.filter(function (item) { return ["PENDING_REVIEW", "NEEDS_CHANGES"].indexOf(item.status) >= 0; }).length);
     byId("user-count").textContent = String(state.users.length);
     renderCats();
     renderCommunities();
@@ -220,10 +261,38 @@
     if (state.busy) return;
     state.busy = true;
     button.disabled = true;
-    var id = encodeURIComponent(button.dataset.id);
-    var review = button.dataset.communityAction === "review";
-    var route = review ? "/api/v1/communities/" + id + "/review" : "/api/v1/communities/" + id + "/archive";
-    request(route, { method: "POST", body: review ? { approved: true } : undefined }).then(function () { toast("小区状态已更新"); return loadAll(); }).catch(function (error) { showGlobal(errorText(error), true); }).finally(function () { state.busy = false; });
+    var id = button.dataset.id;
+    var action = button.dataset.communityAction;
+    var route;
+    var options;
+    try {
+      if (action === "archive") {
+        route = "/api/v1/communities/" + encodeURIComponent(id) + "/archive";
+        options = { method: "POST" };
+      } else {
+        var note = document.querySelector('[data-review-note="' + id + '"]');
+        var target = document.querySelector('[data-merge-target="' + id + '"]');
+        var built = communityReview.buildActionRequest(action, id, {
+          version: button.dataset.version,
+          note: note ? note.value : "",
+          targetCommunityId: target ? target.value : ""
+        });
+        route = built.path;
+        options = built.options;
+      }
+    } catch (error) {
+      state.busy = false;
+      button.disabled = false;
+      showGlobal(error.message === "review_note_required" ? "退回修改或驳回时必须填写审核原因" : error.message === "merge_target_required" ? "请选择要合并到的已开放小区" : "审核参数无效", true);
+      return;
+    }
+    request(route, options).then(function () {
+      toast(action === "merge" ? "小区已合并，关联猫咪已自动改挂" : "小区状态已更新");
+      return loadAll();
+    }).catch(function (error) {
+      showGlobal(errorText(error), true);
+      if (error.status === 409) return loadAll();
+    }).finally(function () { state.busy = false; });
   }
 
   function logout() {
@@ -246,6 +315,8 @@
   });
   byId("logout").addEventListener("click", logout);
   byId("refresh").addEventListener("click", loadAll);
+  byId("load-more-admin-cats").addEventListener("click", function (event) { loadMore("cats", event.currentTarget); });
+  byId("load-more-admin-communities").addEventListener("click", function (event) { loadMore("communities", event.currentTarget); });
   byId("cat-search").addEventListener("input", renderCats);
   byId("user-search").addEventListener("input", renderUsers);
   byId("community-form").addEventListener("submit", function (event) {

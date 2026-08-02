@@ -27,7 +27,7 @@
 
   <div class="admin-shell" id="admin-shell" hidden>
     <aside class="sidebar">
-      <a class="side-brand" href="#overview"><span class="brand-mark" aria-hidden="true"><i></i></span><span><strong>帮帮小猫</strong><small>管理后台</small></span></a>
+      <a class="side-brand" href="/help-cat/rescue/index.html#home" aria-label="返回帮帮小猫首页" title="返回帮帮小猫首页"><span class="brand-mark" aria-hidden="true"><i></i></span><span><strong>帮帮小猫</strong><small>管理后台</small></span></a>
       <nav aria-label="后台导航">
         <button class="side-nav active" type="button" data-section="overview"><span class="nav-dot overview-dot"></span>总览</button>
         <button class="side-nav" type="button" data-section="cats"><span class="nav-dot cat-dot"></span>猫咪档案</button>
@@ -59,12 +59,14 @@
         <div class="section-heading"><div><span class="eyebrow">CAT ARCHIVE</span><h2>猫咪档案库</h2><p>审核、公开、隐藏或归档社区猫咪档案。</p></div><button class="button secondary" id="refresh" type="button">刷新数据</button></div>
         <label class="search-box">搜索猫咪<input id="cat-search" placeholder="名称、编号或位置"></label>
         <div id="cats" class="list"></div>
+        <div class="load-more-row"><button class="button secondary" id="load-more-admin-cats" type="button" hidden>加载更多猫咪</button></div>
       </section>
 
       <section class="admin-section" data-admin-section="communities" hidden>
         <div class="section-heading"><div><span class="eyebrow">COMMUNITY GOVERNANCE</span><h2>小区管理</h2><p>新增小区会立即开放，居民建议需要管理员审核。</p></div></div>
         <form class="inline-form" id="community-form"><label>小区名称<input id="community-name" required placeholder="例如：聚源福小区"></label><label>所属街道<input id="community-street" required value="银湖街道"></label><button class="button primary" type="submit">新增小区</button></form>
         <div id="communities" class="list"></div>
+        <div class="load-more-row"><button class="button secondary" id="load-more-admin-communities" type="button" hidden>加载更多小区</button></div>
       </section>
 
       <section class="admin-section users-panel" id="users-panel" data-admin-section="users" hidden>
@@ -78,6 +80,7 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
   <script src="session.js?v=20260802-runtime-tests"></script>
+  <script src="community-review.js?v=20260802-runtime-tests"></script>
   <script src="app.js?v=20260802-runtime-tests"></script>
 </body>
 </html>

@@ -50,6 +50,30 @@ class CommercialFrontendContractTests(unittest.TestCase):
         self.assertIn('window.HelpCatAdminSession.logout(request, clearSession, showLogin, state)', script)
         self.assertLess(html.index('session.js?v='), html.index('app.js?v='))
 
+    def test_admin_brand_returns_home_and_linked_review_is_versioned_and_paged(self):
+        html = (ROOT / "admin" / "index.html").read_text(encoding="utf-8")
+        script = (ROOT / "admin" / "app.js").read_text(encoding="utf-8")
+        self.assertIn('class="side-brand" href="/help-cat/rescue/index.html#home"', html)
+        self.assertIn('aria-label="返回帮帮小猫首页"', html)
+        self.assertIn('title="返回帮帮小猫首页"', html)
+        self.assertNotIn("access_token=", html + script)
+        for marker in (
+            'data-community-action="approve"',
+            'data-community-action="request_changes"',
+            'data-community-action="merge"',
+            'data-community-action="reject"',
+            'data-linked-cat',
+            'community_review_blocker',
+            'id="load-more-admin-cats"',
+            'id="load-more-admin-communities"',
+            'community-review.js?v=',
+            'next_cursor',
+            'limit=24',
+        ):
+            self.assertIn(marker, html + script)
+        self.assertLess(html.index('session.js?v='), html.index('community-review.js?v='))
+        self.assertLess(html.index('community-review.js?v='), html.index('app.js?v='))
+
 
 if __name__ == "__main__":
     unittest.main()
