@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session as DbSession
 
 from .auth import DUMMY_PASSWORD_HASH, WechatProvider, current_user_factory, hash_password, issue_session, require_admin, require_super_admin, verify_password
 from .config import Settings
+from .community_rules import normalize_community_name
 from .db import Base, ensure_schema, make_session_factory
 from .models import AuditLog, Cat, Community, DailyCatQuota, MediaAsset, Session as AuthSession, Task, User, new_id
 from .schemas import CatCreate, CommunityCreate, PasswordLoginRequest, RegisterRequest, ReviewRequest, RoleUpdate, TaskCreate, VisibilityRequest, WechatLoginRequest
@@ -32,7 +33,9 @@ def cat_payload(cat):
 
 
 def community_payload(item):
-    return {"id": item.id, "city": item.city, "district": item.district, "street": item.street, "name": item.name, "status": item.status, "created_by": item.created_by}
+    return {"id": item.id, "city": item.city, "district": item.district, "street": item.street, "name": item.name,
+            "status": item.status, "created_by": item.created_by, "review_note": item.review_note,
+            "merged_into_id": item.merged_into_id, "version": item.version}
 
 
 def task_payload(item):
@@ -169,10 +172,14 @@ def create_app(database_url=None, storage_root=None, fake_admin_openids=None):
     @app.post("/api/v1/communities", status_code=201)
     def create_community(payload: CommunityCreate, actor=Depends(current_user), db: DbSession = Depends(db_session)):
         actor_id, role = actor
-        duplicate = db.scalar(select(Community).where(Community.name == payload.name, Community.status != "ARCHIVED"))
+        try:
+            normalized_name = normalize_community_name(payload.name)
+        except ValueError:
+            error(422, "invalid_community_name")
+        duplicate = db.scalar(select(Community).where(Community.normalized_name == normalized_name, Community.status != "ARCHIVED"))
         if duplicate:
             error(409, "community_exists")
-        item = Community(name=payload.name.strip(), street=payload.street.strip(), status="ACTIVE" if role in {"ADMIN", "SUPER_ADMIN"} else "PENDING_REVIEW", created_by=actor_id)
+        item = Community(name=payload.name.strip(), normalized_name=normalized_name, street=payload.street.strip(), status="ACTIVE" if role in {"ADMIN", "SUPER_ADMIN"} else "PENDING_REVIEW", created_by=actor_id)
         db.add(item)
         db.flush()
         audit(db, actor_id, "CREATE", "community", item.id, after=community_payload(item))
@@ -186,6 +193,10 @@ def create_app(database_url=None, storage_root=None, fake_admin_openids=None):
         if not item:
             error(404, "community_not_found")
         before = community_payload(item)
+        try:
+            item.normalized_name = normalize_community_name(payload.name)
+        except ValueError:
+            error(422, "invalid_community_name")
         item.name = payload.name.strip()
         item.street = payload.street.strip()
         audit(db, actor[0], "UPDATE", "community", item.id, before, community_payload(item))

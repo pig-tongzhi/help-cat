@@ -30,6 +30,7 @@ def ensure_schema(engine):
     user_columns = {item["name"] for item in inspector.get_columns("users")}
     session_columns = {item["name"] for item in inspector.get_columns("sessions")}
     cat_columns = {item["name"] for item in inspector.get_columns("cats")}
+    community_columns = {item["name"] for item in inspector.get_columns("communities")}
     if "username" not in user_columns:
         statements.append("ALTER TABLE users ADD COLUMN username VARCHAR(80)")
     if "password_hash" not in user_columns:
@@ -42,7 +43,30 @@ def ensure_schema(engine):
         statements.append("ALTER TABLE cats ADD COLUMN longitude FLOAT")
     if "photo_asset_id" not in cat_columns:
         statements.append("ALTER TABLE cats ADD COLUMN photo_asset_id VARCHAR(32)")
+    if "normalized_name" not in community_columns:
+        statements.append("ALTER TABLE communities ADD COLUMN normalized_name VARCHAR(120) NOT NULL DEFAULT ''")
+    if "review_note" not in community_columns:
+        statements.append("ALTER TABLE communities ADD COLUMN review_note TEXT NOT NULL DEFAULT ''")
+    if "merged_into_id" not in community_columns:
+        statements.append("ALTER TABLE communities ADD COLUMN merged_into_id VARCHAR(32)")
+    if "version" not in community_columns:
+        statements.append("ALTER TABLE communities ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
     if statements:
         with engine.begin() as connection:
             for statement in statements:
                 connection.execute(text(statement))
+    from .community_rules import normalize_community_name
+    with engine.begin() as connection:
+        rows = connection.execute(text("SELECT id, name FROM communities WHERE normalized_name = '' OR normalized_name IS NULL")).mappings()
+        for row in rows:
+            try:
+                normalized_name = normalize_community_name(row["name"])
+            except ValueError:
+                normalized_name = "community-" + row["id"]
+            connection.execute(
+                text("UPDATE communities SET normalized_name = :normalized_name WHERE id = :id"),
+                {"normalized_name": normalized_name, "id": row["id"]},
+            )
+        connection.execute(text("UPDATE communities SET version = 1 WHERE version IS NULL OR version < 1"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_communities_normalized_name ON communities (normalized_name)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_communities_merged_into_id ON communities (merged_into_id)"))
