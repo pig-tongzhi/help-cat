@@ -1,15 +1,16 @@
 import json
 import mimetypes
 import secrets
+import base64
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 from zoneinfo import ZoneInfo
 
-from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DbSession
 
@@ -18,7 +19,7 @@ from .config import Settings
 from .community_rules import normalize_community_name
 from .db import Base, ensure_schema, make_session_factory
 from .models import AuditLog, Cat, Community, DailyCatQuota, MediaAsset, Session as AuthSession, Task, User, new_id
-from .schemas import CatCreate, CommunityCreate, PasswordLoginRequest, RegisterRequest, ReviewRequest, RoleUpdate, TaskCreate, VisibilityRequest, WechatLoginRequest
+from .schemas import CatCreate, CommunityCreate, CommunityEdit, CommunityMerge, CommunityReview, PasswordLoginRequest, RegisterRequest, ReviewRequest, RoleUpdate, TaskCreate, VisibilityRequest, WechatLoginRequest
 
 
 def error(status, code, message=None):
@@ -54,6 +55,31 @@ def user_payload(user):
 def audit(db, actor_id, action, entity_type, entity_id, before=None, after=None):
     db.add(AuditLog(actor_id=actor_id, action=action, entity_type=entity_type, entity_id=entity_id,
                     before_json=json.dumps(before or {}, ensure_ascii=False), after_json=json.dumps(after or {}, ensure_ascii=False)))
+
+
+def encode_cursor(item):
+    raw = item.created_at.isoformat() + "|" + item.id
+    return base64.urlsafe_b64encode(raw.encode()).decode().rstrip("=")
+
+
+def decode_cursor(value):
+    try:
+        padded = value + "=" * (-len(value) % 4)
+        raw = base64.urlsafe_b64decode(padded.encode()).decode()
+        created_at, entity_id = raw.rsplit("|", 1)
+        return datetime.fromisoformat(created_at), entity_id
+    except (ValueError, UnicodeDecodeError):
+        error(422, "invalid_cursor")
+
+
+def paginated_items(db, stmt, model, cursor, limit):
+    if cursor:
+        created_at, entity_id = decode_cursor(cursor)
+        stmt = stmt.where(or_(model.created_at < created_at, and_(model.created_at == created_at, model.id < entity_id)))
+    rows = db.scalars(stmt.order_by(model.created_at.desc(), model.id.desc()).limit(limit + 1)).all()
+    has_more = len(rows) > limit
+    rows = rows[:limit]
+    return rows, encode_cursor(rows[-1]) if has_more and rows else None
 
 
 def create_app(database_url=None, storage_root=None, fake_admin_openids=None):
@@ -141,15 +167,17 @@ def create_app(database_url=None, storage_root=None, fake_admin_openids=None):
         return {"id": user.id, "username": user.username, "role": user.role}
 
     @app.get("/api/v1/communities")
-    def list_communities(q: str = "", db: DbSession = Depends(db_session)):
-        items = db.scalars(select(Community).where(Community.status == "ACTIVE", Community.name.contains(q)).order_by(Community.name)).all()
-        return {"items": [community_payload(item) for item in items]}
+    def list_communities(q: str = "", cursor: Optional[str] = None, limit: int = Query(default=24, ge=1, le=100), db: DbSession = Depends(db_session)):
+        items, next_cursor = paginated_items(
+            db, select(Community).where(Community.status == "ACTIVE", Community.name.contains(q)), Community, cursor, limit
+        )
+        return {"items": [community_payload(item) for item in items], "next_cursor": next_cursor}
 
     @app.get("/api/v1/admin/communities")
-    def list_admin_communities(actor=Depends(current_user), db: DbSession = Depends(db_session)):
+    def list_admin_communities(cursor: Optional[str] = None, limit: int = Query(default=24, ge=1, le=100), actor=Depends(current_user), db: DbSession = Depends(db_session)):
         require_admin(actor)
-        items = db.scalars(select(Community).order_by(Community.updated_at.desc())).all()
-        return {"items": [community_payload(item) for item in items]}
+        items, next_cursor = paginated_items(db, select(Community), Community, cursor, limit)
+        return {"items": [community_payload(item) for item in items], "next_cursor": next_cursor}
 
     @app.get("/api/v1/admin/users")
     def list_admin_users(actor=Depends(current_user), db: DbSession = Depends(db_session)):
@@ -190,18 +218,38 @@ def create_app(database_url=None, storage_root=None, fake_admin_openids=None):
         return community_payload(item)
 
     @app.patch("/api/v1/communities/{community_id}")
-    def edit_community(community_id: str, payload: CommunityCreate, actor=Depends(current_user), db: DbSession = Depends(db_session)):
-        require_admin(actor)
-        item = db.get(Community, community_id)
+    def edit_community(community_id: str, payload: CommunityEdit, actor=Depends(current_user), db: DbSession = Depends(db_session)):
+        item = db.scalar(select(Community).where(Community.id == community_id).with_for_update())
         if not item:
             error(404, "community_not_found")
+        is_admin = actor[1] in {"ADMIN", "SUPER_ADMIN"}
+        if not is_admin and item.created_by != actor[0]:
+            error(403, "community_edit_forbidden")
+        if not is_admin and item.status not in {"PENDING_REVIEW", "NEEDS_CHANGES"}:
+            error(409, "community_not_editable")
+        if is_admin and item.status in {"MERGED", "REJECTED", "ARCHIVED"}:
+            error(409, "community_not_editable")
+        if payload.version is not None and payload.version != item.version:
+            error(409, "stale_community_version")
         before = community_payload(item)
         try:
-            item.normalized_name = normalize_community_name(payload.name)
+            normalized_name = normalize_community_name(payload.name)
         except ValueError:
             error(422, "invalid_community_name")
+        duplicate = db.scalar(select(Community).where(
+            Community.id != item.id,
+            Community.normalized_name == normalized_name,
+            Community.status.notin_(["MERGED", "REJECTED", "ARCHIVED"]),
+        ))
+        if duplicate:
+            error(409, "community_exists")
+        item.normalized_name = normalized_name
         item.name = payload.name.strip()
         item.street = payload.street.strip()
+        item.review_note = payload.note.strip()
+        if not is_admin:
+            item.status = "PENDING_REVIEW"
+        item.version += 1
         audit(db, actor[0], "UPDATE", "community", item.id, before, community_payload(item))
         db.commit()
         return community_payload(item)
@@ -219,20 +267,60 @@ def create_app(database_url=None, storage_root=None, fake_admin_openids=None):
         return community_payload(item)
 
     @app.post("/api/v1/communities/{community_id}/review")
-    def review_community(community_id: str, payload: ReviewRequest, actor=Depends(current_user), db: DbSession = Depends(db_session)):
+    def review_community(community_id: str, payload: CommunityReview, actor=Depends(current_user), db: DbSession = Depends(db_session)):
         require_admin(actor)
-        item = db.get(Community, community_id)
+        item = db.scalar(select(Community).where(Community.id == community_id).with_for_update())
         if not item:
             error(404, "community_not_found")
-        before = {"status": item.status}
-        item.status = "ACTIVE" if payload.approved else "HIDDEN"
+        if item.status not in {"PENDING_REVIEW", "NEEDS_CHANGES"}:
+            error(409, "community_review_state_invalid")
+        if payload.version is not None and payload.version != item.version:
+            error(409, "stale_community_version")
+        if payload.action in {"request_changes", "reject"} and not payload.note.strip():
+            error(422, "review_note_required")
+        before = community_payload(item)
+        if payload.approved is not None:
+            item.status = "ACTIVE" if payload.approved else "HIDDEN"
+        else:
+            item.status = {"approve": "ACTIVE", "request_changes": "NEEDS_CHANGES", "reject": "REJECTED"}[payload.action]
+        item.review_note = payload.note.strip()
         item.reviewed_by = actor[0]
-        audit(db, actor[0], "REVIEW", "community", item.id, before, {"status": item.status})
+        item.version += 1
+        audit(db, actor[0], "REVIEW", "community", item.id, before, community_payload(item))
         db.commit()
         return community_payload(item)
 
+    @app.post("/api/v1/communities/{community_id}/merge")
+    def merge_community(community_id: str, payload: CommunityMerge, actor=Depends(current_user), db: DbSession = Depends(db_session)):
+        require_admin(actor)
+        source = db.scalar(select(Community).where(Community.id == community_id).with_for_update())
+        if not source:
+            error(404, "community_not_found")
+        if source.status not in {"PENDING_REVIEW", "NEEDS_CHANGES"}:
+            error(409, "community_merge_state_invalid")
+        if payload.version != source.version:
+            error(409, "stale_community_version")
+        if payload.target_community_id == source.id:
+            error(409, "community_merge_target_invalid")
+        target = db.scalar(select(Community).where(Community.id == payload.target_community_id).with_for_update())
+        if not target or target.status != "ACTIVE":
+            error(409, "community_merge_target_invalid")
+        linked_cats = db.scalars(select(Cat).where(Cat.community_id == source.id).with_for_update()).all()
+        for cat in linked_cats:
+            before_cat = {"community_id": cat.community_id}
+            cat.community_id = target.id
+            audit(db, actor[0], "COMMUNITY_REASSIGN", "cat", cat.id, before_cat, {"community_id": target.id})
+        before = community_payload(source)
+        source.status = "MERGED"
+        source.merged_into_id = target.id
+        source.reviewed_by = actor[0]
+        source.version += 1
+        audit(db, actor[0], "MERGE", "community", source.id, before, community_payload(source))
+        db.commit()
+        return community_payload(source)
+
     @app.get("/api/v1/cats")
-    def list_cats(q: str = "", community_id: Optional[str] = None, authorization: Optional[str] = Header(default=None), db: DbSession = Depends(db_session)):
+    def list_cats(q: str = "", community_id: Optional[str] = None, cursor: Optional[str] = None, limit: int = Query(default=24, ge=1, le=100), authorization: Optional[str] = Header(default=None), db: DbSession = Depends(db_session)):
         is_admin = False
         if authorization and authorization.startswith("Bearer "):
             session = db.scalar(select(AuthSession).where(AuthSession.token == authorization[7:].strip()))
@@ -240,15 +328,15 @@ def create_app(database_url=None, storage_root=None, fake_admin_openids=None):
                 user = db.get(User, session.user_id)
                 expires_at = session.expires_at.replace(tzinfo=timezone.utc) if session.expires_at.tzinfo is None else session.expires_at
                 is_admin = bool(user and user.role in {"ADMIN", "SUPER_ADMIN"} and user.status == "ACTIVE" and expires_at >= datetime.now(timezone.utc))
-        stmt = select(Cat)
+        stmt = select(Cat).join(Community, Cat.community_id == Community.id)
         if not is_admin:
-            stmt = stmt.where(Cat.review_status == "APPROVED", Cat.visibility_status == "ACTIVE")
+            stmt = stmt.where(Cat.review_status == "APPROVED", Cat.visibility_status == "ACTIVE", Community.status == "ACTIVE")
         if community_id:
             stmt = stmt.where(Cat.community_id == community_id)
         if q:
             stmt = stmt.where(Cat.nickname.contains(q) | Cat.code.contains(q))
-        items = db.scalars(stmt.order_by(Cat.created_at.desc())).all()
-        return {"items": [cat_payload(item) for item in items]}
+        items, next_cursor = paginated_items(db, stmt, Cat, cursor, limit)
+        return {"items": [cat_payload(item) for item in items], "next_cursor": next_cursor}
 
     @app.post("/api/v1/cats", status_code=201)
     def create_cat(payload: CatCreate, actor=Depends(current_user), db: DbSession = Depends(db_session)):
@@ -288,7 +376,7 @@ def create_app(database_url=None, storage_root=None, fake_admin_openids=None):
                 select(Community).where(
                     Community.normalized_name == normalized_name,
                     Community.status.in_(["ACTIVE", "PENDING_REVIEW", "NEEDS_CHANGES"]),
-                ).order_by(Community.status == "ACTIVE", Community.updated_at.desc())
+                ).order_by((Community.status == "ACTIVE").desc(), Community.updated_at.desc())
             )
             if not community:
                 community = Community(
@@ -324,6 +412,8 @@ def create_app(database_url=None, storage_root=None, fake_admin_openids=None):
     def review_cat(cat_id: str, payload: ReviewRequest, actor=Depends(current_user), db: DbSession = Depends(db_session)):
         require_admin(actor)
         cat = get_cat_or_404(db, cat_id)
+        if payload.approved and cat.community.status != "ACTIVE":
+            error(409, "community_not_active")
         before = {"review_status": cat.review_status}
         cat.review_status = "APPROVED" if payload.approved else "REJECTED"
         audit(db, actor[0], "REVIEW", "cat", cat.id, before, {"review_status": cat.review_status})

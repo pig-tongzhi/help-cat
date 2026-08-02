@@ -5,6 +5,7 @@ import unittest
 import urllib.error
 import urllib.request
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from sqlalchemy import select
 
@@ -47,6 +48,7 @@ class CommercialApiTests(unittest.TestCase):
         return asyncio.run(self.asgi_request(method, path, headers, body))
 
     async def asgi_request(self, method, path, headers, body):
+        parsed = urlsplit(path)
         sent = False
         messages = []
 
@@ -61,8 +63,8 @@ class CommercialApiTests(unittest.TestCase):
             messages.append(message)
 
         scope = {
-            "type": "http", "http_version": "1.1", "method": method, "path": path,
-            "raw_path": path.encode(), "query_string": b"", "headers": [(k.lower().encode(), v.encode()) for k, v in headers.items()],
+            "type": "http", "http_version": "1.1", "method": method, "path": parsed.path,
+            "raw_path": parsed.path.encode(), "query_string": parsed.query.encode(), "headers": [(k.lower().encode(), v.encode()) for k, v in headers.items()],
             "client": ("testclient", 50000), "server": ("testserver", 80), "scheme": "http",
         }
         await self.app(scope, receive, send)
@@ -212,6 +214,106 @@ class CommercialApiTests(unittest.TestCase):
         with self.app.state.session_factory() as db:
             self.assertIsNone(db.scalar(select(Community).where(Community.name == "不应残留的小区")))
             self.assertIsNone(db.scalar(select(Cat).where(Cat.nickname == "团团")))
+
+    def test_candidate_owner_edit_uses_version_and_resubmits_changes(self):
+        _, cat = self.request("POST", "/api/v1/cats", self.user_token, {
+            "community_candidate": {"name": "待纠正小区", "street": "银湖街道"},
+            "nickname": "点点", "location_note": "东门",
+        })
+        community_id = cat["community_id"]
+        other_token = self.login("other-user-openid")
+        status, _ = self.request("PATCH", f"/api/v1/communities/{community_id}", other_token, {
+            "name": "别人的修改", "street": "银湖街道", "note": "", "version": 1,
+        })
+        self.assertEqual(status, 403)
+        status, changed = self.request("PATCH", f"/api/v1/communities/{community_id}", self.user_token, {
+            "name": "待纠正家园", "street": "银湖街道", "note": "补充东门照片", "version": 1,
+        })
+        self.assertEqual(status, 200)
+        self.assertEqual((changed["name"], changed["version"], changed["status"]), ("待纠正家园", 2, "PENDING_REVIEW"))
+        status, body = self.request("PATCH", f"/api/v1/communities/{community_id}", self.user_token, {
+            "name": "过期写入", "street": "银湖街道", "note": "", "version": 1,
+        })
+        self.assertEqual(status, 409)
+        self.assertEqual(body["code"], "stale_community_version")
+
+    def test_candidate_review_actions_require_notes_and_admin_permissions(self):
+        _, candidate = self.request("POST", "/api/v1/communities", self.user_token, {"name": "联审小区", "street": "银湖街道"})
+        candidate_id = candidate["id"]
+        status, _ = self.request("POST", f"/api/v1/communities/{candidate_id}/review", self.user_token, {
+            "action": "approve", "version": 1,
+        })
+        self.assertEqual(status, 403)
+        status, body = self.request("POST", f"/api/v1/communities/{candidate_id}/review", self.admin_token, {
+            "action": "request_changes", "note": "", "version": 1,
+        })
+        self.assertEqual(status, 422)
+        self.assertEqual(body["code"], "review_note_required")
+        status, changed = self.request("POST", f"/api/v1/communities/{candidate_id}/review", self.admin_token, {
+            "action": "request_changes", "note": "请补充街道", "version": 1,
+        })
+        self.assertEqual((status, changed["status"], changed["version"]), (200, "NEEDS_CHANGES", 2))
+        status, approved = self.request("POST", f"/api/v1/communities/{candidate_id}/review", self.super_token, {
+            "action": "approve", "version": 2,
+        })
+        self.assertEqual((status, approved["status"]), (200, "ACTIVE"))
+
+        _, rejected = self.request("POST", "/api/v1/communities", self.user_token, {"name": "广告小区", "street": "银湖街道"})
+        status, _ = self.request("POST", f"/api/v1/communities/{rejected['id']}/review", self.super_token, {
+            "action": "reject", "note": "", "version": 1,
+        })
+        self.assertEqual(status, 422)
+        status, rejected_body = self.request("POST", f"/api/v1/communities/{rejected['id']}/review", self.super_token, {
+            "action": "reject", "note": "垃圾广告", "version": 1,
+        })
+        self.assertEqual((status, rejected_body["status"]), (200, "REJECTED"))
+
+    def test_legacy_community_rejection_keeps_hidden_state_during_rolling_deploy(self):
+        _, candidate = self.request("POST", "/api/v1/communities", self.user_token, {
+            "name": "旧客户端候选", "street": "银湖街道",
+        })
+        status, hidden = self.request(
+            "POST", f"/api/v1/communities/{candidate['id']}/review", self.admin_token, {"approved": False},
+        )
+        self.assertEqual((status, hidden["status"]), (200, "HIDDEN"))
+
+    def test_merge_reassigns_linked_cats_and_publication_waits_for_active_community(self):
+        _, target = self.request("POST", "/api/v1/communities", self.admin_token, {"name": "正式小区", "street": "银湖街道"})
+        _, cat = self.request("POST", "/api/v1/cats", self.user_token, {
+            "community_candidate": {"name": "正式小区北区", "street": "银湖街道"},
+            "nickname": "联审猫", "location_note": "北门",
+        })
+        status, blocked = self.request("POST", f"/api/v1/cats/{cat['id']}/review", self.admin_token, {"approved": True})
+        self.assertEqual(status, 409)
+        self.assertEqual(blocked["code"], "community_not_active")
+        status, merged = self.request("POST", f"/api/v1/communities/{cat['community_id']}/merge", self.super_token, {
+            "target_community_id": target["id"], "version": 1,
+        })
+        self.assertEqual((status, merged["status"], merged["merged_into_id"]), (200, "MERGED", target["id"]))
+        with self.app.state.session_factory() as db:
+            self.assertEqual(db.get(Cat, cat["id"]).community_id, target["id"])
+        status, approved = self.request("POST", f"/api/v1/cats/{cat['id']}/review", self.admin_token, {"approved": True})
+        self.assertEqual((status, approved["review_status"], approved["community_status"]), (200, "APPROVED", "ACTIVE"))
+
+    def test_collection_cursor_pagination_is_bounded_and_stable(self):
+        for index in range(30):
+            status, _ = self.request("POST", "/api/v1/communities", self.admin_token, {
+                "name": f"分页小区{index:02d}", "street": "银湖街道",
+            })
+            self.assertEqual(status, 201)
+        status, first = self.request("GET", "/api/v1/communities?limit=10")
+        self.assertEqual(status, 200)
+        self.assertEqual(len(first["items"]), 10)
+        self.assertTrue(first["next_cursor"])
+        status, second = self.request("GET", "/api/v1/communities?limit=10&cursor=" + first["next_cursor"])
+        self.assertEqual(status, 200)
+        self.assertEqual(len(second["items"]), 10)
+        self.assertTrue(set(item["id"] for item in first["items"]).isdisjoint(item["id"] for item in second["items"]))
+        status, _ = self.request("GET", "/api/v1/communities?limit=101")
+        self.assertEqual(status, 422)
+        status, body = self.request("GET", "/api/v1/communities?cursor=%25%25%25")
+        self.assertEqual(status, 422)
+        self.assertEqual(body["code"], "invalid_cursor")
 
     def test_admin_can_approve_hide_and_archive_cat(self):
         _, community = self.request("POST", "/api/v1/communities", self.admin_token, {"name": "管理小区", "street": "银湖街道"})

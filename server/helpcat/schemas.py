@@ -22,6 +22,37 @@ class CommunityCreate(BaseModel):
     street: str = Field(min_length=1, max_length=80)
 
 
+class CommunityEdit(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    street: str = Field(min_length=1, max_length=80)
+    note: str = Field(default="", max_length=500)
+    version: Optional[int] = Field(default=None, ge=1)
+
+
+class CommunityReview(BaseModel):
+    action: Optional[Literal["approve", "request_changes", "reject"]] = None
+    note: str = Field(default="", max_length=500)
+    version: Optional[int] = Field(default=None, ge=1)
+    approved: Optional[bool] = None
+
+    @model_validator(mode="after")
+    def support_explicit_and_legacy_review(self):
+        if self.action is None and self.approved is None:
+            raise ValueError("community_review_action_required")
+        if self.action is not None and self.approved is not None:
+            raise ValueError("one_community_review_action_required")
+        if self.action is None:
+            self.action = "approve" if self.approved else "reject"
+            if not self.approved and not self.note:
+                self.note = "旧版审核驳回"
+        return self
+
+
+class CommunityMerge(BaseModel):
+    target_community_id: str = Field(min_length=1, max_length=32)
+    version: int = Field(ge=1)
+
+
 class ReviewRequest(BaseModel):
     approved: bool
 
