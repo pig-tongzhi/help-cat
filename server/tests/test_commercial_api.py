@@ -329,6 +329,19 @@ class CommercialApiTests(unittest.TestCase):
         self.assertEqual(self.request("GET", "/api/v1/cats")[1]["items"], [])
         self.assertEqual(len(self.request("GET", "/api/v1/cats", self.admin_token)[1]["items"]), 1)
 
+    def test_revoked_admin_session_cannot_read_nonpublic_cats(self):
+        _, community = self.request("POST", "/api/v1/communities", self.admin_token, {"name": "撤销会话小区", "street": "银湖街道"})
+        _, pending = self.request("POST", "/api/v1/cats", self.user_token, {
+            "community_id": community["id"], "nickname": "待审核猫", "location_note": "东门",
+        })
+        status, admin_view = self.request("GET", "/api/v1/cats", self.admin_token)
+        self.assertEqual(status, 200)
+        self.assertIn(pending["id"], [item["id"] for item in admin_view["items"]])
+        self.assertEqual(self.request("POST", "/api/v1/auth/logout", self.admin_token)[0], 200)
+        status, public_view = self.request("GET", "/api/v1/cats", self.admin_token)
+        self.assertEqual(status, 200)
+        self.assertNotIn(pending["id"], [item["id"] for item in public_view["items"]])
+
     def test_image_upload_rejects_non_image_and_accepts_small_image(self):
         status, _ = self.request("POST", "/api/v1/media/images", self.user_token, file_tuple=("note.txt", b"hello", "text/plain"))
         self.assertEqual(status, 415)

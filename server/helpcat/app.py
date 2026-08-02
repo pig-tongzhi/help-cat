@@ -327,7 +327,10 @@ def create_app(database_url=None, storage_root=None, fake_admin_openids=None):
             if session:
                 user = db.get(User, session.user_id)
                 expires_at = session.expires_at.replace(tzinfo=timezone.utc) if session.expires_at.tzinfo is None else session.expires_at
-                is_admin = bool(user and user.role in {"ADMIN", "SUPER_ADMIN"} and user.status == "ACTIVE" and expires_at >= datetime.now(timezone.utc))
+                is_admin = bool(
+                    user and user.role in {"ADMIN", "SUPER_ADMIN"} and user.status == "ACTIVE"
+                    and session.revoked_at is None and expires_at >= datetime.now(timezone.utc)
+                )
         stmt = select(Cat).join(Community, Cat.community_id == Community.id)
         if not is_admin:
             stmt = stmt.where(Cat.review_status == "APPROVED", Cat.visibility_status == "ACTIVE", Community.status == "ACTIVE")
