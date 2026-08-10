@@ -71,10 +71,21 @@
     }[status] || { label: status || "待审核", tone: "pending" };
   }
 
+  function buildSubmissionQuery(append, cursors, limit) {
+    cursors = cursors || {};
+    var params = ["limit=" + (Number(limit) || 24)];
+    if (append) {
+      params.push(cursors.cats ? "cat_cursor=" + encodeURIComponent(cursors.cats) : "cat_done=true");
+      params.push(cursors.communities ? "community_cursor=" + encodeURIComponent(cursors.communities) : "community_done=true");
+    }
+    return params.join("&");
+  }
+
   return {
     buildCatCommunityPayload: buildCatCommunityPayload,
     buildCommunityEditPayload: buildCommunityEditPayload,
     appendUnique: appendUnique,
-    statusMeta: statusMeta
+    statusMeta: statusMeta,
+    buildSubmissionQuery: buildSubmissionQuery
   };
 }));

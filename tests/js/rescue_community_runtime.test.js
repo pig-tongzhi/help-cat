@@ -46,3 +46,11 @@ test("candidate status metadata covers the complete correction lifecycle", () =>
   assert.equal(form.statusMeta("REJECTED").label, "未通过");
   assert.equal(form.statusMeta("ACTIVE").label, "已开放");
 });
+
+test("submission pagination marks an exhausted side instead of reloading page one", () => {
+  assert.equal(
+    form.buildSubmissionQuery(true, { cats: null, communities: "next-community" }, 24),
+    "limit=24&cat_done=true&community_cursor=next-community"
+  );
+  assert.equal(form.buildSubmissionQuery(false, {}, 24), "limit=24");
+});

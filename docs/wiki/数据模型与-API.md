@@ -98,7 +98,7 @@
 | POST | `/cats/{id}/review` | ADMIN+ | 审核通过或拒绝 |
 | POST | `/cats/{id}/visibility` | ADMIN+ | 公开或隐藏 |
 | POST | `/cats/{id}/archive` | ADMIN+ | 归档 |
-| GET | `/me/submissions` | 登录 | 当前用户的小区和猫咪分别游标分页 |
+| GET | `/me/submissions` | 登录 | 当前用户的小区和猫咪分别游标分页；一侧结束后用对应 `*_done=true` 防止重载第一页 |
 
 ## 任务
 

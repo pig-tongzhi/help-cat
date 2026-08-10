@@ -175,7 +175,7 @@
   function renderCats() {
     var query = byId("cat-search").value.trim().toLowerCase();
     var cats = state.cats.filter(function (cat) {
-      return !query || [cat.nickname, cat.code, cat.location_note].join(" ").toLowerCase().indexOf(query) >= 0;
+      return !query || [cat.nickname, cat.code, cat.location_note, cat.community_name].join(" ").toLowerCase().indexOf(query) >= 0;
     });
     byId("cats").innerHTML = cats.length ? cats.map(function (cat) {
       var blocker = cat.community_review_blocker;

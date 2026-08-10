@@ -141,10 +141,11 @@
 
   function loadSubmissions(append) {
     if (!state.user) return Promise.resolve();
-    var params = ["limit=24"];
-    if (append && state.cursors.submissionCats) params.push("cat_cursor=" + encodeURIComponent(state.cursors.submissionCats));
-    if (append && state.cursors.submissionCommunities) params.push("community_cursor=" + encodeURIComponent(state.cursors.submissionCommunities));
-    return api.request("/api/v1/me/submissions?" + params.join("&")).then(function (payload) {
+    var query = communityForm.buildSubmissionQuery(append, {
+      cats: state.cursors.submissionCats,
+      communities: state.cursors.submissionCommunities
+    }, 24);
+    return api.request("/api/v1/me/submissions?" + query).then(function (payload) {
       state.submissions = {
         cats: append ? communityForm.appendUnique(state.submissions.cats, payload.cats || []) : payload.cats || [],
         communities: append ? communityForm.appendUnique(state.submissions.communities, payload.communities || []) : payload.communities || []
@@ -186,7 +187,7 @@
     var query = byId("cat-search").value.trim().toLowerCase();
     var communityId = byId("community-filter").value;
     return state.cats.filter(function (cat) {
-      var haystack = [cat.nickname, cat.code, communityName(cat.community_id)].join(" ").toLowerCase();
+      var haystack = [cat.nickname, cat.code, communityName(cat.community_id, cat.community_name), cat.community_name].join(" ").toLowerCase();
       return (!query || haystack.indexOf(query) >= 0) && (!communityId || cat.community_id === communityId);
     });
   }

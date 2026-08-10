@@ -163,6 +163,7 @@ class RescueH5ContractTests(unittest.TestCase):
             self.assertIn(text, script)
         for text in ('Idempotency-Key', 'catIdempotencyKey', 'crypto.randomUUID', 'prefers-reduced-motion'):
             self.assertIn(text, script)
+        self.assertIn('cat.community_name', script)
 
     def test_rescue_assets_are_versioned_in_dependency_order(self):
         html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")

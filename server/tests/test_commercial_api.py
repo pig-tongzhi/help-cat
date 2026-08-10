@@ -142,6 +142,54 @@ class CommercialApiTests(unittest.TestCase):
         self.assertEqual((status, len(submissions["cats"])), (200, 1))
         self.assertTrue(submissions["next_cursor"]["cats"])
 
+    def test_personal_submission_dual_cursor_stops_exhausted_side_without_reloading_first_page(self):
+        for index in range(3):
+            self.request("POST", "/api/v1/communities", self.user_token, {
+                "name": "双游标小区%d" % index, "street": "银湖街道",
+            })
+        _, active = self.request("POST", "/api/v1/communities", self.admin_token, {
+            "name": "双游标正式小区", "street": "银湖街道",
+        })
+        for index in range(3):
+            self.request("POST", "/api/v1/cats", self.user_token, {
+                "community_id": active["id"], "nickname": "双游标猫%d" % index, "location_note": "东门",
+            }, extra_headers={"Idempotency-Key": "dual-cursor-cat-%d" % index})
+        with self.app.state.session_factory() as db:
+            for index in range(3, 5):
+                db.add(Cat(
+                    community_id=active["id"], code="HC-DUAL-%d" % index,
+                    nickname="双游标猫%d" % index, location_note="东门", created_by=self.user_id,
+                ))
+            db.commit()
+
+        cat_cursor = None
+        community_cursor = None
+        cat_done = False
+        community_done = False
+        cat_ids = []
+        community_ids = []
+        while not (cat_done and community_done):
+            query = ["limit=2"]
+            if cat_cursor:
+                query.append("cat_cursor=" + cat_cursor)
+            if community_cursor:
+                query.append("community_cursor=" + community_cursor)
+            if cat_done:
+                query.append("cat_done=true")
+            if community_done:
+                query.append("community_done=true")
+            status, page = self.request("GET", "/api/v1/me/submissions?" + "&".join(query), self.user_token)
+            self.assertEqual(status, 200)
+            cat_ids.extend(item["id"] for item in page["cats"])
+            community_ids.extend(item["id"] for item in page["communities"])
+            cat_cursor = page["next_cursor"]["cats"]
+            community_cursor = page["next_cursor"]["communities"]
+            cat_done = cat_done or cat_cursor is None
+            community_done = community_done or community_cursor is None
+        self.assertEqual(len(cat_ids), len(set(cat_ids)))
+        self.assertEqual(len(community_ids), len(set(community_ids)))
+        self.assertEqual((len(cat_ids), len(community_ids)), (5, 3))
+
     def test_super_admin_can_promote_and_demote_user_with_audit(self):
         status, body = self.request("POST", "/api/v1/admin/users/%s/role" % self.user_id, self.super_token, {"role": "ADMIN"})
         self.assertEqual((status, body["role"]), (200, "ADMIN"))
@@ -319,6 +367,10 @@ class CommercialApiTests(unittest.TestCase):
             "action": "request_changes", "note": "请补充街道", "version": 1,
         })
         self.assertEqual((status, changed["status"], changed["version"]), (200, "NEEDS_CHANGES", 2))
+        status, legacy = self.request("POST", f"/api/v1/communities/{candidate_id}/review", self.admin_token, {
+            "approved": True,
+        })
+        self.assertEqual((status, legacy["code"]), (409, "legacy_review_version_required"))
         status, approved = self.request("POST", f"/api/v1/communities/{candidate_id}/review", self.super_token, {
             "action": "approve", "version": 2,
         })
@@ -354,6 +406,8 @@ class CommercialApiTests(unittest.TestCase):
         self.assertEqual(status, 422)
         status, archived = self.request("POST", f"/api/v1/communities/{active['id']}/archive", self.admin_token, {"version": 1})
         self.assertEqual((status, archived["status"], archived["version"]), (200, "ARCHIVED", 2))
+        status, stale = self.request("POST", f"/api/v1/communities/{active['id']}/archive", self.super_token, {"version": 1})
+        self.assertEqual((status, stale["code"]), (409, "stale_community_version"))
 
     def test_admin_can_reassign_cat_after_candidate_rejection_then_approve_it(self):
         _, target = self.request("POST", "/api/v1/communities", self.admin_token, {

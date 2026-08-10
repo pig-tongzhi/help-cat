@@ -1,10 +1,17 @@
+import importlib.util
+import os
+import sqlite3
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 from sqlalchemy import inspect, text
+from sqlalchemy.orm.exc import StaleDataError
 
 from server.helpcat.db import ensure_schema, make_session_factory
+from server.helpcat.models import Community, User
 
 
 class CommercialMigrationTests(unittest.TestCase):
@@ -70,6 +77,75 @@ class CommercialMigrationTests(unittest.TestCase):
         environment = Path("server/helpcat/migrations/env.py").read_text(encoding="utf-8")
         self.assertIn('os.getenv("HELPCAT_DATABASE_URL")', environment)
         self.assertIn('config.set_main_option("sqlalchemy.url"', environment)
+
+    def test_mapper_version_predicate_rejects_two_transactions_updating_same_community(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            engine, session_factory = make_session_factory("sqlite:///" + str(Path(tmp) / "versioned.db"))
+            ensure_schema(engine)
+            with session_factory() as setup:
+                setup.add(User(id="u-version", openid="version-openid", role="ADMIN", status="ACTIVE", nickname="管理员"))
+                setup.add(Community(
+                    id="c-version", name="版本并发小区", normalized_name="版本并发小区",
+                    street="银湖街道", status="PENDING_REVIEW", created_by="u-version",
+                ))
+                setup.commit()
+            first = session_factory()
+            second = session_factory()
+            try:
+                first_item = first.get(Community, "c-version")
+                second_item = second.get(Community, "c-version")
+                first_item.status = "ACTIVE"
+                first_item.version += 1
+                second_item.status = "REJECTED"
+                second_item.version += 1
+                first.commit()
+                with self.assertRaises(StaleDataError):
+                    second.commit()
+            finally:
+                first.close()
+                second.close()
+
+    @unittest.skipUnless(importlib.util.find_spec("alembic"), "Alembic is installed in production/CI, not the macOS system Python")
+    def test_alembic_upgrade_executes_against_legacy_sqlite_and_reconciles_collisions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            database = Path(tmp) / "legacy.db"
+            with sqlite3.connect(database) as connection:
+                connection.executescript("""
+                    CREATE TABLE communities (
+                        id VARCHAR(32) PRIMARY KEY, city VARCHAR(40), district VARCHAR(40), street VARCHAR(80),
+                        name VARCHAR(120), status VARCHAR(20), created_by VARCHAR(32), reviewed_by VARCHAR(32),
+                        created_at DATETIME, updated_at DATETIME
+                    );
+                    CREATE TABLE cats (
+                        id VARCHAR(32) PRIMARY KEY, community_id VARCHAR(32), code VARCHAR(40), nickname VARCHAR(80),
+                        living_status VARCHAR(80), health_status VARCHAR(80), location_note VARCHAR(240),
+                        latitude FLOAT, longitude FLOAT, photo_asset_id VARCHAR(32), review_status VARCHAR(20),
+                        visibility_status VARCHAR(20), created_by VARCHAR(32), created_at DATETIME, updated_at DATETIME
+                    );
+                    INSERT INTO communities VALUES
+                        ('c1','杭州市','富阳区','银湖街道','星河 家园','ACTIVE','u1',NULL,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),
+                        ('c2','杭州市','富阳区','银湖街道','星河　家园','PENDING_REVIEW','u1',NULL,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP);
+                    INSERT INTO cats VALUES
+                        ('cat1','c2','HC-LEGACY','旧猫','','UNKNOWN','北门',NULL,NULL,NULL,'PENDING_REVIEW','ACTIVE','u1',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP);
+                """)
+            config = Path(tmp) / "alembic.ini"
+            config.write_text(
+                "[alembic]\nscript_location = " + str((Path.cwd() / "server/helpcat/migrations").resolve()) +
+                "\nprepend_sys_path = " + str(Path.cwd().resolve()) + "\nsqlalchemy.url = sqlite:///unused.db\n",
+                encoding="utf-8",
+            )
+            environment = dict(os.environ, HELPCAT_DATABASE_URL="sqlite:///" + str(database))
+            subprocess.run(
+                [sys.executable, "-m", "alembic", "-c", str(config), "upgrade", "head"],
+                check=True, cwd=Path.cwd(), env=environment, capture_output=True, text=True,
+            )
+            with sqlite3.connect(database) as connection:
+                self.assertEqual(connection.execute("SELECT version_num FROM alembic_version").fetchone()[0], "003_scale_integrity")
+                self.assertEqual(connection.execute("SELECT community_id FROM cats WHERE id='cat1'").fetchone()[0], "c1")
+                self.assertEqual(connection.execute("SELECT status, merged_into_id FROM communities WHERE id='c2'").fetchone(), ("MERGED", "c1"))
+                self.assertTrue(any(row[2] == "merged_into_id" for row in connection.execute("PRAGMA foreign_key_list(communities)")))
+                self.assertIn("uq_communities_live_location_name", {row[1] for row in connection.execute("PRAGMA index_list(communities)")})
+                self.assertIn("uq_cats_actor_idempotency", {row[1] for row in connection.execute("PRAGMA index_list(cats)")})
 
 
 if __name__ == "__main__":

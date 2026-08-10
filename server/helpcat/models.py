@@ -58,6 +58,7 @@ class Community(Base):
     review_note: Mapped[str] = mapped_column(Text, default="")
     merged_into_id: Mapped[Optional[str]] = mapped_column(ForeignKey("communities.id"), nullable=True, index=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
+    __mapper_args__ = {"version_id_col": version, "version_id_generator": False}
     created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
     reviewed_by: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
@@ -83,6 +84,7 @@ class Cat(Base):
     created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
     idempotency_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
+    __mapper_args__ = {"version_id_col": version, "version_id_generator": False}
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
 

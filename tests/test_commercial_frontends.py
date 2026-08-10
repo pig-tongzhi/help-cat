@@ -70,6 +70,7 @@ class CommercialFrontendContractTests(unittest.TestCase):
             'data-target-search',
             'linked_cat_count',
             'merged_into_name',
+            'cat.community_name',
             'id="load-more-admin-communities"',
             'community-review.js?v=',
             'next_cursor',
