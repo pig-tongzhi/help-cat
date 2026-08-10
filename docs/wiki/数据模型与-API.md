@@ -34,11 +34,11 @@
 
 ### cats
 
-关联小区，保存猫咪编号、名称、居住/健康状态、模糊位置、可选坐标、可选图片、审核状态、可见性、创建者、乐观锁版本和可空幂等键。
+关联小区，保存猫咪编号、名称、居住/健康状态、模糊位置、可选坐标、可选图片、审核状态、可见性、创建者、乐观锁版本、可空幂等键和可空稳定公开 `profile_key`。
 
 猫咪编号格式为随机生成的 `HC-XXXXXXXX`。
 
-`(created_by, idempotency_key)` 唯一；同一用户用同一个建档键重试时返回原猫咪。有效小区使用 `(city, district, normalized_name)` 部分唯一索引，终态记录不阻止日后创建正确的小区。
+`(created_by, idempotency_key)` 唯一；同一用户用同一个建档键重试时返回原猫咪。`profile_key` 在所有猫咪中唯一，77 固定为 `story-77`。有效小区使用 `(city, district, normalized_name)` 部分唯一索引，终态记录不阻止日后创建正确的小区。
 
 ### daily_cat_quotas
 
@@ -93,7 +93,10 @@
 | 方法 | 路径 | 权限 | 作用 |
 |---|---|---|---|
 | GET | `/cats` | 公开/可选管理员 Token | 游标分页；访客还要求关联小区 ACTIVE；管理员看全部 |
+| GET | `/public/metrics` | 公开 | 服务端统计公开猫咪、开放任务和 ACTIVE 小区；排除 QA，不受 Token/分页/搜索影响 |
+| GET | `/public/profiles/{profile_key}` | 公开 | 按稳定 key 返回已审核、已公开且非 QA 的唯一档案 |
 | POST | `/cats` | 登录 | `community_id` 或 `community_candidate` 二选一；支持 `Idempotency-Key`；USER 待审且有每日配额 |
+| POST | `/admin/cat-drafts/import` | ADMIN+ | 媒体与猫咪原子幂等导入；只创建 `PENDING_REVIEW + HIDDEN` 草稿 |
 | POST | `/cats/{id}/community` | ADMIN+ | 携带猫咪 `version` 改挂到 ACTIVE 小区 |
 | POST | `/cats/{id}/review` | ADMIN+ | 审核通过或拒绝 |
 | POST | `/cats/{id}/visibility` | ADMIN+ | 公开或隐藏 |
@@ -112,7 +115,7 @@
 
 | 方法 | 路径 | 权限 | 作用 |
 |---|---|---|---|
-| POST | `/media/images` | 登录 | 上传并校验单张图片 |
+| POST | `/media/images` | 登录 | 完整解码、限制像素、安全重编码并剥离元数据后上传单张图片 |
 | GET | `/media/{asset_id}` | 公开 | 读取媒体文件 |
 
 媒体读取当前为公开 ID 地址。规模化前需评估防盗链、CDN、内容审核、隐私和删除策略。
@@ -155,7 +158,7 @@
 ## 数据库迁移
 
 - SQLAlchemy 模型是运行时数据结构来源。
-- Alembic 位于 `server/helpcat/migrations/`；`002_community_candidates` 添加候选字段，`003_scale_integrity` 增加猫咪版本/幂等键、有效小区唯一索引、幂等唯一索引和合并自外键。
+- Alembic 位于 `server/helpcat/migrations/`；`002_community_candidates` 添加候选字段，`003_scale_integrity` 增加猫咪版本/幂等键和完整性约束，`004_public_metrics` 增加 QA 标记，`005_public_profiles` 增加唯一 `profile_key` 并兼容回填旧 77。
 - 迁移环境读取 `HELPCAT_DATABASE_URL`；生产执行时必须提供绝对 SQLite URL。
 - `ensure_schema()` 为早期 SQLite 试运行提供小范围向前兼容补列，不应替代正式生产迁移。
 - 迁移 PostgreSQL 前必须先做数据备份、双向数量校验、业务抽样和回滚演练。

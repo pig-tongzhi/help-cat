@@ -53,9 +53,13 @@ class CommercialFrontendContractTests(unittest.TestCase):
     def test_admin_brand_returns_home_and_linked_review_is_versioned_and_paged(self):
         html = (ROOT / "admin" / "index.html").read_text(encoding="utf-8")
         script = (ROOT / "admin" / "app.js").read_text(encoding="utf-8")
+        brand_source = 'src="/help-cat/rescue/assets/brand/helpcat-77-mark.svg"'
         self.assertIn('class="side-brand" href="/help-cat/rescue/index.html#home"', html)
         self.assertIn('aria-label="返回帮帮小猫首页"', html)
         self.assertIn('title="返回帮帮小猫首页"', html)
+        self.assertEqual(html.count(brand_source), 2)
+        self.assertEqual(html.count('<img class="brand-mark"'), 2)
+        self.assertNotIn('<span class="brand-mark"', html)
         self.assertNotIn("access_token=", html + script)
         for marker in (
             'data-community-action="approve"',
@@ -89,6 +93,27 @@ class CommercialFrontendContractTests(unittest.TestCase):
             self.assertIn(marker, styles)
         for width in ("1024px", "820px", "430px", "390px", "360px"):
             self.assertIn(width, styles)
+
+    def test_release_runbook_deploys_complete_rescue_tree_and_uses_one_release_root(self):
+        runbook = (ROOT / "docs" / "wiki" / "部署回滚与运维.md").read_text(encoding="utf-8")
+        changes = (ROOT / "docs" / "wiki" / "变更记录.md").read_text(encoding="utf-8")
+        flow = (ROOT / "docs" / "wiki" / "核心业务流程.md").read_text(encoding="utf-8")
+        for marker in (
+            "发布整个 `app/rescue/` 目录",
+            "story-77.js",
+            "manifest.webmanifest",
+            "assets/brand/",
+            "assets/77/",
+            "rescue.SHA256",
+            "每个 HTML 引用资源",
+            "HTTP 200",
+        ):
+            self.assertIn(marker, runbook)
+        release_root = "/opt/help-cat/releases/<timestamp>"
+        self.assertIn(release_root + "/scripts/help_cat_77_seed.py", changes)
+        self.assertIn(release_root + "/rescue/assets/77/rescue-day.webp", changes)
+        for marker in ("/api/v1/admin/cat-drafts/import", "PENDING_REVIEW", "HIDDEN", "人工"):
+            self.assertIn(marker, changes + flow)
 
 
 if __name__ == "__main__":
