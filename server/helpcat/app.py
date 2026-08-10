@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Optional
 from zoneinfo import ZoneInfo
 
-from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import and_, func, or_, select
@@ -80,7 +80,8 @@ def cat_payload(cat):
     return {"id": cat.id, "community_id": cat.community_id, "code": cat.code, "nickname": cat.nickname,
             "living_status": cat.living_status, "health_status": cat.health_status, "location_note": cat.location_note,
             "review_status": cat.review_status, "visibility_status": cat.visibility_status, "created_by": cat.created_by,
-            "photo_asset_id": cat.photo_asset_id, "latitude": cat.latitude, "longitude": cat.longitude,
+            "photo_asset_id": cat.photo_asset_id, "profile_key": cat.profile_key,
+            "latitude": cat.latitude, "longitude": cat.longitude,
             "community_name": cat.community.name if cat.community else "",
             "community_street": cat.community.street if cat.community else "",
             "version": cat.version,
@@ -109,6 +110,10 @@ def task_payload(item):
             "status": item.status, "created_by": item.created_by, "claimed_by": item.claimed_by}
 
 
+def media_payload(asset):
+    return {"id": asset.id, "object_key": asset.object_key, "content_type": asset.content_type, "byte_size": asset.byte_size}
+
+
 def user_payload(user):
     return {"id": user.id, "username": user.username, "nickname": user.nickname, "role": user.role,
             "status": user.status, "created_at": user.created_at.isoformat()}
@@ -121,6 +126,22 @@ def audit(db, actor_id, action, entity_type, entity_id, before=None, after=None)
 
 def is_qa_label(value):
     return str(value or "").lstrip().startswith("[QA-")
+
+
+def normalized_idempotency_key(value):
+    key = str(value or "").strip()
+    if not 8 <= len(key) <= 64 or not all(character.isalnum() or character in "-_.:" for character in key):
+        error(422, "invalid_idempotency_key")
+    return key
+
+
+def normalized_profile_key(value):
+    key = str(value or "").strip()
+    if not 3 <= len(key) <= 64 or not all(character.islower() or character.isdigit() or character == "-" for character in key):
+        error(422, "invalid_profile_key")
+    if key.startswith("-") or key.endswith("-") or "--" in key:
+        error(422, "invalid_profile_key")
+    return key
 
 
 def encode_cursor(item):
@@ -188,6 +209,19 @@ def create_app(database_url=None, storage_root=None, fake_admin_openids=None):
             select(func.count(Community.id)).where(Community.status == "ACTIVE", Community.is_qa.is_(False))
         )
         return {"cats": public_cats or 0, "tasks": open_tasks or 0, "communities": active_communities or 0}
+
+    @app.get("/api/v1/public/profiles/{profile_key}")
+    def public_profile(profile_key: str, db: DbSession = Depends(db_session)):
+        key = normalized_profile_key(profile_key)
+        cat = db.scalar(
+            select(Cat).join(Community, Cat.community_id == Community.id).where(
+                Cat.profile_key == key, Cat.review_status == "APPROVED", Cat.visibility_status == "ACTIVE",
+                Cat.is_qa.is_(False), Community.status == "ACTIVE", Community.is_qa.is_(False),
+            )
+        )
+        if not cat:
+            error(404, "public_profile_not_found")
+        return cat_payload(cat)
 
     @app.post("/api/v1/auth/wechat-login")
     def wechat_login(payload: WechatLoginRequest, db: DbSession = Depends(db_session)):
@@ -486,9 +520,7 @@ def create_app(database_url=None, storage_root=None, fake_admin_openids=None):
     def create_cat(payload: CatCreate, actor=Depends(current_user), idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"), db: DbSession = Depends(db_session)):
         actor_id, role = actor
         if idempotency_key:
-            idempotency_key = idempotency_key.strip()
-            if not 8 <= len(idempotency_key) <= 64 or not all(character.isalnum() or character in "-_.:" for character in idempotency_key):
-                error(422, "invalid_idempotency_key")
+            idempotency_key = normalized_idempotency_key(idempotency_key)
             existing = db.scalar(select(Cat).where(Cat.created_by == actor_id, Cat.idempotency_key == idempotency_key))
             if existing:
                 return cat_payload(existing)
@@ -573,6 +605,105 @@ def create_app(database_url=None, storage_root=None, fake_admin_openids=None):
             db.rollback()
             error(409, "stale_cat_version")
         return cat_payload(cat)
+
+    @app.post("/api/v1/admin/cat-drafts/import", status_code=201)
+    async def import_cat_draft(
+        file: UploadFile = File(...),
+        community_id: str = Form(...),
+        profile_key: str = Form(...),
+        nickname: str = Form(...),
+        living_status: str = Form(default=""),
+        health_status: str = Form(default="UNKNOWN"),
+        location_note: str = Form(...),
+        actor=Depends(current_user),
+        idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+        db: DbSession = Depends(db_session),
+    ):
+        require_admin(actor)
+        key = normalized_profile_key(profile_key)
+        request_key = normalized_idempotency_key(idempotency_key)
+        clean_nickname = nickname.strip()
+        clean_living_status = living_status.strip()
+        clean_health_status = health_status.strip()
+        clean_location_note = location_note.strip()
+        if not 1 <= len(clean_nickname) <= 80 or len(clean_living_status) > 80 or not 1 <= len(clean_health_status) <= 80 or not 1 <= len(clean_location_note) <= 240:
+            error(422, "invalid_draft_fields")
+        existing_request = db.scalar(
+            select(Cat).where(Cat.created_by == actor[0], Cat.idempotency_key == request_key)
+        )
+        if existing_request:
+            if existing_request.profile_key != key:
+                error(409, "idempotency_key_reused")
+            asset = db.get(MediaAsset, existing_request.photo_asset_id)
+            if not asset:
+                error(409, "draft_media_missing")
+            return {"changed": False, "cat": cat_payload(existing_request), "media": media_payload(asset)}
+        existing_profile = db.scalar(select(Cat).where(Cat.profile_key == key))
+        if existing_profile:
+            if existing_profile.idempotency_key and existing_profile.idempotency_key != request_key:
+                error(409, "profile_key_exists")
+            asset = db.get(MediaAsset, existing_profile.photo_asset_id)
+            if not asset:
+                error(409, "draft_media_missing")
+            if not existing_profile.idempotency_key:
+                existing_profile.idempotency_key = request_key
+                db.commit()
+            return {"changed": False, "cat": cat_payload(existing_profile), "media": media_payload(asset)}
+        community = db.get(Community, community_id)
+        if not community or community.status != "ACTIVE":
+            error(404, "community_not_found")
+        allowed_content_types = {item[0] for item in PUBLIC_IMAGE_FORMATS.values()}
+        if file.content_type not in allowed_content_types:
+            error(415, "unsupported_image_type")
+        content = await file.read(settings.max_image_bytes + 1)
+        if len(content) > settings.max_image_bytes:
+            error(413, "image_too_large")
+        sanitized, content_type, extension = sanitize_public_image(
+            content, file.content_type, settings.max_image_pixels, settings.max_image_bytes,
+        )
+        object_key = new_id() + extension
+        asset = MediaAsset(
+            id=new_id(), object_key=object_key, content_type=content_type,
+            byte_size=len(sanitized), created_by=actor[0],
+        )
+        cat = Cat(
+            id=new_id(), community_id=community.id, community=community,
+            code="HC-" + secrets.token_hex(4).upper(), nickname=clean_nickname,
+            living_status=clean_living_status, health_status=clean_health_status,
+            location_note=clean_location_note, photo_asset_id=asset.id,
+            review_status="PENDING_REVIEW", visibility_status="HIDDEN",
+            created_by=actor[0], idempotency_key=request_key, profile_key=key,
+            is_qa=is_qa_label(clean_nickname) or community.is_qa,
+        )
+        target = settings.storage_root / object_key
+        staging = settings.storage_root / ("." + object_key + "." + new_id() + ".tmp")
+        try:
+            staging.write_bytes(sanitized)
+            db.add_all([asset, cat])
+            db.flush()
+            audit(db, actor[0], "UPLOAD", "media", asset.id, after=media_payload(asset))
+            audit(db, actor[0], "CREATE", "cat", cat.id, after=cat_payload(cat))
+            staging.replace(target)
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            staging.unlink(missing_ok=True)
+            target.unlink(missing_ok=True)
+            concurrent = db.scalar(
+                select(Cat).where(Cat.created_by == actor[0], Cat.idempotency_key == request_key)
+            )
+            if concurrent and concurrent.profile_key == key:
+                concurrent_asset = db.get(MediaAsset, concurrent.photo_asset_id)
+                if concurrent_asset:
+                    return {"changed": False, "cat": cat_payload(concurrent), "media": media_payload(concurrent_asset)}
+                error(409, "draft_media_missing")
+            error(409, "profile_key_exists")
+        except Exception:
+            db.rollback()
+            staging.unlink(missing_ok=True)
+            target.unlink(missing_ok=True)
+            raise
+        return {"changed": True, "cat": cat_payload(cat), "media": media_payload(asset)}
 
     def get_cat_or_404(db, cat_id):
         cat = db.get(Cat, cat_id)

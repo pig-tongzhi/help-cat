@@ -50,6 +50,8 @@ def ensure_schema(engine):
         statements.append("ALTER TABLE cats ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
     if "is_qa" not in cat_columns:
         statements.append("ALTER TABLE cats ADD COLUMN is_qa BOOLEAN NOT NULL DEFAULT 0")
+    if "profile_key" not in cat_columns:
+        statements.append("ALTER TABLE cats ADD COLUMN profile_key VARCHAR(64)")
     if "normalized_name" not in community_columns:
         statements.append("ALTER TABLE communities ADD COLUMN normalized_name VARCHAR(120) NOT NULL DEFAULT ''")
     if "review_note" not in community_columns:
@@ -83,12 +85,26 @@ def ensure_schema(engine):
         connection.execute(text("UPDATE communities SET is_qa = 1 WHERE name LIKE '[QA-%'"))
         connection.execute(text("UPDATE cats SET is_qa = 1 WHERE nickname LIKE '[QA-%'"))
         connection.execute(text("UPDATE tasks SET is_qa = 1 WHERE title LIKE '[QA-%'"))
+        story_rows = connection.execute(text("""
+            SELECT id, profile_key FROM cats
+            WHERE profile_key = 'story-77'
+               OR (profile_key IS NULL AND nickname = '77' AND location_note LIKE '%2025-06-02 相遇%')
+            ORDER BY id
+        """)).mappings().all()
+        if len(story_rows) > 1:
+            raise RuntimeError("multiple legacy cats match story-77; reconcile before startup")
+        if story_rows and story_rows[0]["profile_key"] is None:
+            connection.execute(
+                text("UPDATE cats SET profile_key = 'story-77' WHERE id = :id"),
+                {"id": story_rows[0]["id"]},
+            )
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_communities_is_qa ON communities (is_qa)"))
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_cats_is_qa ON cats (is_qa)"))
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_tasks_is_qa ON tasks (is_qa)"))
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_communities_normalized_name ON communities (normalized_name)"))
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_communities_merged_into_id ON communities (merged_into_id)"))
         connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_cats_actor_idempotency ON cats (created_by, idempotency_key)"))
+        connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_cats_profile_key ON cats (profile_key)"))
         connection.execute(text("""
             CREATE TRIGGER IF NOT EXISTS fk_communities_merged_into_id_insert
             BEFORE INSERT ON communities

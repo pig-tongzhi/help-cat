@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Idempotently import the approved public profile for 77 through the Help Cat API."""
+"""Idempotently import 77 as a hidden draft through the Help Cat API."""
 
 import argparse
 import json
@@ -7,7 +7,6 @@ import mimetypes
 import os
 import secrets
 import urllib.error
-import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,6 +14,8 @@ from pathlib import Path
 
 MARKER = "2025-06-02 相遇"
 LOCATION_NOTE = "公开位置已保护；" + MARKER
+PROFILE_KEY = "story-77"
+IDEMPOTENCY_KEY = "help-cat:profile:story-77:import:v1"
 
 
 @dataclass(frozen=True)
@@ -45,28 +46,39 @@ class ApiClient:
             raise RuntimeError("%s %s returned %s (%s)" % (method, path, status, code))
         return response
 
-    def upload_image(self, path, token, expected=201):
+    def import_cat_draft(self, path, token, fields, idempotency_key, expected=201):
         content = Path(path).read_bytes()
         boundary = "----HelpCat77%s" % secrets.token_hex(12)
+        parts = []
+        for name, value in fields.items():
+            parts.append((
+                "--%s\r\nContent-Disposition: form-data; name=\"%s\"\r\n\r\n%s\r\n"
+                % (boundary, name, value)
+            ).encode("utf-8"))
         filename = Path(path).name
         content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
-        body = (
+        parts.append(
             ("--%s\r\n" % boundary).encode()
             + ('Content-Disposition: form-data; name="file"; filename="%s"\r\n' % filename).encode()
             + ("Content-Type: %s\r\n\r\n" % content_type).encode()
             + content
-            + ("\r\n--%s--\r\n" % boundary).encode()
+            + b"\r\n"
         )
+        parts.append(("--%s--\r\n" % boundary).encode())
         request = urllib.request.Request(
-            self.base_url + "/api/v1/media/images",
-            data=body,
-            headers={"Authorization": "Bearer " + token, "Content-Type": "multipart/form-data; boundary=" + boundary},
+            self.base_url + "/api/v1/admin/cat-drafts/import",
+            data=b"".join(parts),
+            headers={
+                "Authorization": "Bearer " + token,
+                "Content-Type": "multipart/form-data; boundary=" + boundary,
+                "Idempotency-Key": idempotency_key,
+            },
             method="POST",
         )
         status, response = self._open(request)
         if status != expected:
             code = response.get("code") if isinstance(response, dict) else "invalid_response"
-            raise RuntimeError("POST /api/v1/media/images returned %s (%s)" % (status, code))
+            raise RuntimeError("POST /api/v1/admin/cat-drafts/import returned %s (%s)" % (status, code))
         return response
 
     @staticmethod
@@ -92,25 +104,8 @@ def _require_password(password_env):
     return password
 
 
-def _find_marked_cat(client, token):
-    for visibility_token in (None, token):
-        cursor = None
-        while True:
-            parameters = {"q": "77"}
-            if cursor:
-                parameters["cursor"] = cursor
-            response = client.json("GET", "/api/v1/cats?" + urllib.parse.urlencode(parameters), token=visibility_token)
-            for item in response.get("items", []):
-                if item.get("nickname") == "77" and MARKER in item.get("location_note", ""):
-                    return item
-            cursor = response.get("next_cursor")
-            if not cursor:
-                break
-    return None
-
-
 def seed_77_profile(config, client=None):
-    """Create or repair the approved public 77 profile without duplicating its cat or media."""
+    """Atomically import 77 as a hidden draft; publication always remains manual."""
     password = _require_password(config.password_env)
     client = client or ApiClient(config.base_url)
     login = client.json("POST", "/api/v1/auth/login", {"username": config.username, "password": password})
@@ -121,36 +116,24 @@ def seed_77_profile(config, client=None):
     if account.get("role") not in {"ADMIN", "SUPER_ADMIN"}:
         raise RuntimeError("77 profile import requires an ADMIN or SUPER_ADMIN account")
 
-    cat = _find_marked_cat(client, token)
-    changed = False
-    if not cat:
-        media = client.upload_image(config.photo, token)
-        media_id = media.get("id")
-        if not media_id:
-            raise RuntimeError("image upload response did not include a media id")
-        cat = client.json("POST", "/api/v1/cats", {
-            "community_id": config.community_id,
-            "nickname": "77",
-            "living_status": "已进入家庭",
-            "health_status": "UNKNOWN",
-            "location_note": LOCATION_NOTE,
-            "photo_asset_id": media_id,
-        }, token=token, expected=201)
-        changed = True
-    media_id = cat.get("photo_asset_id")
-    if not media_id:
-        raise RuntimeError("existing 77 profile has no approved portrait media")
-    review_status = cat.get("review_status")
-    visibility_status = cat.get("visibility_status")
-    if review_status not in {"PENDING_REVIEW", "APPROVED"} or visibility_status not in {"ACTIVE", "HIDDEN"}:
+    result = client.import_cat_draft(config.photo, token, {
+        "community_id": config.community_id,
+        "profile_key": PROFILE_KEY,
+        "nickname": "77",
+        "living_status": "已进入家庭",
+        "health_status": "UNKNOWN",
+        "location_note": LOCATION_NOTE,
+    }, IDEMPOTENCY_KEY, expected=201)
+    cat = result.get("cat") or {}
+    media = result.get("media") or {}
+    media_id = media.get("id") or cat.get("photo_asset_id")
+    if not cat.get("id") or not media_id:
+        raise RuntimeError("draft import response did not include cat and media ids")
+    if cat.get("profile_key") != PROFILE_KEY:
+        raise RuntimeError("draft import returned an unexpected profile key")
+    if cat.get("review_status") == "REJECTED" or cat.get("visibility_status") == "ARCHIVED":
         raise RuntimeError("existing 77 profile requires manual review")
-    if review_status == "PENDING_REVIEW":
-        cat = client.json("POST", "/api/v1/cats/%s/review" % cat["id"], {"approved": True}, token=token)
-        changed = True
-    if visibility_status == "HIDDEN":
-        client.json("POST", "/api/v1/cats/%s/visibility" % cat["id"], {"visible": True}, token=token)
-        changed = True
-    return {"cat_id": cat["id"], "media_id": media_id, "changed": changed}
+    return {"cat_id": cat["id"], "media_id": media_id, "changed": bool(result.get("changed"))}
 
 
 def main(argv=None):

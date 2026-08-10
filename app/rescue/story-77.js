@@ -7,6 +7,8 @@
     });
   }
 
+  var PROFILE_KEY = "story-77";
+
   var chapters = Object.freeze([
     Object.freeze({ title: "初见 77", marker: "2025 年 6 月 2 日", copy: "2025 年 6 月 2 日，我们第一次遇见了 77。一次相遇，让它被认真记住。", image: "assets/77/rescue-day.webp", alt: "77 幼猫期的近照", width: 620, height: 460 }),
     Object.freeze({ title: "名字的由来", marker: "农历五月初七", copy: "那天是农历五月初七。77 的名字，来自这一份最初的记录。" }),
@@ -25,7 +27,7 @@
     return '<article class="story-chapter">' +
       visual +
       '<div class="story-chapter-copy"><span class="story-index">0' + (index + 1) + '</span><h2>' + escapeHtml(chapter.title) + '</h2><p>' + escapeHtml(chapter.copy) + '</p>' +
-      (index === chapters.length - 1 ? '<div class="story-actions"><button class="button primary" type="button" data-story-action="cats">看看正在等待帮助的小猫</button><button class="button secondary" type="button" data-story-action="create-cat">为遇见的小猫建立档案</button></div>' : '') +
+      (index === chapters.length - 1 ? '<div class="story-actions"><a class="button secondary" href="#cats?profile=' + PROFILE_KEY + '" data-story-action="profile" data-story-profile-link hidden>正在读取 77 公开档案…</a><button class="button primary" type="button" data-story-action="cats">看看正在等待帮助的小猫</button><button class="button secondary" type="button" data-story-action="create-cat">为遇见的小猫建立档案</button></div>' : '') +
       '</div></article>';
   }
 
@@ -41,15 +43,35 @@
   function render(container, actions) {
     if (!container) return;
     var handlers = actions || {};
+    var loadedProfile = null;
     container.innerHTML = renderToString();
     Array.prototype.forEach.call(container.querySelectorAll("[data-story-action]"), function (button) {
-      button.addEventListener("click", function () {
+      button.addEventListener("click", function (event) {
         var action = button.dataset.storyAction;
+        if (action === "profile") {
+          if (event && typeof event.preventDefault === "function") event.preventDefault();
+          if (loadedProfile && typeof handlers.openProfile === "function") handlers.openProfile(loadedProfile);
+        }
         if (action === "cats" && typeof handlers.openCats === "function") handlers.openCats();
         if (action === "create-cat" && typeof handlers.openCreateCat === "function") handlers.openCreateCat();
         if (action === "back-home" && typeof handlers.backHome === "function") handlers.backHome();
       });
     });
+    var profileLink = typeof container.querySelector === "function" ? container.querySelector("[data-story-profile-link]") : null;
+    if (profileLink && typeof handlers.loadProfile === "function") {
+      Promise.resolve(handlers.loadProfile(PROFILE_KEY)).then(function (profile) {
+        if (!profile || profile.profile_key !== PROFILE_KEY) throw new Error("invalid public profile");
+        loadedProfile = profile;
+        profileLink.hidden = false;
+        profileLink.textContent = "查看 " + (profile.nickname || "77") + " 的公开档案";
+        profileLink.setAttribute("href", "#cats?profile=" + PROFILE_KEY);
+        profileLink.removeAttribute("aria-disabled");
+      }).catch(function () {
+        profileLink.hidden = false;
+        profileLink.textContent = "77 公开档案暂时无法载入";
+        profileLink.setAttribute("aria-disabled", "true");
+      });
+    }
   }
 
   window.HelpCatStory77 = Object.freeze({ render: render, renderToString: renderToString });

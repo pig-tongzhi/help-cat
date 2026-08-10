@@ -406,7 +406,8 @@
   var validViews = ["home", "cats", "tasks", "profile", "story-77"];
 
   function normalizedView(view) {
-    return validViews.indexOf(view) >= 0 ? view : "home";
+    var route = String(view || "").split("?")[0];
+    return validViews.indexOf(route) >= 0 ? route : "home";
   }
 
   function reducedMotion() {
@@ -453,6 +454,18 @@
     if (!window.HelpCatStory77) return;
     window.HelpCatStory77.render(byId("story-77-root"), {
       openCats: function () { navigate("cats"); },
+      loadProfile: function (profileKey) {
+        return api.request("/api/v1/public/profiles/" + encodeURIComponent(profileKey));
+      },
+      openProfile: function (profile) {
+        state.cats = [profile];
+        state.cursors.cats = null;
+        byId("cat-search").value = profile.nickname || "77";
+        byId("community-filter").value = "";
+        navigate("cats");
+        window.history.replaceState(null, "", "#cats?profile=" + encodeURIComponent(profile.profile_key));
+        renderCats();
+      },
       openCreateCat: openCatSheet,
       backHome: function () { navigate("home", { replace: true, restoreHomeScroll: true }); }
     });

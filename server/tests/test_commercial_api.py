@@ -12,7 +12,7 @@ from sqlalchemy import select
 from PIL import Image, TiffImagePlugin
 
 from server.helpcat.app import create_app
-from server.helpcat.models import AuditLog, Cat, Community, DailyCatQuota, Task, User
+from server.helpcat.models import AuditLog, Cat, Community, DailyCatQuota, MediaAsset, Task, User
 
 
 class CommercialApiTests(unittest.TestCase):
@@ -48,6 +48,34 @@ class CommercialApiTests(unittest.TestCase):
             if body is not None:
                 headers["Content-Type"] = "application/json"
         return asyncio.run(self.asgi_request(method, path, headers, body))
+
+    def import_draft(self, token, community_id, image_bytes, idempotency_key="help-cat-story-77-import-v1", profile_key="story-77"):
+        boundary = "----HelpCatDraftImportBoundary"
+        fields = {
+            "community_id": community_id,
+            "profile_key": profile_key,
+            "nickname": "77",
+            "living_status": "已进入家庭",
+            "health_status": "UNKNOWN",
+            "location_note": "公开位置已保护；2025-06-02 相遇",
+        }
+        chunks = []
+        for name, value in fields.items():
+            chunks.append((
+                "--%s\r\nContent-Disposition: form-data; name=\"%s\"\r\n\r\n%s\r\n"
+                % (boundary, name, value)
+            ).encode())
+        chunks.append(
+            ("--%s\r\nContent-Disposition: form-data; name=\"file\"; filename=\"77.jpg\"\r\n"
+             "Content-Type: image/jpeg\r\n\r\n" % boundary).encode() + image_bytes + b"\r\n"
+        )
+        chunks.append(("--%s--\r\n" % boundary).encode())
+        headers = {
+            "Authorization": "Bearer " + token,
+            "Content-Type": "multipart/form-data; boundary=" + boundary,
+            "Idempotency-Key": idempotency_key,
+        }
+        return asyncio.run(self.asgi_request("POST", "/api/v1/admin/cat-drafts/import", headers, b"".join(chunks)))
 
     async def asgi_request(self, method, path, headers, body):
         parsed = urlsplit(path)
@@ -588,6 +616,56 @@ class CommercialApiTests(unittest.TestCase):
             responses.append(metrics)
 
         self.assertEqual(responses, [{"cats": 30, "tasks": 27, "communities": 1}] * 4)
+
+    def test_admin_draft_import_is_atomic_idempotent_and_requires_manual_publish(self):
+        _, community = self.request("POST", "/api/v1/communities", self.admin_token, {
+            "name": "77 档案小区", "street": "银湖街道",
+        })
+        source = self.jpeg_bytes(with_private_exif=True)
+
+        first_status, first = self.import_draft(self.admin_token, community["id"], source)
+        second_status, second = self.import_draft(self.admin_token, community["id"], source)
+
+        self.assertEqual((first_status, second_status), (201, 201))
+        self.assertTrue(first["changed"])
+        self.assertFalse(second["changed"])
+        self.assertEqual(first["cat"]["id"], second["cat"]["id"])
+        self.assertEqual(first["media"]["id"], second["media"]["id"])
+        self.assertEqual(first["cat"]["profile_key"], "story-77")
+        self.assertEqual(first["cat"]["review_status"], "PENDING_REVIEW")
+        self.assertEqual(first["cat"]["visibility_status"], "HIDDEN")
+        with self.app.state.session_factory() as db:
+            self.assertEqual(len(db.scalars(select(Cat).where(Cat.profile_key == "story-77")).all()), 1)
+            self.assertEqual(len(db.scalars(select(MediaAsset)).all()), 1)
+            actions = db.scalars(select(AuditLog.action).where(AuditLog.entity_id == first["cat"]["id"])).all()
+            self.assertNotIn("REVIEW", actions)
+            self.assertNotIn("VISIBILITY", actions)
+
+        status, body = self.request("GET", "/api/v1/public/profiles/story-77", self.admin_token)
+        self.assertEqual((status, body["code"]), (404, "public_profile_not_found"))
+        self.request("POST", "/api/v1/cats/%s/review" % first["cat"]["id"], self.admin_token, {"approved": True})
+        self.assertEqual(self.request("GET", "/api/v1/public/profiles/story-77")[0], 404)
+        self.request("POST", "/api/v1/cats/%s/visibility" % first["cat"]["id"], self.admin_token, {"visible": True})
+        status, public_profile = self.request("GET", "/api/v1/public/profiles/story-77", self.super_token)
+        self.assertEqual(status, 200)
+        self.assertEqual((public_profile["id"], public_profile["profile_key"]), (first["cat"]["id"], "story-77"))
+
+        repeat_status, repeat = self.import_draft(self.admin_token, community["id"], source)
+        self.assertEqual(repeat_status, 201)
+        self.assertFalse(repeat["changed"])
+        self.assertEqual((repeat["cat"]["review_status"], repeat["cat"]["visibility_status"]), ("APPROVED", "ACTIVE"))
+        duplicate_status, duplicate = self.import_draft(
+            self.admin_token, community["id"], source, idempotency_key="different-story-77-import-key",
+        )
+        self.assertEqual((duplicate_status, duplicate["code"]), (409, "profile_key_exists"))
+
+    def test_failed_admin_draft_import_leaves_no_media_row_or_file(self):
+        status, body = self.import_draft(self.admin_token, "missing-community", self.jpeg_bytes())
+        self.assertEqual((status, body["code"]), (404, "community_not_found"))
+        with self.app.state.session_factory() as db:
+            self.assertEqual(len(db.scalars(select(MediaAsset)).all()), 0)
+            self.assertEqual(len(db.scalars(select(Cat)).all()), 0)
+        self.assertEqual(list(Path(self.tmp.name).iterdir()), [])
 
     def test_admin_can_approve_hide_and_archive_cat(self):
         _, community = self.request("POST", "/api/v1/communities", self.admin_token, {"name": "管理小区", "street": "银湖街道"})

@@ -89,6 +89,41 @@ test("77 story render connects its injected actions without inline handlers", ()
   assert.deepEqual(calls, ["cats", "create-cat", "back-home"]);
 });
 
+test("77 story loads and links the stable public profile", async () => {
+  const story = loadStory();
+  const listeners = {};
+  const profileLink = {
+    hidden: true,
+    textContent: "",
+    dataset: { storyAction: "profile" },
+    setAttribute(name, value) { this[name] = value; },
+    removeAttribute(name) { delete this[name]; },
+    addEventListener(type, callback) { listeners["profile:" + type] = callback; }
+  };
+  const buttons = [profileLink];
+  const container = {
+    innerHTML: "",
+    querySelector(selector) { return selector === "[data-story-profile-link]" ? profileLink : null; },
+    querySelectorAll() { return buttons; }
+  };
+  const opened = [];
+
+  story.render(container, {
+    loadProfile(profileKey) {
+      assert.equal(profileKey, "story-77");
+      return Promise.resolve({ id: "cat-77", profile_key: "story-77", nickname: "77" });
+    },
+    openProfile(profile) { opened.push(profile.id); }
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  listeners["profile:click"]({ preventDefault() {} });
+
+  assert.equal(profileLink.hidden, false);
+  assert.equal(profileLink.href, "#cats?profile=story-77");
+  assert.match(profileLink.textContent, /查看 77 的公开档案/);
+  assert.deepEqual(opened, ["cat-77"]);
+});
+
 test("hash Back traversal keeps the original home scroll after visiting cats from the story", () => {
   const { window, route } = loadRouteRuntime();
   window.scrollY = 247;

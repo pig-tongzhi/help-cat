@@ -11,7 +11,7 @@ from sqlalchemy import inspect, text
 from sqlalchemy.orm.exc import StaleDataError
 
 from server.helpcat.db import ensure_schema, make_session_factory
-from server.helpcat.models import Community, User
+from server.helpcat.models import Cat, Community, User
 
 
 class CommercialMigrationTests(unittest.TestCase):
@@ -82,6 +82,53 @@ class CommercialMigrationTests(unittest.TestCase):
         self.assertIn('down_revision = "003_scale_integrity"', migration)
         for marker in ("communities", "cats", "tasks", "is_qa", "[QA-"):
             self.assertIn(marker, migration)
+
+    def test_public_profile_migration_declares_unique_key_and_legacy_77_backfill(self):
+        path = Path("server/helpcat/migrations/versions/005_public_profiles.py")
+        self.assertTrue(path.is_file())
+        migration = path.read_text(encoding="utf-8")
+        self.assertIn('revision = "005_public_profiles"', migration)
+        self.assertIn('down_revision = "004_public_metrics"', migration)
+        for marker in ("profile_key", "uq_cats_profile_key", "story-77", "2025-06-02 相遇"):
+            self.assertIn(marker, migration)
+
+    def test_bootstrap_backfills_one_legacy_story_profile_and_rejects_duplicate_markers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            engine, session_factory = make_session_factory("sqlite:///" + str(Path(tmp) / "one.db"))
+            ensure_schema(engine)
+            self.assertIn("profile_key", {item["name"] for item in inspect(engine).get_columns("cats")})
+            with session_factory() as db:
+                db.add(User(id="u-story", openid="story-openid", role="ADMIN", status="ACTIVE", nickname="管理员"))
+                db.add(Community(
+                    id="c-story", name="故事小区", normalized_name="故事小区", street="银湖街道",
+                    status="ACTIVE", created_by="u-story",
+                ))
+                db.add(Cat(
+                    id="cat-story", community_id="c-story", code="HC-STORY", nickname="77",
+                    location_note="公开位置已保护；2025-06-02 相遇", created_by="u-story",
+                ))
+                db.commit()
+            ensure_schema(engine)
+            with engine.connect() as connection:
+                self.assertEqual(connection.execute(text("SELECT profile_key FROM cats WHERE id='cat-story'")).scalar_one(), "story-77")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            engine, session_factory = make_session_factory("sqlite:///" + str(Path(tmp) / "duplicate.db"))
+            ensure_schema(engine)
+            with session_factory() as db:
+                db.add(User(id="u-duplicate", openid="duplicate-openid", role="ADMIN", status="ACTIVE", nickname="管理员"))
+                db.add(Community(
+                    id="c-duplicate", name="重复故事小区", normalized_name="重复故事小区", street="银湖街道",
+                    status="ACTIVE", created_by="u-duplicate",
+                ))
+                for index in range(2):
+                    db.add(Cat(
+                        id="cat-duplicate-%d" % index, community_id="c-duplicate", code="HC-DUP-%d" % index,
+                        nickname="77", location_note="公开位置已保护；2025-06-02 相遇", created_by="u-duplicate",
+                    ))
+                db.commit()
+            with self.assertRaisesRegex(RuntimeError, "multiple legacy cats match story-77"):
+                ensure_schema(engine)
 
     def test_alembic_environment_honors_deployment_database_url(self):
         environment = Path("server/helpcat/migrations/env.py").read_text(encoding="utf-8")

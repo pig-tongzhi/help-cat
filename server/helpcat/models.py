@@ -68,7 +68,10 @@ class Community(Base):
 
 class Cat(Base):
     __tablename__ = "cats"
-    __table_args__ = (UniqueConstraint("created_by", "idempotency_key", name="uq_cats_actor_idempotency"),)
+    __table_args__ = (
+        UniqueConstraint("created_by", "idempotency_key", name="uq_cats_actor_idempotency"),
+        UniqueConstraint("profile_key", name="uq_cats_profile_key"),
+    )
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
     community_id: Mapped[str] = mapped_column(ForeignKey("communities.id"), index=True)
     community: Mapped[Community] = relationship(foreign_keys=[community_id])
@@ -84,6 +87,7 @@ class Cat(Base):
     visibility_status: Mapped[str] = mapped_column(String(20), default="ACTIVE", index=True)
     created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
     idempotency_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    profile_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     is_qa: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sql_text("0"), nullable=False, index=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
     __mapper_args__ = {"version_id_col": version, "version_id_generator": False}
