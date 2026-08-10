@@ -82,6 +82,30 @@
     toast.timer = window.setTimeout(function () { target.hidden = true; }, 2800);
   }
 
+  function uniqueCollectionCount(collection) {
+    var seen = Object.create(null);
+    return (Array.isArray(collection) ? collection : []).reduce(function (count, item, index) {
+      var key = item && item.id != null ? "id:" + String(item.id) : "item:" + String(index);
+      if (seen[key]) return count;
+      seen[key] = true;
+      return count + 1;
+    }, 0);
+  }
+
+  function formatMetric(value) {
+    try {
+      return new Intl.NumberFormat("zh-CN").format(value);
+    } catch (error) {
+      return String(value);
+    }
+  }
+
+  function renderMetrics() {
+    byId("metric-cats").textContent = formatMetric(uniqueCollectionCount(state.cats));
+    byId("metric-tasks").textContent = formatMetric(uniqueCollectionCount(state.tasks));
+    byId("metric-communities").textContent = formatMetric(uniqueCollectionCount(state.communities));
+  }
+
   function checkForUpdate() {
     var current = document.documentElement.dataset.appVersion || "";
     return window.HelpCatVersion.checkForUpdate(fetch, window.location.pathname, current, function () {
@@ -127,6 +151,7 @@
     return api.request(path + "?" + params.join("&")).then(function (payload) {
       state[type] = communityForm.appendUnique(state[type], payload.items || []);
       state.cursors[type] = payload.next_cursor || null;
+      renderMetrics();
       if (type === "cats") renderCats();
       else if (type === "tasks") renderTasks();
       else renderCommunityOptions();
@@ -204,6 +229,7 @@
       if (sequence !== searchCatsFromServer.sequence) return;
       state.cats = payload.items || [];
       state.cursors.cats = payload.next_cursor || null;
+      renderMetrics();
       renderCats();
     }).catch(function (error) { toast(errorText(error)); });
   }
@@ -215,7 +241,6 @@
 
   function renderCats() {
     var cats = filteredCats();
-    byId("metric-cats").textContent = String(state.cats.length);
     byId("cat-result-count").textContent = "共 " + cats.length + " 只已审核猫咪";
     byId("home-cats").innerHTML = state.cats.length ? state.cats.slice(0, 3).map(catCard).join("") : emptyCard("还没有公开档案", "登录后可以提交第一只社区猫咪。");
     byId("cat-list").innerHTML = cats.length ? cats.map(catCard).join("") : emptyCard("没有找到匹配档案", "试试更换名称或小区筛选条件。");
@@ -223,8 +248,7 @@
   }
 
   function renderTasks() {
-    byId("metric-tasks").textContent = String(state.tasks.length);
-    byId("open-task-count").textContent = String(state.tasks.length);
+    byId("open-task-count").textContent = formatMetric(uniqueCollectionCount(state.tasks));
     var content = state.tasks.length ? state.tasks.map(taskCard).join("") : emptyCard("暂时没有开放任务", "有新的救助行动时会在这里及时发布。");
     byId("task-list").innerHTML = content;
     byId("home-tasks").innerHTML = state.tasks.length ? state.tasks.slice(0, 2).map(taskCard).join("") : content;
@@ -335,6 +359,7 @@
   }
 
   function renderApp() {
+    renderMetrics();
     renderCommunityOptions();
     renderCats();
     renderTasks();
@@ -563,6 +588,7 @@
     button.textContent = "领取中…";
     api.request("/api/v1/tasks/" + encodeURIComponent(taskId) + "/claim", { method: "POST" }).then(function () {
       state.tasks = state.tasks.filter(function (task) { return task.id !== taskId; });
+      renderMetrics();
       renderTasks();
       toast("任务领取成功，请按说明完成救助");
     }).catch(function (error) {
@@ -747,6 +773,7 @@
       if (!query) return;
       api.request("/api/v1/communities?limit=24&q=" + encodeURIComponent(query)).then(function (payload) {
         state.communities = communityForm.appendUnique(state.communities, payload.items || []);
+        renderMetrics();
         renderCommunityOptions();
       }).catch(function (error) { toast(errorText(error)); });
     }, 240);

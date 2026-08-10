@@ -33,27 +33,25 @@
 
     <main id="main-content">
       <section class="view active" data-view="home" aria-labelledby="home-title">
-        <div class="hero-card">
-          <div class="hero-copy">
-            <span class="region-chip"><span class="pulse-dot"></span>A HOME FOR EVERY CAT · 银湖街道</span>
-            <h1 id="home-title">让相遇有名字，<br><em>让守护有回应。</em></h1>
-            <p>一份可信档案，连接社区里的每一次发现、照料与救助。精确位置始终受到保护。</p>
-            <div class="hero-actions">
+        <section class="editorial-hero">
+          <div class="editorial-hero-copy">
+            <p class="editorial-eyebrow">77 / 社区猫咪公共档案</p>
+            <h1 id="home-title">让每一只小猫，<br>都被认真看见</h1>
+            <p class="editorial-deck">从一份可信档案开始，让社区里的发现、照料与救助成为可以接力的日常。</p>
+            <div class="editorial-hero-actions">
               <button class="button primary" type="button" id="home-add-cat">为猫咪建档</button>
-              <button class="button quiet-on-dark" type="button" data-nav="tasks">查看救助任务</button>
+              <button class="editorial-story-link" type="button" data-nav="story-77">阅读 77 的故事 <span aria-hidden="true">↗</span></button>
             </div>
           </div>
-          <div class="hero-mark" aria-hidden="true">
-            <span class="hero-cat"><i></i></span>
-            <span class="hero-heart">♥</span>
-            <span class="hero-note">COMMUNITY<br>WITH CARE</span>
-          </div>
-        </div>
+          <picture class="editorial-hero-visual">
+            <img src="assets/brand/helpcat-77-mark.svg" alt="77 黑眼斑猫咪品牌图标" width="640" height="640">
+          </picture>
+        </section>
 
         <div class="metric-grid" aria-label="社区救助概况">
-          <article class="metric-card"><span class="metric-icon cat-icon" aria-hidden="true"></span><div><strong id="metric-cats">—</strong><small>已建档猫咪</small></div></article>
-          <article class="metric-card"><span class="metric-icon task-icon" aria-hidden="true"></span><div><strong id="metric-tasks">—</strong><small>待领取任务</small></div></article>
-          <article class="metric-card"><span class="metric-icon shield-icon" aria-hidden="true"></span><div><strong>隐私保护</strong><small>位置默认脱敏</small></div></article>
+          <article class="metric-card"><span class="metric-index" aria-hidden="true">01</span><div><strong id="metric-cats">—</strong><small>公开猫咪</small></div></article>
+          <article class="metric-card"><span class="metric-index" aria-hidden="true">02</span><div><strong id="metric-tasks">—</strong><small>开放任务</small></div></article>
+          <article class="metric-card"><span class="metric-index" aria-hidden="true">03</span><div><strong id="metric-communities">—</strong><small>覆盖小区</small></div></article>
         </div>
 
         <section class="content-section">

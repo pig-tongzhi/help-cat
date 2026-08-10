@@ -24,6 +24,42 @@ class RescueH5ContractTests(unittest.TestCase):
         self.assertEqual(manifest["name"], "帮帮小猫")
         self.assertEqual({icon["sizes"] for icon in manifest["icons"]}, {"192x192", "512x512"})
 
+    def test_rescue_home_has_editorial_hero_and_story_entry(self):
+        html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
+        styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
+        for marker in (
+            'class="editorial-hero"',
+            '<h1 id="home-title">让每一只小猫，<br>都被认真看见</h1>',
+            '<picture class="editorial-hero-visual">',
+            'data-nav="story-77"',
+            'id="metric-communities"',
+            'id="home-cats"',
+            'id="home-tasks"',
+            "公开猫咪",
+            "开放任务",
+            "覆盖小区",
+        ):
+            self.assertIn(marker, html)
+        self.assertIn(".editorial-hero", styles)
+        self.assertNotIn("A HOME FOR EVERY CAT", html)
+        self.assertNotIn('class="region-chip"', html)
+        self.assertNotIn('class="hero-mark"', html)
+        self.assertNotIn(".hero-mark", styles)
+
+    def test_rescue_metrics_use_deduplicated_public_collections(self):
+        script = (ROOT / "app" / "rescue" / "app.js").read_text(encoding="utf-8")
+        for marker in (
+            "function renderMetrics()",
+            "uniqueCollectionCount(state.cats)",
+            "uniqueCollectionCount(state.tasks)",
+            "uniqueCollectionCount(state.communities)",
+            'new Intl.NumberFormat("zh-CN")',
+            "return String(value)",
+            'byId("metric-communities")',
+        ):
+            self.assertIn(marker, script)
+        self.assertGreaterEqual(script.count("renderMetrics();"), 2)
+
     def test_rescue_page_contains_enterprise_product_copy_and_privacy(self):
         html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
         for text in ("帮帮小猫", "Help Cat", "银湖街道", "猫咪档案", "救助任务", "我的", "精确位置不会公开"):
