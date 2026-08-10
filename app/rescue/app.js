@@ -391,7 +391,7 @@
   function navigate(view, options) {
     var target = normalizedView(view);
     var previous = state.view;
-    if (target === "story-77" && previous !== "story-77") {
+    if (target === "story-77" && previous === "home") {
       state.homeScrollY = window.scrollY || window.pageYOffset || 0;
     }
     state.view = target;
@@ -406,7 +406,7 @@
   function syncRouteFromHash() {
     var target = normalizedView(window.location.hash.replace("#", ""));
     var previous = state.view;
-    if (target === "story-77" && previous !== "story-77") {
+    if (target === "story-77" && previous === "home") {
       state.homeScrollY = window.scrollY || window.pageYOffset || 0;
     }
     state.view = target;
