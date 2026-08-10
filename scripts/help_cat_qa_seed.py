@@ -2,6 +2,7 @@
 """Create the namespaced Help Cat production QA dataset through the HTTP API."""
 
 import argparse
+import base64
 import json
 import os
 import secrets
@@ -328,7 +329,17 @@ def seed_full_flow(config, passwords):
         cats["archived"] = client.json("POST", "/api/v1/cats/%s/review" % cats["archived"]["id"], {"approved": True}, tokens["admin"])
         cats["archived"] = client.json("POST", "/api/v1/cats/%s/archive" % cats["archived"]["id"], token=tokens["admin"])
 
-        media = client.upload_jpeg("/api/v1/media/images", b"\xff\xd8\xff\xe0HelpCat-QA-JPEG", tokens["admin"])
+        qa_jpeg = base64.b64decode(
+            "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/"
+            "2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAACAAIDASIAAhEBAxEB/8QA"
+            "HwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkK"
+            "FhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXG"
+            "x8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAEC"
+            "AxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOE"
+            "hYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD6AooorgO4"
+            "/9k="
+        )
+        media = client.upload_jpeg("/api/v1/media/images", qa_jpeg, tokens["admin"])
         created["entity_ids"].append(media["id"])
         created["media_ids"].append(media["id"])
         created["object_keys"].append(media["object_key"])

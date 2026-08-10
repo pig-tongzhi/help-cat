@@ -96,19 +96,28 @@ class RescueH5ContractTests(unittest.TestCase):
         for selector in (".story-timeline", ".story-chapter:nth-child(even)", ".story-back"):
             self.assertIn(selector, styles)
 
-    def test_rescue_metrics_use_deduplicated_public_collections(self):
+    def test_rescue_metrics_use_independent_public_endpoint_and_explicit_error_state(self):
+        html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
         script = (ROOT / "app" / "rescue" / "app.js").read_text(encoding="utf-8")
         for marker in (
+            'data-metric-state="loading"',
             "function renderMetrics()",
-            "uniqueCollectionCount(state.cats)",
-            "uniqueCollectionCount(state.tasks)",
-            "uniqueCollectionCount(state.communities)",
+            "function loadPublicMetrics()",
+            'api.request("/api/v1/public/metrics")',
+            'state.metrics.status = "ready"',
+            'state.metrics.status = "error"',
+            'value.textContent = "—"',
+            'label.textContent = "暂时无法获取"',
             'new Intl.NumberFormat("zh-CN")',
             "return String(value)",
-            'byId("metric-communities")',
+            'key: "communities"',
         ):
-            self.assertIn(marker, script)
-        self.assertGreaterEqual(script.count("renderMetrics();"), 2)
+            self.assertIn(marker, html + script)
+        render_metrics = script[script.index("function renderMetrics()"):script.index("function checkForUpdate()")]
+        for collection in ("state.cats", "state.tasks", "state.communities"):
+            self.assertNotIn(collection, render_metrics)
+        search_metrics = script[script.index("function searchCatsFromServer()"):script.index("function scheduleCatSearch()")]
+        self.assertNotIn("renderMetrics", search_metrics)
 
     def test_rescue_page_contains_enterprise_product_copy_and_privacy(self):
         html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")

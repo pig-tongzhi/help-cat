@@ -24,6 +24,9 @@ class CommercialMigrationTests(unittest.TestCase):
             cat_columns = {item["name"] for item in inspect(engine).get_columns("cats")}
             self.assertTrue({"latitude", "longitude"}.issubset(cat_columns))
             self.assertTrue({"version", "idempotency_key"}.issubset(cat_columns))
+            self.assertIn("is_qa", cat_columns)
+            self.assertIn("is_qa", {item["name"] for item in inspect(engine).get_columns("communities")})
+            self.assertIn("is_qa", {item["name"] for item in inspect(engine).get_columns("tasks")})
 
     def test_bootstrap_schema_adds_and_backfills_community_candidate_fields(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -71,6 +74,13 @@ class CommercialMigrationTests(unittest.TestCase):
             "idempotency_key",
             "batch_alter_table",
         ):
+            self.assertIn(marker, migration)
+
+    def test_public_metrics_migration_adds_and_backfills_explicit_qa_markers(self):
+        migration = Path("server/helpcat/migrations/versions/004_public_metrics.py").read_text(encoding="utf-8")
+        self.assertIn('revision = "004_public_metrics"', migration)
+        self.assertIn('down_revision = "003_scale_integrity"', migration)
+        for marker in ("communities", "cats", "tasks", "is_qa", "[QA-"):
             self.assertIn(marker, migration)
 
     def test_alembic_environment_honors_deployment_database_url(self):

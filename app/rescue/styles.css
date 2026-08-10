@@ -107,6 +107,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .metric-card > div { display: grid; gap: 4px; }
 .metric-card strong { font-family: Georgia, "Times New Roman", serif; font-size: clamp(34px, 4.2vw, 58px); font-weight: 500; line-height: .9; letter-spacing: -.055em; }
 .metric-card small { color: var(--muted); font-size: 12px; }
+.metric-card[data-metric-state="error"] strong { color: var(--muted); }
 .metric-index { align-self: flex-start; color: rgba(29,29,31,.34); font-size: 9px; font-weight: 800; letter-spacing: .16em; }
 
 .content-section { margin: 0 0 42px; }

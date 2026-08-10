@@ -31,6 +31,7 @@ def ensure_schema(engine):
     session_columns = {item["name"] for item in inspector.get_columns("sessions")}
     cat_columns = {item["name"] for item in inspector.get_columns("cats")}
     community_columns = {item["name"] for item in inspector.get_columns("communities")}
+    task_columns = {item["name"] for item in inspector.get_columns("tasks")}
     if "username" not in user_columns:
         statements.append("ALTER TABLE users ADD COLUMN username VARCHAR(80)")
     if "password_hash" not in user_columns:
@@ -47,6 +48,8 @@ def ensure_schema(engine):
         statements.append("ALTER TABLE cats ADD COLUMN idempotency_key VARCHAR(64)")
     if "version" not in cat_columns:
         statements.append("ALTER TABLE cats ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
+    if "is_qa" not in cat_columns:
+        statements.append("ALTER TABLE cats ADD COLUMN is_qa BOOLEAN NOT NULL DEFAULT 0")
     if "normalized_name" not in community_columns:
         statements.append("ALTER TABLE communities ADD COLUMN normalized_name VARCHAR(120) NOT NULL DEFAULT ''")
     if "review_note" not in community_columns:
@@ -55,6 +58,10 @@ def ensure_schema(engine):
         statements.append("ALTER TABLE communities ADD COLUMN merged_into_id VARCHAR(32)")
     if "version" not in community_columns:
         statements.append("ALTER TABLE communities ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
+    if "is_qa" not in community_columns:
+        statements.append("ALTER TABLE communities ADD COLUMN is_qa BOOLEAN NOT NULL DEFAULT 0")
+    if "is_qa" not in task_columns:
+        statements.append("ALTER TABLE tasks ADD COLUMN is_qa BOOLEAN NOT NULL DEFAULT 0")
     if statements:
         with engine.begin() as connection:
             for statement in statements:
@@ -73,6 +80,12 @@ def ensure_schema(engine):
             )
         connection.execute(text("UPDATE communities SET version = 1 WHERE version IS NULL OR version < 1"))
         connection.execute(text("UPDATE cats SET version = 1 WHERE version IS NULL OR version < 1"))
+        connection.execute(text("UPDATE communities SET is_qa = 1 WHERE name LIKE '[QA-%'"))
+        connection.execute(text("UPDATE cats SET is_qa = 1 WHERE nickname LIKE '[QA-%'"))
+        connection.execute(text("UPDATE tasks SET is_qa = 1 WHERE title LIKE '[QA-%'"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_communities_is_qa ON communities (is_qa)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_cats_is_qa ON cats (is_qa)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_tasks_is_qa ON tasks (is_qa)"))
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_communities_normalized_name ON communities (normalized_name)"))
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_communities_merged_into_id ON communities (merged_into_id)"))
         connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_cats_actor_idempotency ON cats (created_by, idempotency_key)"))

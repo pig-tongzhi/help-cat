@@ -8,6 +8,7 @@
     communities: [],
     cats: [],
     tasks: [],
+    metrics: { status: "loading", values: null },
     submissions: { cats: [], communities: [] },
     view: "home",
     homeScrollY: 0,
@@ -102,9 +103,43 @@
   }
 
   function renderMetrics() {
-    byId("metric-cats").textContent = formatMetric(uniqueCollectionCount(state.cats));
-    byId("metric-tasks").textContent = formatMetric(uniqueCollectionCount(state.tasks));
-    byId("metric-communities").textContent = formatMetric(uniqueCollectionCount(state.communities));
+    var definitions = [
+      { key: "cats", label: "公开猫咪" },
+      { key: "tasks", label: "开放任务" },
+      { key: "communities", label: "覆盖小区" }
+    ];
+    definitions.forEach(function (definition) {
+      var value = byId("metric-" + definition.key);
+      var label = byId("metric-" + definition.key + "-label");
+      value.closest(".metric-card").dataset.metricState = state.metrics.status;
+      if (state.metrics.status === "ready") {
+        value.textContent = formatMetric(state.metrics.values[definition.key]);
+        label.textContent = definition.label;
+      } else {
+        value.textContent = "—";
+        label.textContent = "暂时无法获取";
+        if (state.metrics.status === "loading") label.textContent = "正在加载";
+      }
+    });
+  }
+
+  function loadPublicMetrics() {
+    state.metrics.status = "loading";
+    renderMetrics();
+    return api.request("/api/v1/public/metrics").then(function (metrics) {
+      if (["cats", "tasks", "communities"].some(function (key) { return typeof metrics[key] !== "number"; })) {
+        throw { code: "invalid_metrics", message: "公开指标响应无效" };
+      }
+      state.metrics.values = metrics;
+      state.metrics.status = "ready";
+      renderMetrics();
+      return metrics;
+    }).catch(function () {
+      state.metrics.values = null;
+      state.metrics.status = "error";
+      renderMetrics();
+      return null;
+    });
   }
 
   function checkForUpdate() {
@@ -152,7 +187,6 @@
     return api.request(path + "?" + params.join("&")).then(function (payload) {
       state[type] = communityForm.appendUnique(state[type], payload.items || []);
       state.cursors[type] = payload.next_cursor || null;
-      renderMetrics();
       if (type === "cats") renderCats();
       else if (type === "tasks") renderTasks();
       else renderCommunityOptions();
@@ -230,7 +264,6 @@
       if (sequence !== searchCatsFromServer.sequence) return;
       state.cats = payload.items || [];
       state.cursors.cats = payload.next_cursor || null;
-      renderMetrics();
       renderCats();
     }).catch(function (error) { toast(errorText(error)); });
   }
@@ -548,7 +581,7 @@
       byId("auth-form").reset();
       closeSheets();
       renderAccount();
-      return Promise.all([loadPublicData(), loadSubmissions()]);
+      return Promise.all([loadPublicData(), loadPublicMetrics(), loadSubmissions()]);
     }).then(function () {
       toast(state.authMode === "register" ? "注册成功，欢迎加入" : "登录成功");
     }).catch(function (error) {
@@ -572,7 +605,7 @@
       event.target.reset();
       byId("community-street").value = "银湖街道";
       toast(isAdminRole(state.user && state.user.role) ? "小区已创建并开放" : "小区建议已提交，等待管理员审核");
-      return Promise.all([loadPublicData(), loadSubmissions()]);
+      return Promise.all([loadPublicData(), loadPublicMetrics(), loadSubmissions()]);
     }).catch(function (error) {
       toast(errorText(error));
     }).finally(function () {
@@ -621,7 +654,7 @@
       state.catIdempotencyKey = null;
       closeSheets();
       toast(approved ? "档案已创建并公开" : "档案已提交，等待管理员审核");
-      return Promise.all([loadPublicData(), loadSubmissions()]);
+      return Promise.all([loadPublicData(), loadPublicMetrics(), loadSubmissions()]);
     }).catch(function (error) {
       byId("cat-message").textContent = errorText(error);
     }).finally(function () {
@@ -637,8 +670,8 @@
     button.textContent = "领取中…";
     api.request("/api/v1/tasks/" + encodeURIComponent(taskId) + "/claim", { method: "POST" }).then(function () {
       state.tasks = state.tasks.filter(function (task) { return task.id !== taskId; });
-      renderMetrics();
       renderTasks();
+      loadPublicMetrics();
       toast("任务领取成功，请按说明完成救助");
     }).catch(function (error) {
       toast(errorText(error));
@@ -826,7 +859,6 @@
       if (!query) return;
       api.request("/api/v1/communities?limit=24&q=" + encodeURIComponent(query)).then(function (payload) {
         state.communities = communityForm.appendUnique(state.communities, payload.items || []);
-        renderMetrics();
         renderCommunityOptions();
       }).catch(function (error) { toast(errorText(error)); });
     }, 240);
@@ -845,12 +877,13 @@
   renderStory();
   renderApp();
   checkForUpdate();
+  var initialMetrics = loadPublicMetrics();
   api.restoreSession().then(function (user) {
     state.user = user;
     renderAccount();
-    return Promise.all([loadPublicData(), user ? loadSubmissions() : Promise.resolve()]);
+    return Promise.all([loadPublicData(), initialMetrics, user ? loadSubmissions() : Promise.resolve()]);
   }).catch(function (error) {
     showStatus(errorText(error), true);
-    return loadPublicData();
+    return Promise.all([loadPublicData(), initialMetrics]);
   });
 }());

@@ -119,6 +119,10 @@ def audit(db, actor_id, action, entity_type, entity_id, before=None, after=None)
                     before_json=json.dumps(before or {}, ensure_ascii=False), after_json=json.dumps(after or {}, ensure_ascii=False)))
 
 
+def is_qa_label(value):
+    return str(value or "").lstrip().startswith("[QA-")
+
+
 def encode_cursor(item):
     raw = item.created_at.isoformat() + "|" + item.id
     return base64.urlsafe_b64encode(raw.encode()).decode().rstrip("=")
@@ -170,6 +174,20 @@ def create_app(database_url=None, storage_root=None, fake_admin_openids=None):
     @app.get("/api/v1/health")
     def health():
         return {"status": "ok", "service": "help-cat-api", "version": "1.0.0"}
+
+    @app.get("/api/v1/public/metrics")
+    def public_metrics(db: DbSession = Depends(db_session)):
+        public_cats = db.scalar(
+            select(func.count(Cat.id)).join(Community, Cat.community_id == Community.id).where(
+                Cat.review_status == "APPROVED", Cat.visibility_status == "ACTIVE",
+                Cat.is_qa.is_(False), Community.status == "ACTIVE", Community.is_qa.is_(False),
+            )
+        )
+        open_tasks = db.scalar(select(func.count(Task.id)).where(Task.status == "OPEN", Task.is_qa.is_(False)))
+        active_communities = db.scalar(
+            select(func.count(Community.id)).where(Community.status == "ACTIVE", Community.is_qa.is_(False))
+        )
+        return {"cats": public_cats or 0, "tasks": open_tasks or 0, "communities": active_communities or 0}
 
     @app.post("/api/v1/auth/wechat-login")
     def wechat_login(payload: WechatLoginRequest, db: DbSession = Depends(db_session)):
@@ -302,7 +320,7 @@ def create_app(database_url=None, storage_root=None, fake_admin_openids=None):
         ))
         if duplicate:
             error(409, "community_exists")
-        item = Community(name=payload.name.strip(), normalized_name=normalized_name, street=payload.street.strip(), status="ACTIVE" if role in {"ADMIN", "SUPER_ADMIN"} else "PENDING_REVIEW", created_by=actor_id)
+        item = Community(name=payload.name.strip(), normalized_name=normalized_name, street=payload.street.strip(), status="ACTIVE" if role in {"ADMIN", "SUPER_ADMIN"} else "PENDING_REVIEW", created_by=actor_id, is_qa=is_qa_label(payload.name))
         db.add(item)
         try:
             db.flush()
@@ -521,6 +539,7 @@ def create_app(database_url=None, storage_root=None, fake_admin_openids=None):
                     review_note=candidate.note.strip(),
                     status="ACTIVE" if role in {"ADMIN", "SUPER_ADMIN"} else "PENDING_REVIEW",
                     created_by=actor_id,
+                    is_qa=is_qa_label(candidate.name),
                 )
                 db.add(community)
                 try:
@@ -535,6 +554,7 @@ def create_app(database_url=None, storage_root=None, fake_admin_openids=None):
                   latitude=payload.latitude, longitude=payload.longitude,
                   review_status=review_status, created_by=actor_id,
                   idempotency_key=idempotency_key,
+                  is_qa=is_qa_label(payload.nickname) or community.is_qa,
                   photo_asset_id=photo_asset.id if photo_asset else None)
         db.add(cat)
         try:
@@ -657,7 +677,7 @@ def create_app(database_url=None, storage_root=None, fake_admin_openids=None):
         require_admin(actor)
         if payload.community_id and not db.get(Community, payload.community_id):
             error(404, "community_not_found")
-        task = Task(title=payload.title.strip(), description=payload.description.strip(), community_id=payload.community_id, created_by=actor[0])
+        task = Task(title=payload.title.strip(), description=payload.description.strip(), community_id=payload.community_id, created_by=actor[0], is_qa=is_qa_label(payload.title))
         db.add(task)
         db.flush()
         audit(db, actor[0], "CREATE", "task", task.id, after={"title": task.title, "status": task.status})
