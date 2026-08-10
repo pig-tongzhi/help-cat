@@ -244,7 +244,7 @@ class RescueH5ContractTests(unittest.TestCase):
         version_script = (ROOT / "app" / "rescue" / "version.js").read_text(encoding="utf-8")
         styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
         for marker in (
-            'data-app-version="20260802-premium-community-r2"',
+            'data-app-version="20260811-77-editorial-r1"',
             'id="version-update"',
             'id="reload-version"',
         ):
@@ -255,6 +255,8 @@ class RescueH5ContractTests(unittest.TestCase):
             'fetchPage(path, { cache: "no-store" })',
             "if (!response.ok)",
             "if (match && match[1] !== current)",
+            'CURRENT_VERSION = "20260811-77-editorial-r1"',
+            "current: CURRENT_VERSION",
         ):
             self.assertIn(marker, version_script)
         self.assertIn('document.addEventListener("visibilitychange"', script)
@@ -271,12 +273,45 @@ class RescueH5ContractTests(unittest.TestCase):
 
     def test_rescue_assets_are_versioned_in_dependency_order(self):
         html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
-        self.assertIn('styles.css?v=20260802-premium-community-r2', html)
-        api_index = html.index('api.js?v=20260802-premium-community-r2')
-        version_index = html.index('version.js?v=20260802-premium-community-r2')
-        app_index = html.index('app.js?v=20260802-premium-community-r2')
+        version = "20260811-77-editorial-r1"
+        for asset in ("styles.css", "api.js", "community-form.js", "version.js", "story-77.js", "app.js"):
+            self.assertIn(f'{asset}?v={version}', html)
+        api_index = html.index(f'api.js?v={version}')
+        version_index = html.index(f'version.js?v={version}')
+        app_index = html.index(f'app.js?v={version}')
         self.assertLess(api_index, version_index)
         self.assertLess(version_index, app_index)
+
+    def test_77_story_has_responsive_accessible_mobile_contract(self):
+        html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
+        styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
+        story = (ROOT / "app" / "rescue" / "story-77.js").read_text(encoding="utf-8")
+
+        for marker in (
+            "env(safe-area-inset-bottom)",
+            "@media (prefers-reduced-motion: reduce)",
+            ".story-back:focus-visible",
+            "@media (max-width: 720px)",
+            ".story-chapter { grid-template-columns: 1fr;",
+            "@media (min-width: 721px) and (max-width: 1024px)",
+            ".cat-grid { grid-template-columns: repeat(3, minmax(0, 1fr));",
+            ".compact-grid { grid-template-columns: repeat(2, minmax(0, 1fr));",
+        ):
+            self.assertIn(marker, styles)
+
+        for container in ("app-shell", "story-view", "story-page"):
+            self.assertNotRegex(styles, rf"\\.{container}[^{{]*\\{{[^}}]*100vw")
+        self.assertNotIn(".cat-grid,.compact-grid { grid-template-columns: 1fr; }", styles)
+        self.assertGreater(
+            styles.index("@media (min-width: 721px) and (max-width: 1024px)"),
+            styles.rindex("@media (max-width: 820px)"),
+            "tablet archive rules must override the broader 820px fallback",
+        )
+
+        self.assertIn('<button class="story-back" type="button"', story)
+        self.assertIn('<button class="button primary" type="button" data-story-action="cats">', story)
+        self.assertIn('<button class="button secondary" type="button" data-story-action="create-cat">', story)
+        self.assertIn('story-77.js?v=20260811-77-editorial-r1', html)
 
     def test_rescue_uses_premium_tokens_responsive_type_and_exact_motto(self):
         html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")

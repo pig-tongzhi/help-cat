@@ -6,6 +6,8 @@
 }(typeof globalThis !== "undefined" ? globalThis : this, function () {
   "use strict";
 
+  var CURRENT_VERSION = "20260811-77-editorial-r1";
+
   function checkForUpdate(fetchPage, path, current, showUpdate) {
     return fetchPage(path, { cache: "no-store" })
       .then(function (response) {
@@ -20,5 +22,5 @@
       });
   }
 
-  return { checkForUpdate: checkForUpdate };
+  return { current: CURRENT_VERSION, checkForUpdate: checkForUpdate };
 }));
