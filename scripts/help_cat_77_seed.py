@@ -140,16 +140,16 @@ def seed_77_profile(config, client=None):
     media_id = cat.get("photo_asset_id")
     if not media_id:
         raise RuntimeError("existing 77 profile has no approved portrait media")
-    if cat.get("review_status") == "PENDING_REVIEW":
+    review_status = cat.get("review_status")
+    visibility_status = cat.get("visibility_status")
+    if review_status not in {"PENDING_REVIEW", "APPROVED"} or visibility_status not in {"ACTIVE", "HIDDEN"}:
+        raise RuntimeError("existing 77 profile requires manual review")
+    if review_status == "PENDING_REVIEW":
         cat = client.json("POST", "/api/v1/cats/%s/review" % cat["id"], {"approved": True}, token=token)
         changed = True
-    elif cat.get("review_status") != "APPROVED":
-        raise RuntimeError("existing 77 profile requires manual review")
-    if cat.get("visibility_status") == "HIDDEN":
+    if visibility_status == "HIDDEN":
         client.json("POST", "/api/v1/cats/%s/visibility" % cat["id"], {"visible": True}, token=token)
         changed = True
-    elif cat.get("visibility_status") != "ACTIVE":
-        raise RuntimeError("existing 77 profile requires manual review")
     return {"cat_id": cat["id"], "media_id": media_id, "changed": changed}
 
 

@@ -143,6 +143,22 @@ class HelpCat77SeedTests(unittest.TestCase):
                 self.assertEqual(client.visibility_changes, [])
 
     @patch.dict(os.environ, {"HELP_CAT_77_PASSWORD": "only-in-environment"}, clear=False)
+    def test_pending_archived_profile_fails_without_review_or_visibility_writes(self):
+        client = FakeHttpClient()
+        client.admin_cats.append({
+            "id": "cat-77", "nickname": "77", "photo_asset_id": "media-77", "review_status": "PENDING_REVIEW",
+            "visibility_status": "ARCHIVED", "location_note": "公开位置已保护；2025-06-02 相遇",
+        })
+
+        with self.assertRaisesRegex(RuntimeError, "requires manual review"):
+            seed_77_profile(self.config, client)
+
+        self.assertEqual(client.uploads, [])
+        self.assertEqual(client.creates, [])
+        self.assertEqual(client.reviews, [])
+        self.assertEqual(client.visibility_changes, [])
+
+    @patch.dict(os.environ, {"HELP_CAT_77_PASSWORD": "only-in-environment"}, clear=False)
     def test_user_account_cannot_import_or_review(self):
         with self.assertRaisesRegex(RuntimeError, "ADMIN or SUPER_ADMIN"):
             seed_77_profile(self.config, FakeHttpClient(role="USER"))
