@@ -10,6 +10,7 @@
     tasks: [],
     submissions: { cats: [], communities: [] },
     view: "home",
+    homeScrollY: 0,
     authMode: "login",
     catStep: 1,
     catCommunityMode: "existing",
@@ -355,7 +356,9 @@
     document.querySelectorAll(".nav-item").forEach(function (button) {
       button.classList.toggle("active", button.dataset.nav === state.view);
     });
-    byId("floating-add-cat").hidden = state.view === "profile";
+    var storyActive = state.view === "story-77";
+    byId("floating-add-cat").hidden = storyActive || state.view === "profile";
+    byId("bottom-nav").hidden = storyActive;
   }
 
   function renderApp() {
@@ -367,13 +370,59 @@
     renderView();
   }
 
-  function navigate(view) {
-    state.view = ["home", "cats", "tasks", "profile"].indexOf(view) >= 0 ? view : "home";
+  var validViews = ["home", "cats", "tasks", "profile", "story-77"];
+
+  function normalizedView(view) {
+    return validViews.indexOf(view) >= 0 ? view : "home";
+  }
+
+  function reducedMotion() {
+    return window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  }
+
+  function scrollToTop() {
+    window.scrollTo({ top: 0, behavior: reducedMotion() ? "auto" : "smooth" });
+  }
+
+  function restoreHomeScroll() {
+    window.scrollTo({ top: state.homeScrollY || 0, behavior: "auto" });
+  }
+
+  function navigate(view, options) {
+    var target = normalizedView(view);
+    var previous = state.view;
+    if (target === "story-77" && previous !== "story-77") {
+      state.homeScrollY = window.scrollY || window.pageYOffset || 0;
+    }
+    state.view = target;
     renderView();
-    window.history.replaceState(null, "", "#" + state.view);
-    var reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    window.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
+    if (options && options.replace) window.history.replaceState(null, "", "#" + state.view);
+    else window.history.pushState(null, "", "#" + state.view);
+    if (options && options.restoreHomeScroll && target === "home") restoreHomeScroll();
+    else if (target !== previous) scrollToTop();
     if (state.view === "profile" && state.user) loadSubmissions();
+  }
+
+  function syncRouteFromHash() {
+    var target = normalizedView(window.location.hash.replace("#", ""));
+    var previous = state.view;
+    if (target === "story-77" && previous !== "story-77") {
+      state.homeScrollY = window.scrollY || window.pageYOffset || 0;
+    }
+    state.view = target;
+    renderView();
+    if (target === "home" && previous === "story-77") restoreHomeScroll();
+    else if (target !== previous) scrollToTop();
+    if (target === "profile" && state.user) loadSubmissions();
+  }
+
+  function renderStory() {
+    if (!window.HelpCatStory77) return;
+    window.HelpCatStory77.render(byId("story-77-root"), {
+      openCats: function () { navigate("cats"); },
+      openCreateCat: openCatSheet,
+      backHome: function () { navigate("home", { replace: true, restoreHomeScroll: true }); }
+    });
   }
 
   function openSheet(id) {
@@ -688,7 +737,11 @@
 
   document.addEventListener("click", function (event) {
     var nav = event.target.closest("[data-nav]");
-    if (nav) { navigate(nav.dataset.nav); return; }
+    if (nav) {
+      if (nav.tagName === "A") event.preventDefault();
+      navigate(nav.dataset.nav);
+      return;
+    }
     if (event.target.closest("[data-close-sheet]") || event.target === byId("sheet-backdrop")) { closeSheets(); return; }
     var authMode = event.target.closest("[data-auth-mode]");
     if (authMode) { setAuthMode(authMode.dataset.authMode); return; }
@@ -785,9 +838,11 @@
     if (document.visibilityState === "visible") checkForUpdate();
   });
   document.addEventListener("keydown", function (event) { if (event.key === "Escape") closeSheets(); });
+  window.addEventListener("hashchange", syncRouteFromHash);
 
   var initialView = window.location.hash.replace("#", "");
-  if (["home", "cats", "tasks", "profile"].indexOf(initialView) >= 0) state.view = initialView;
+  if (validViews.indexOf(initialView) >= 0) state.view = initialView;
+  renderStory();
   renderApp();
   checkForUpdate();
   api.restoreSession().then(function (user) {

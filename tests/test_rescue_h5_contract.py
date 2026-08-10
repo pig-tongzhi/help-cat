@@ -46,6 +46,20 @@ class RescueH5ContractTests(unittest.TestCase):
         self.assertNotIn('class="hero-mark"', html)
         self.assertNotIn(".hero-mark", styles)
 
+    def test_rescue_story_route_is_shareable_and_actionable(self):
+        html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
+        script = (ROOT / "app" / "rescue" / "app.js").read_text(encoding="utf-8")
+        story = (ROOT / "app" / "rescue" / "story-77.js").read_text(encoding="utf-8")
+        styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
+        for marker in ('id="story-77"', 'data-view="story-77"', 'story-77.js?v='):
+            self.assertIn(marker, html)
+        for marker in ('"story-77"', "window.addEventListener(\"hashchange\", syncRouteFromHash)", "window.history.pushState", "homeScrollY"):
+            self.assertIn(marker, script)
+        for marker in ("返回首页", 'data-story-action="cats"', 'data-story-action="create-cat"'):
+            self.assertIn(marker, story)
+        for selector in (".story-timeline", ".story-chapter:nth-child(even)", ".story-back"):
+            self.assertIn(selector, styles)
+
     def test_rescue_metrics_use_deduplicated_public_collections(self):
         script = (ROOT / "app" / "rescue" / "app.js").read_text(encoding="utf-8")
         for marker in (

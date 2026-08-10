@@ -71,6 +71,25 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .editorial-hero-visual:before { content: "HELP CAT · 77"; position: absolute; left: 24px; top: 24px; color: rgba(23,23,23,.52); font-size: 9px; font-weight: 850; letter-spacing: .19em; }
 .editorial-hero-visual:after { content: "被看见，是守护的开始"; position: absolute; right: 24px; bottom: 24px; color: rgba(23,23,23,.58); font-family: Georgia, "Songti SC", serif; font-size: 12px; letter-spacing: .08em; writing-mode: vertical-rl; }
 .editorial-hero-visual img { display: block; width: min(76%, 430px); height: auto; filter: drop-shadow(0 28px 32px rgba(23,23,23,.14)); transform: rotate(-3deg); }
+.story-view { max-width: 980px; margin: 0 auto; }
+.story-page { padding: 8px 0 clamp(62px, 9vw, 112px); color: var(--editorial-ink); }
+.story-topbar { display: flex; align-items: center; justify-content: space-between; gap: 18px; min-height: 56px; border-bottom: 1px solid rgba(23,23,23,.13); }
+.story-wordmark, .story-index { color: rgba(23,23,23,.56); font-size: 10px; font-weight: 850; letter-spacing: .17em; }
+.story-back { min-height: 44px; padding: 10px 0 10px 14px; border: 0; border-bottom: 1px solid currentColor; background: transparent; color: var(--editorial-ink); font-size: 13px; font-weight: 800; cursor: pointer; }
+.story-back:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+.story-intro { max-width: 680px; padding: clamp(56px, 10vw, 118px) 0 clamp(44px, 7vw, 78px); }
+.story-intro p { margin: 0 0 18px; color: var(--muted); font-size: 13px; line-height: 1.8; }
+.story-intro h1 { margin: 0; font-family: Georgia, "Songti SC", "STSong", serif; font-size: clamp(54px, 8vw, 96px); font-weight: 500; letter-spacing: -.08em; }
+.story-timeline { position: relative; display: grid; gap: clamp(34px, 6vw, 76px); }
+.story-timeline:before { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: rgba(23,23,23,.13); }
+.story-chapter { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: center; gap: clamp(28px, 7vw, 110px); }
+.story-chapter:nth-child(even) .story-visual { order: 2; }.story-chapter:nth-child(even) .story-chapter-copy { order: 1; }
+.story-visual { display: grid; place-items: end start; min-height: clamp(230px, 32vw, 360px); margin: 0; padding: 20px; overflow: hidden; background: linear-gradient(145deg, #e7ded7, #cfc0b5 52%, #8a7770); }
+.story-visual:before { content: "77"; color: rgba(255,255,255,.36); font-family: Georgia, "Times New Roman", serif; font-size: clamp(130px, 20vw, 250px); font-weight: 700; line-height: .7; letter-spacing: -.14em; }
+.story-visual span { position: relative; color: rgba(255,255,255,.85); font-size: 10px; font-weight: 800; letter-spacing: .13em; }
+.story-visual-2, .story-visual-5 { background: linear-gradient(145deg, #e9ddd3, #d99386 55%, #a24f41); }.story-visual-3, .story-visual-6 { background: linear-gradient(145deg, #dfe8e1, #8fa49a 55%, #415950); }.story-visual-4 { background: linear-gradient(145deg, #e8e2d8, #b8a589 55%, #725d4d); }
+.story-chapter-copy { max-width: 370px; padding: 22px 0; background: var(--canvas); }.story-chapter h2 { margin: 13px 0; font-family: Georgia, "Songti SC", "STSong", serif; font-size: clamp(30px, 4vw, 48px); font-weight: 500; letter-spacing: -.06em; }.story-chapter p { margin: 0; color: var(--ink-2); font-size: 15px; line-height: 1.95; }
+.story-actions { display: grid; justify-items: start; gap: 11px; margin-top: 28px; }.story-actions .button { text-align: left; }.story-signoff { margin-top: clamp(66px, 11vw, 136px); padding-top: 24px; border-top: 1px solid rgba(23,23,23,.13); color: rgba(23,23,23,.55); font-family: Georgia, "Songti SC", serif; font-size: 14px; text-align: center; }
 .button { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 11px 17px; border: 0; border-radius: var(--radius-sm); font-weight: 760; cursor: pointer; transition: transform .16s ease, box-shadow .16s ease, background .16s ease; }
 .button:hover { transform: translateY(-1px); }
 .button:disabled { cursor: not-allowed; opacity: .6; transform: none; }
@@ -198,6 +217,7 @@ textarea { min-height: 110px; resize: vertical; }
   .editorial-hero-actions { position: relative; z-index: 3; margin-top: 26px; }
   .editorial-hero-visual { min-height: 260px; margin: -4px 18px 18px; }
   .editorial-hero-visual img { width: min(62%, 300px); }
+  .story-page { padding-top: 0; }.story-intro { padding-top: 54px; }.story-timeline { gap: 30px; }.story-timeline:before { left: 13px; }.story-chapter { grid-template-columns: 1fr; gap: 0; padding-left: 28px; }.story-chapter:nth-child(even) .story-visual, .story-chapter:nth-child(even) .story-chapter-copy { order: initial; }.story-chapter:before { content: ""; position: absolute; left: 8px; top: 23px; width: 11px; height: 11px; border: 2px solid var(--editorial-rose); border-radius: 50%; background: var(--canvas); }.story-visual { min-height: 220px; }.story-chapter-copy { max-width: none; padding: 22px 0 10px; }.story-actions { justify-items: stretch; }.story-actions .button { width: 100%; }
   .metric-grid { margin-bottom: 44px; }.metric-card { min-height: 104px; padding: 22px 14px; }.metric-card:first-child { padding-left: 0; }.metric-card:last-child { padding-right: 0; }.metric-card strong { font-size: clamp(30px, 8vw, 42px); }
   .section-title { align-items: center; }.section-title h2, .community-suggestion-card h2 { font-size: 21px; }.text-button { padding: 0; }
   .cat-grid, .compact-grid { grid-template-columns: 1fr; gap: 12px; }
