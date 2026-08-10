@@ -1,3 +1,4 @@
+import json
 import pathlib
 import unittest
 
@@ -6,6 +7,22 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
 class RescueH5ContractTests(unittest.TestCase):
+    def test_77_brand_assets_and_manifest_are_wired(self):
+        page = (ROOT / "app/rescue/index.html").read_text()
+        for marker in (
+            'rel="icon" href="assets/brand/favicon.svg"',
+            'rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png"',
+            'rel="manifest" href="manifest.webmanifest"',
+            'class="brand-logo brand-logo-77"',
+        ):
+            self.assertIn(marker, page)
+        svg = (ROOT / "app/rescue/assets/brand/helpcat-77-mark.svg").read_text()
+        self.assertIn('viewBox="0 0 64 64"', svg)
+        self.assertIn('aria-labelledby="helpcat-77-title"', svg)
+        manifest = json.loads((ROOT / "app/rescue/manifest.webmanifest").read_text())
+        self.assertEqual(manifest["name"], "帮帮小猫")
+        self.assertEqual({icon["sizes"] for icon in manifest["icons"]}, {"192x192", "512x512"})
+
     def test_rescue_page_contains_enterprise_product_copy_and_privacy(self):
         html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
         for text in ("帮帮小猫", "Help Cat", "银湖街道", "猫咪档案", "救助任务", "我的", "精确位置不会公开"):
