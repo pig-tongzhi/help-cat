@@ -1,4 +1,5 @@
 import json
+import hashlib
 import pathlib
 import unittest
 
@@ -20,12 +21,17 @@ class RescueH5ContractTests(unittest.TestCase):
             path = asset_dir / name
             self.assertTrue(path.is_file(), f"{name} must exist")
             self.assertLess(path.stat().st_size, 450 * 1024, f"{name} must be below 450 KiB")
+        self.assertNotEqual(
+            hashlib.sha256((asset_dir / "hero-desktop.webp").read_bytes()).hexdigest(),
+            hashlib.sha256((asset_dir / "hero-mobile.webp").read_bytes()).hexdigest(),
+            "desktop and mobile heroes must use distinct responsive compositions",
+        )
 
         html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
         for path in ("assets/77/hero-desktop.webp", "assets/77/hero-mobile.webp"):
             self.assertIn(path, html)
         self.assertIn(
-            '<img src="assets/77/hero-desktop.webp" alt="77，一只白底黑斑的猫咪" width="670" height="750"',
+            '<img src="assets/77/hero-desktop.webp" alt="77，一只白底黑斑的猫咪" width="960" height="720"',
             html,
         )
 
