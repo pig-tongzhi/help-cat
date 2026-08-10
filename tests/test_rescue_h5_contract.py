@@ -10,6 +10,7 @@ class RescueH5ContractTests(unittest.TestCase):
     def test_77_brand_assets_and_manifest_are_wired(self):
         page = (ROOT / "app/rescue/index.html").read_text()
         for marker in (
+            '<meta name="theme-color" content="#F7F5F1">',
             'rel="icon" href="assets/brand/favicon.svg"',
             'rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png"',
             'rel="manifest" href="manifest.webmanifest"',
