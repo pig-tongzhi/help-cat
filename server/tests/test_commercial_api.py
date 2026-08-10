@@ -1,5 +1,6 @@
 import json
 import asyncio
+import io
 import tempfile
 import unittest
 import urllib.error
@@ -8,6 +9,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from sqlalchemy import select
+from PIL import Image, TiffImagePlugin
 
 from server.helpcat.app import create_app
 from server.helpcat.models import AuditLog, Cat, Community, DailyCatQuota, Task, User
@@ -71,6 +73,56 @@ class CommercialApiTests(unittest.TestCase):
         status = next(item["status"] for item in messages if item["type"] == "http.response.start")
         content = b"".join(item.get("body", b"") for item in messages if item["type"] == "http.response.body")
         return status, json.loads(content.decode())
+
+    def request_bytes(self, method, path, token=None):
+        headers = {"Authorization": "Bearer " + token} if token else {}
+        return asyncio.run(self.asgi_request_bytes(method, path, headers))
+
+    async def asgi_request_bytes(self, method, path, headers):
+        parsed = urlsplit(path)
+        sent = False
+        messages = []
+
+        async def receive():
+            nonlocal sent
+            if sent:
+                return {"type": "http.disconnect"}
+            sent = True
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        async def send(message):
+            messages.append(message)
+
+        scope = {
+            "type": "http", "http_version": "1.1", "method": method, "path": parsed.path,
+            "raw_path": parsed.path.encode(), "query_string": parsed.query.encode(),
+            "headers": [(key.lower().encode(), value.encode()) for key, value in headers.items()],
+            "client": ("testclient", 50000), "server": ("testserver", 80), "scheme": "http",
+        }
+        await self.app(scope, receive, send)
+        status = next(item["status"] for item in messages if item["type"] == "http.response.start")
+        content = b"".join(item.get("body", b"") for item in messages if item["type"] == "http.response.body")
+        return status, content
+
+    @staticmethod
+    def jpeg_bytes(size=(32, 24), with_private_exif=False):
+        image = Image.new("RGB", size, (231, 220, 205))
+        buffer = io.BytesIO()
+        if not with_private_exif:
+            image.save(buffer, format="JPEG", quality=90)
+            return buffer.getvalue()
+        exif = Image.Exif()
+        exif[0x010F] = "Private Phone"
+        exif[0x0110] = "Private Camera Model"
+        exif[0x9003] = "2026:08:11 12:34:56"
+        exif[0x8825] = {
+            1: "N",
+            2: (TiffImagePlugin.IFDRational(30, 1), TiffImagePlugin.IFDRational(15, 1), TiffImagePlugin.IFDRational(0, 1)),
+            3: "E",
+            4: (TiffImagePlugin.IFDRational(120, 1), TiffImagePlugin.IFDRational(10, 1), TiffImagePlugin.IFDRational(0, 1)),
+        }
+        image.save(buffer, format="JPEG", quality=90, exif=exif)
+        return buffer.getvalue()
 
     def login(self, openid):
         status, body = self.request("POST", "/api/v1/auth/wechat-login", payload={"code": "fake:" + openid})
@@ -526,9 +578,38 @@ class CommercialApiTests(unittest.TestCase):
         self.assertEqual(status, 415)
         status, _ = self.request("POST", "/api/v1/media/images", self.user_token, file_tuple=("fake.jpg", b"not-an-image", "image/jpeg"))
         self.assertEqual(status, 415)
-        status, body = self.request("POST", "/api/v1/media/images", self.user_token, file_tuple=("cat.jpg", b"\xff\xd8\xff\xe0fake-jpeg", "image/jpeg"))
+        status, body = self.request("POST", "/api/v1/media/images", self.user_token, file_tuple=("cat.jpg", self.jpeg_bytes(), "image/jpeg"))
         self.assertEqual(status, 201)
         self.assertTrue(body["object_key"])
+
+    def test_public_upload_is_decoded_reencoded_and_strips_gps_exif(self):
+        source = self.jpeg_bytes(with_private_exif=True)
+        self.assertIn(b"Private Phone", source)
+
+        status, asset = self.request(
+            "POST", "/api/v1/media/images", self.user_token,
+            file_tuple=("private-cat.jpg", source, "image/jpeg"),
+        )
+        self.assertEqual(status, 201)
+
+        download_status, public_bytes = self.request_bytes("GET", "/api/v1/media/" + asset["id"])
+        self.assertEqual(download_status, 200)
+        self.assertNotEqual(public_bytes, source)
+        self.assertNotIn(b"Private Phone", public_bytes)
+        self.assertNotIn(b"Private Camera Model", public_bytes)
+        with Image.open(io.BytesIO(public_bytes)) as public_image:
+            public_image.load()
+            self.assertEqual(public_image.size, (32, 24))
+            self.assertEqual(len(public_image.getexif()), 0)
+
+    def test_image_upload_rejects_decoded_pixel_count_above_limit(self):
+        self.app.state.settings.max_image_pixels = 100
+        status, body = self.request(
+            "POST", "/api/v1/media/images", self.user_token,
+            file_tuple=("too-many-pixels.jpg", self.jpeg_bytes(size=(11, 10)), "image/jpeg"),
+        )
+        self.assertEqual(status, 413)
+        self.assertEqual(body["code"], "image_too_many_pixels")
 
 
 if __name__ == "__main__":

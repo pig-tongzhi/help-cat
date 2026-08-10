@@ -2,6 +2,7 @@ import json
 import mimetypes
 import secrets
 import base64
+import io
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -14,6 +15,7 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DbSession
 from sqlalchemy.orm.exc import StaleDataError
+from PIL import Image, ImageOps, UnidentifiedImageError
 
 from .auth import DUMMY_PASSWORD_HASH, WechatProvider, current_user_factory, hash_password, issue_session, require_admin, require_super_admin, verify_password
 from .config import Settings
@@ -25,6 +27,52 @@ from .schemas import CatCommunityReassign, CatCreate, CommunityArchive, Communit
 
 def error(status, code, message=None):
     raise HTTPException(status_code=status, detail={"code": code, "message": message or code})
+
+
+PUBLIC_IMAGE_FORMATS = {
+    "JPEG": ("image/jpeg", ".jpg"),
+    "PNG": ("image/png", ".png"),
+    "WEBP": ("image/webp", ".webp"),
+}
+
+
+def sanitize_public_image(content, claimed_content_type, max_image_pixels, max_image_bytes):
+    """Fully decode and safely re-encode one public image without source metadata."""
+    try:
+        with Image.open(io.BytesIO(content)) as source:
+            image_format = source.format
+            expected = PUBLIC_IMAGE_FORMATS.get(image_format)
+            if not expected or expected[0] != claimed_content_type:
+                error(415, "image_content_mismatch")
+            frame_count = int(getattr(source, "n_frames", 1) or 1)
+            decoded_pixels = source.width * source.height * frame_count
+            if decoded_pixels > max_image_pixels:
+                error(413, "image_too_many_pixels")
+            for frame_index in range(frame_count):
+                source.seek(frame_index)
+                source.load()
+            source.seek(0)
+            sanitized = ImageOps.exif_transpose(source)
+            if image_format == "JPEG":
+                if sanitized.mode not in {"RGB", "L"}:
+                    sanitized = sanitized.convert("RGB")
+            elif sanitized.mode not in {"RGB", "RGBA", "L", "LA"}:
+                sanitized = sanitized.convert("RGBA" if "transparency" in source.info else "RGB")
+            output = io.BytesIO()
+            if image_format == "JPEG":
+                sanitized.save(output, format="JPEG", quality=88, optimize=True, progressive=True)
+            elif image_format == "PNG":
+                sanitized.save(output, format="PNG", optimize=True, compress_level=9)
+            else:
+                sanitized.save(output, format="WEBP", quality=85, method=6)
+    except HTTPException:
+        raise
+    except (Image.DecompressionBombError, UnidentifiedImageError, OSError, SyntaxError, ValueError):
+        error(415, "image_content_mismatch")
+    sanitized_content = output.getvalue()
+    if len(sanitized_content) > max_image_bytes:
+        error(413, "image_too_large")
+    return sanitized_content, expected[0], expected[1]
 
 
 def cat_payload(cat):
@@ -637,18 +685,18 @@ def create_app(database_url=None, storage_root=None, fake_admin_openids=None):
 
     @app.post("/api/v1/media/images", status_code=201)
     async def upload_image(file: UploadFile = File(...), actor=Depends(current_user), db: DbSession = Depends(db_session)):
-        allowed = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
-        if file.content_type not in allowed:
+        allowed_content_types = {item[0] for item in PUBLIC_IMAGE_FORMATS.values()}
+        if file.content_type not in allowed_content_types:
             error(415, "unsupported_image_type")
         content = await file.read(settings.max_image_bytes + 1)
         if len(content) > settings.max_image_bytes:
             error(413, "image_too_large")
-        signatures = {"image/jpeg": lambda value: value.startswith(b"\xff\xd8\xff"), "image/png": lambda value: value.startswith(b"\x89PNG\r\n\x1a\n"), "image/webp": lambda value: value.startswith(b"RIFF") and value[8:12] == b"WEBP"}
-        if not signatures[file.content_type](content):
-            error(415, "image_content_mismatch")
-        asset = MediaAsset(object_key=new_id() + allowed[file.content_type], content_type=file.content_type, byte_size=len(content), created_by=actor[0])
+        sanitized, content_type, extension = sanitize_public_image(
+            content, file.content_type, settings.max_image_pixels, settings.max_image_bytes,
+        )
+        asset = MediaAsset(object_key=new_id() + extension, content_type=content_type, byte_size=len(sanitized), created_by=actor[0])
         target = settings.storage_root / asset.object_key
-        target.write_bytes(content)
+        target.write_bytes(sanitized)
         db.add(asset)
         db.flush()
         audit(db, actor[0], "UPLOAD", "media", asset.id, after={"content_type": asset.content_type, "byte_size": asset.byte_size})
