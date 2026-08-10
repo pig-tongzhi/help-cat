@@ -93,11 +93,20 @@ def _require_password(password_env):
 
 
 def _find_marked_cat(client, token):
-    query = "/api/v1/cats?q=" + urllib.parse.quote(MARKER)
-    public_items = client.json("GET", query).get("items", [])
-    admin_items = client.json("GET", query, token=token).get("items", [])
-    matches = [item for item in admin_items + public_items if MARKER in item.get("location_note", "")]
-    return matches[0] if matches else None
+    for visibility_token in (None, token):
+        cursor = None
+        while True:
+            parameters = {"q": "77"}
+            if cursor:
+                parameters["cursor"] = cursor
+            response = client.json("GET", "/api/v1/cats?" + urllib.parse.urlencode(parameters), token=visibility_token)
+            for item in response.get("items", []):
+                if item.get("nickname") == "77" and MARKER in item.get("location_note", ""):
+                    return item
+            cursor = response.get("next_cursor")
+            if not cursor:
+                break
+    return None
 
 
 def seed_77_profile(config, client=None):
@@ -131,12 +140,16 @@ def seed_77_profile(config, client=None):
     media_id = cat.get("photo_asset_id")
     if not media_id:
         raise RuntimeError("existing 77 profile has no approved portrait media")
-    if cat.get("review_status") != "APPROVED":
+    if cat.get("review_status") == "PENDING_REVIEW":
         cat = client.json("POST", "/api/v1/cats/%s/review" % cat["id"], {"approved": True}, token=token)
         changed = True
-    if cat.get("visibility_status") != "ACTIVE":
+    elif cat.get("review_status") != "APPROVED":
+        raise RuntimeError("existing 77 profile requires manual review")
+    if cat.get("visibility_status") == "HIDDEN":
         client.json("POST", "/api/v1/cats/%s/visibility" % cat["id"], {"visible": True}, token=token)
         changed = True
+    elif cat.get("visibility_status") != "ACTIVE":
+        raise RuntimeError("existing 77 profile requires manual review")
     return {"cat_id": cat["id"], "media_id": media_id, "changed": changed}
 
 

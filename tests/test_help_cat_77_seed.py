@@ -2,6 +2,7 @@ import os
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+from urllib.parse import parse_qs, urlsplit
 
 from scripts.help_cat_77_seed import SeedConfig, seed_77_profile
 
@@ -15,18 +16,26 @@ class FakeHttpClient:
         self.creates = []
         self.reviews = []
         self.visibility_changes = []
+        self.cat_queries = []
 
     def json(self, method, path, payload=None, token=None, expected=200):
         if (method, path) == ("POST", "/api/v1/auth/login"):
             return {"access_token": "test-token"}
         if (method, path) == ("GET", "/api/v1/auth/me"):
             return {"role": self.role}
-        if (method, path) == ("GET", "/api/v1/cats?q=2025-06-02%20%E7%9B%B8%E9%81%87"):
-            return {"items": self.admin_cats if token else self.public_cats, "next_cursor": None}
+        if method == "GET" and urlsplit(path).path == "/api/v1/cats":
+            query = parse_qs(urlsplit(path).query)
+            self.cat_queries.append((query, token))
+            candidates = self.admin_cats if token else self.public_cats
+            needle = query.get("q", [""])[0]
+            matches = [item for item in candidates if needle in item.get("nickname", "")]
+            page = int(query.get("cursor", ["0"])[0])
+            return {"items": matches[page:page + 1], "next_cursor": str(page + 1) if page + 1 < len(matches) else None}
         if method == "POST" and path == "/api/v1/cats":
             self.creates.append(payload)
             cat = {
                 "id": "cat-77",
+                "nickname": "77",
                 "photo_asset_id": payload["photo_asset_id"],
                 "review_status": "APPROVED",
                 "visibility_status": "ACTIVE",
@@ -82,10 +91,28 @@ class HelpCat77SeedTests(unittest.TestCase):
         self.assertFalse(forbidden & set(client.creates[0]))
 
     @patch.dict(os.environ, {"HELP_CAT_77_PASSWORD": "only-in-environment"}, clear=False)
+    def test_marker_match_on_second_nickname_search_page_prevents_duplicate_import(self):
+        client = FakeHttpClient()
+        client.admin_cats.extend([
+            {"id": "other-77", "nickname": "770", "photo_asset_id": "media-other", "review_status": "APPROVED",
+             "visibility_status": "ACTIVE", "location_note": "没有稳定标记"},
+            {"id": "cat-77", "nickname": "77", "photo_asset_id": "media-77", "review_status": "APPROVED",
+             "visibility_status": "ACTIVE", "location_note": "公开位置已保护；2025-06-02 相遇"},
+        ])
+
+        result = seed_77_profile(self.config, client)
+
+        self.assertEqual(result, {"cat_id": "cat-77", "media_id": "media-77", "changed": False})
+        self.assertEqual(client.uploads, [])
+        self.assertEqual(client.creates, [])
+        self.assertEqual([query["q"] for query, _ in client.cat_queries], [["77"], ["77"], ["77"]])
+        self.assertEqual(client.cat_queries[-1][0]["cursor"], ["1"])
+
+    @patch.dict(os.environ, {"HELP_CAT_77_PASSWORD": "only-in-environment"}, clear=False)
     def test_existing_pending_hidden_profile_is_approved_and_made_public_without_upload(self):
         client = FakeHttpClient()
         client.admin_cats.append({
-            "id": "cat-77", "photo_asset_id": "media-77", "review_status": "PENDING_REVIEW",
+            "id": "cat-77", "nickname": "77", "photo_asset_id": "media-77", "review_status": "PENDING_REVIEW",
             "visibility_status": "HIDDEN", "location_note": "公开位置已保护；2025-06-02 相遇",
         })
 
@@ -96,6 +123,24 @@ class HelpCat77SeedTests(unittest.TestCase):
         self.assertEqual(client.creates, [])
         self.assertEqual(client.reviews, [{"approved": True}])
         self.assertEqual(client.visibility_changes, [{"visible": True}])
+
+    @patch.dict(os.environ, {"HELP_CAT_77_PASSWORD": "only-in-environment"}, clear=False)
+    def test_rejected_or_archived_profile_is_not_republished(self):
+        for review_status, visibility_status in (("REJECTED", "ACTIVE"), ("APPROVED", "ARCHIVED")):
+            with self.subTest(review_status=review_status, visibility_status=visibility_status):
+                client = FakeHttpClient()
+                client.admin_cats.append({
+                    "id": "cat-77", "nickname": "77", "photo_asset_id": "media-77", "review_status": review_status,
+                    "visibility_status": visibility_status, "location_note": "公开位置已保护；2025-06-02 相遇",
+                })
+
+                with self.assertRaisesRegex(RuntimeError, "requires manual review"):
+                    seed_77_profile(self.config, client)
+
+                self.assertEqual(client.uploads, [])
+                self.assertEqual(client.creates, [])
+                self.assertEqual(client.reviews, [])
+                self.assertEqual(client.visibility_changes, [])
 
     @patch.dict(os.environ, {"HELP_CAT_77_PASSWORD": "only-in-environment"}, clear=False)
     def test_user_account_cannot_import_or_review(self):
