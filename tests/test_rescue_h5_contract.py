@@ -313,6 +313,18 @@ class RescueH5ContractTests(unittest.TestCase):
         self.assertIn('<button class="button secondary" type="button" data-story-action="create-cat">', story)
         self.assertIn('story-77.js?v=20260811-77-editorial-r1', html)
 
+    def test_primary_and_update_actions_meet_77_accessibility_contract(self):
+        styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
+
+        for marker in (
+            ".button.primary { background: var(--brand); color: #171717;",
+            ".button.primary:hover { background: var(--brand);",
+            ".floating-action { position: fixed; right: max(20px, calc((100vw - 1180px) / 2 + 24px)); bottom: 84px; z-index: 18; display: none; align-items: center; gap: 7px; min-height: 48px; padding: 10px 15px; border: 0; border-radius: 999px; background: var(--brand); color: #171717;",
+            ".version-update button { flex: 0 0 auto; min-width: 44px; min-height: 44px;",
+            ".version-update button:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }",
+        ):
+            self.assertIn(marker, styles)
+
     def test_rescue_uses_premium_tokens_responsive_type_and_exact_motto(self):
         html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
         styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
