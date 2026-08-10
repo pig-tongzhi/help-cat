@@ -7,6 +7,36 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
 class RescueH5ContractTests(unittest.TestCase):
+    def test_77_public_media_is_sanitized_and_wired(self):
+        asset_dir = ROOT / "app" / "rescue" / "assets" / "77"
+        asset_names = (
+            "hero-desktop.webp",
+            "hero-mobile.webp",
+            "rescue-day.webp",
+            "grown-up.webp",
+            "resting.webp",
+        )
+        for name in asset_names:
+            path = asset_dir / name
+            self.assertTrue(path.is_file(), f"{name} must exist")
+            self.assertLess(path.stat().st_size, 450 * 1024, f"{name} must be below 450 KiB")
+
+        html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
+        for path in ("assets/77/hero-desktop.webp", "assets/77/hero-mobile.webp"):
+            self.assertIn(path, html)
+        self.assertIn(
+            '<img src="assets/77/hero-desktop.webp" alt="77，一只白底黑斑的猫咪" width="670" height="750"',
+            html,
+        )
+
+        story = (ROOT / "app" / "rescue" / "story-77.js").read_text(encoding="utf-8")
+        for path in ("assets/77/rescue-day.webp", "assets/77/grown-up.webp", "assets/77/resting.webp"):
+            self.assertIn(path, story)
+        for alt in ("77 幼猫期的近照", "长大后的 77 正面近照", "77 安静休息的近照"):
+            self.assertIn('alt: "' + alt + '"', story)
+        self.assertIn("alt=\"' + escapeHtml(chapter.alt) + '\" width=\"", story)
+        self.assertIn("index === 0 ? '' : ' loading=\"lazy\"'", story)
+
     def test_77_brand_assets_and_manifest_are_wired(self):
         page = (ROOT / "app/rescue/index.html").read_text()
         for marker in (
