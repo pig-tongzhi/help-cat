@@ -316,6 +316,8 @@ class RescueH5ContractTests(unittest.TestCase):
     def test_primary_and_update_actions_meet_77_accessibility_contract(self):
         styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
 
+        final_tokens = styles.rsplit(":root {", 1)[1]
+        self.assertIn("--brand: #D9683A;", final_tokens)
         for marker in (
             ".button.primary { background: var(--brand); color: #171717;",
             ".button.primary:hover { background: var(--brand);",
