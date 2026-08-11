@@ -152,6 +152,7 @@ class ImpactEvent(Base):
     amount: Mapped[int] = mapped_column(Integer, default=1)
     note: Mapped[str] = mapped_column(Text, default="")
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     created_by: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     reversed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     reversed_by: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)

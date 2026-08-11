@@ -18,6 +18,7 @@ def upgrade():
         sa.Column("amount", sa.Integer(), nullable=False, server_default="1"),
         sa.Column("note", sa.Text(), nullable=False, server_default=""),
         sa.Column("occurred_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("created_by", sa.String(length=32), nullable=False),
         sa.Column("reversed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("reversed_by", sa.String(length=32), nullable=True),

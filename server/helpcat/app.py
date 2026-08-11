@@ -21,8 +21,8 @@ from .auth import DUMMY_PASSWORD_HASH, WechatProvider, current_user_factory, has
 from .config import Settings
 from .community_rules import normalize_community_name
 from .db import Base, ensure_schema, make_session_factory
-from .models import AuditLog, Cat, Community, DailyCatQuota, MediaAsset, Session as AuthSession, Task, User, new_id
-from .schemas import CatCommunityReassign, CatCreate, CommunityArchive, CommunityCreate, CommunityEdit, CommunityMerge, CommunityReview, PasswordLoginRequest, RegisterRequest, ReviewRequest, RoleUpdate, TaskCreate, VisibilityRequest, WechatLoginRequest
+from .models import AuditLog, Cat, Community, DailyCatQuota, ImpactEvent, MediaAsset, Session as AuthSession, Task, User, new_id
+from .schemas import CatCommunityReassign, CatCreate, CommunityArchive, CommunityCreate, CommunityEdit, CommunityMerge, CommunityReview, ImpactEventCreate, PasswordLoginRequest, RegisterRequest, ReviewRequest, RoleUpdate, TaskCreate, VisibilityRequest, WechatLoginRequest
 
 
 def error(status, code, message=None):
@@ -108,6 +108,23 @@ def admin_community_payload(item, linked_count=0, linked_cats=None, merged_into_
 def task_payload(item):
     return {"id": item.id, "title": item.title, "description": item.description, "community_id": item.community_id,
             "status": item.status, "created_by": item.created_by, "claimed_by": item.claimed_by}
+
+
+def iso_utc(value):
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc).isoformat()
+
+
+def impact_event_payload(item):
+    return {
+        "id": item.id, "kind": item.kind, "amount": item.amount, "note": item.note,
+        "occurred_at": iso_utc(item.occurred_at), "created_by": item.created_by,
+        "reversed_at": iso_utc(item.reversed_at),
+        "reversed_by": item.reversed_by, "is_qa": item.is_qa,
+    }
 
 
 def media_payload(asset):
@@ -198,17 +215,53 @@ def create_app(database_url=None, storage_root=None, fake_admin_openids=None):
 
     @app.get("/api/v1/public/metrics")
     def public_metrics(db: DbSession = Depends(db_session)):
-        public_cats = db.scalar(
-            select(func.count(Cat.id)).join(Community, Cat.community_id == Community.id).where(
-                Cat.review_status == "APPROVED", Cat.visibility_status == "ACTIVE",
-                Cat.is_qa.is_(False), Community.status == "ACTIVE", Community.is_qa.is_(False),
-            )
+        values = dict(db.execute(
+            select(ImpactEvent.kind, func.sum(ImpactEvent.amount)).where(
+                ImpactEvent.is_qa.is_(False), ImpactEvent.reversed_at.is_(None),
+            ).group_by(ImpactEvent.kind)
+        ).all())
+        return {
+            "rescued": values.get("RESCUED", 0),
+            "adopted": values.get("ADOPTED", 0),
+            "medical": values.get("MEDICAL", 0),
+            "supporters": values.get("SUPPORTER", 0),
+        }
+
+    @app.post("/api/v1/admin/impact-events", status_code=201)
+    def create_impact_event(payload: ImpactEventCreate, actor=Depends(current_user), db: DbSession = Depends(db_session)):
+        require_admin(actor)
+        event = ImpactEvent(
+            kind=payload.kind, amount=payload.amount, note=payload.note.strip(),
+            occurred_at=payload.occurred_at or datetime.now(timezone.utc), created_by=actor[0], is_qa=False,
         )
-        open_tasks = db.scalar(select(func.count(Task.id)).where(Task.status == "OPEN", Task.is_qa.is_(False)))
-        active_communities = db.scalar(
-            select(func.count(Community.id)).where(Community.status == "ACTIVE", Community.is_qa.is_(False))
-        )
-        return {"cats": public_cats or 0, "tasks": open_tasks or 0, "communities": active_communities or 0}
+        db.add(event)
+        db.flush()
+        audit(db, actor[0], "IMPACT_EVENT_CREATE", "impact_event", event.id, after={
+            "kind": event.kind, "amount": event.amount, "occurred_at": event.occurred_at.isoformat(),
+        })
+        db.commit()
+        return impact_event_payload(event)
+
+    @app.get("/api/v1/admin/impact-events")
+    def list_impact_events(cursor: Optional[str] = None, limit: int = Query(default=24, ge=1, le=100), actor=Depends(current_user), db: DbSession = Depends(db_session)):
+        require_admin(actor)
+        items, next_cursor = paginated_items(db, select(ImpactEvent), ImpactEvent, cursor, limit)
+        return {"items": [impact_event_payload(item) for item in items], "next_cursor": next_cursor}
+
+    @app.post("/api/v1/admin/impact-events/{event_id}/reverse")
+    def reverse_impact_event(event_id: str, actor=Depends(current_user), db: DbSession = Depends(db_session)):
+        require_admin(actor)
+        event = db.get(ImpactEvent, event_id)
+        if not event:
+            error(404, "impact_event_not_found")
+        if event.reversed_at is None:
+            event.reversed_at = datetime.now(timezone.utc)
+            event.reversed_by = actor[0]
+            audit(db, actor[0], "IMPACT_EVENT_REVERSE", "impact_event", event.id, before={
+                "reversed_at": None,
+            }, after={"reversed_at": event.reversed_at.isoformat()})
+            db.commit()
+        return impact_event_payload(event)
 
     @app.get("/api/v1/public/profiles/{profile_key}")
     def public_profile(profile_key: str, db: DbSession = Depends(db_session)):

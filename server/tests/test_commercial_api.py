@@ -12,7 +12,7 @@ from sqlalchemy import select
 from PIL import Image, TiffImagePlugin
 
 from server.helpcat.app import create_app
-from server.helpcat.models import AuditLog, Cat, Community, DailyCatQuota, MediaAsset, Task, User
+from server.helpcat.models import AuditLog, Cat, Community, DailyCatQuota, ImpactEvent, MediaAsset, Task, User
 
 
 class CommercialApiTests(unittest.TestCase):
@@ -574,48 +574,58 @@ class CommercialApiTests(unittest.TestCase):
         self.assertEqual(status, 422)
         self.assertEqual(body["code"], "invalid_cursor")
 
-    def test_public_metrics_are_complete_qa_free_and_identical_for_every_session(self):
-        _, community = self.request("POST", "/api/v1/communities", self.admin_token, {
-            "name": "指标正式小区", "street": "银湖街道",
+    def test_impact_events_are_admin_audited_reversible_and_publicly_aggregated(self):
+        status, forbidden = self.request("POST", "/api/v1/admin/impact-events", self.user_token, {
+            "kind": "RESCUED", "amount": 1, "note": "普通用户不能录入",
         })
-        _, qa_community = self.request("POST", "/api/v1/communities", self.admin_token, {
-            "name": "[QA-20260811] 指标测试小区", "street": "银湖街道",
+        self.assertEqual(status, 403)
+        self.assertEqual(forbidden["code"], "forbidden")
+        status, invalid = self.request("POST", "/api/v1/admin/impact-events", self.admin_token, {
+            "kind": "RESCUED", "amount": 0, "note": "无效数量",
         })
+        self.assertEqual(status, 422)
+
+        created = []
+        for kind, amount in (("RESCUED", 12), ("ADOPTED", 8), ("MEDICAL", 23), ("SUPPORTER", 36)):
+            status, event = self.request("POST", "/api/v1/admin/impact-events", self.admin_token, {
+                "kind": kind, "amount": amount, "note": "真实成果记录",
+            })
+            self.assertEqual(status, 201)
+            created.append(event)
         with self.app.state.session_factory() as db:
-            for index in range(30):
-                db.add(Cat(
-                    community_id=community["id"], code="HC-METRIC-%02d" % index,
-                    nickname="指标猫%02d" % index, location_note="位置已保护",
-                    review_status="APPROVED", visibility_status="ACTIVE", created_by=self.user_id,
-                ))
-            db.add(Cat(
-                community_id=community["id"], code="HC-METRIC-PENDING", nickname="待审指标猫",
-                location_note="位置已保护", review_status="PENDING_REVIEW", visibility_status="ACTIVE",
-                created_by=self.user_id,
-            ))
-            db.add(Cat(
-                community_id=community["id"], code="HC-METRIC-HIDDEN", nickname="隐藏指标猫",
-                location_note="位置已保护", review_status="APPROVED", visibility_status="HIDDEN",
-                created_by=self.user_id,
-            ))
-            for index in range(27):
-                db.add(Task(title="公开指标任务%02d" % index, description="", created_by=self.super_id))
-            db.add(Task(title="已领取指标任务", description="", status="CLAIMED", created_by=self.super_id))
+            db.add(ImpactEvent(kind="RESCUED", amount=99, note="QA 不公开", created_by=self.super_id, is_qa=True))
             db.commit()
-        self.request("POST", "/api/v1/cats", self.admin_token, {
-            "community_id": qa_community["id"], "nickname": "[QA-20260811] 指标猫", "location_note": "位置已保护",
-        })
-        self.request("POST", "/api/v1/tasks", self.admin_token, {
-            "title": "[QA-20260811] 指标任务", "description": "不计入公开指标",
-        })
 
         responses = []
         for token in (None, self.user_token, self.admin_token, self.super_token):
             status, metrics = self.request("GET", "/api/v1/public/metrics", token)
             self.assertEqual(status, 200)
             responses.append(metrics)
+        expected = {"rescued": 12, "adopted": 8, "medical": 23, "supporters": 36}
+        self.assertEqual(responses, [expected] * 4)
 
-        self.assertEqual(responses, [{"cats": 30, "tasks": 27, "communities": 1}] * 4)
+        status, page = self.request("GET", "/api/v1/admin/impact-events?limit=2", self.admin_token)
+        self.assertEqual(status, 200)
+        self.assertEqual(len(page["items"]), 2)
+        self.assertTrue(page["next_cursor"])
+
+        status, reversed_event = self.request(
+            "POST", "/api/v1/admin/impact-events/%s/reverse" % created[0]["id"], self.super_token,
+        )
+        self.assertEqual(status, 200)
+        self.assertIsNotNone(reversed_event["reversed_at"])
+        status, repeated = self.request(
+            "POST", "/api/v1/admin/impact-events/%s/reverse" % created[0]["id"], self.super_token,
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(repeated["reversed_at"], reversed_event["reversed_at"])
+        status, metrics = self.request("GET", "/api/v1/public/metrics")
+        self.assertEqual(status, 200)
+        self.assertEqual(metrics, {"rescued": 0, "adopted": 8, "medical": 23, "supporters": 36})
+
+        with self.app.state.session_factory() as db:
+            actions = {row.action for row in db.scalars(select(AuditLog).where(AuditLog.entity_type == "impact_event"))}
+        self.assertEqual(actions, {"IMPACT_EVENT_CREATE", "IMPACT_EVENT_REVERSE"})
 
     def test_admin_draft_import_is_atomic_idempotent_and_requires_manual_publish(self):
         _, community = self.request("POST", "/api/v1/communities", self.admin_token, {

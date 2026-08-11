@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, Field, model_validator
 from typing import Literal, Optional
 
@@ -104,3 +106,10 @@ class TaskCreate(BaseModel):
     title: str = Field(min_length=1, max_length=120)
     description: str = Field(default="", max_length=2000)
     community_id: Optional[str] = None
+
+
+class ImpactEventCreate(BaseModel):
+    kind: Literal["RESCUED", "ADOPTED", "MEDICAL", "SUPPORTER"]
+    amount: int = Field(default=1, ge=1, le=1000000)
+    note: str = Field(default="", max_length=1000)
+    occurred_at: Optional[datetime] = None
