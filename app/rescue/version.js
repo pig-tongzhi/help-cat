@@ -6,7 +6,7 @@
 }(typeof globalThis !== "undefined" ? globalThis : this, function () {
   "use strict";
 
-  var CURRENT_VERSION = "20260811-77-editorial-r2";
+  var CURRENT_VERSION = "20260812-reference-home-r1";
 
   function checkForUpdate(fetchPage, path, current, showUpdate) {
     return fetchPage(path, { cache: "no-store" })

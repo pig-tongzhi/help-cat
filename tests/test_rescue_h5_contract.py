@@ -31,7 +31,7 @@ class RescueH5ContractTests(unittest.TestCase):
         for path in ("assets/77/hero-desktop.webp", "assets/77/hero-mobile.webp"):
             self.assertIn(path, html)
         self.assertIn(
-            '<img src="assets/77/hero-desktop.webp?v=20260811-77-editorial-r2" alt="77，一只白底黑斑的猫咪" width="960" height="720"',
+            '<img src="assets/77/hero-desktop.webp?v=20260812-reference-home-r1" alt="77，一只白底黑斑的猫咪" width="960" height="720"',
             html,
         )
 
@@ -64,16 +64,20 @@ class RescueH5ContractTests(unittest.TestCase):
         html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
         styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
         for marker in (
-            'class="editorial-hero"',
+            'class="reference-hero editorial-hero"',
             '<h1 id="home-title">让每一只小猫，<br>都被认真看见</h1>',
             '<picture class="editorial-hero-visual">',
             'data-nav="story-77"',
-            'id="metric-communities"',
+            'id="metric-rescued"',
+            'id="metric-adopted"',
+            'id="metric-medical"',
+            'id="metric-supporters"',
             'id="home-cats"',
             'id="home-tasks"',
-            "公开猫咪",
-            "开放任务",
-            "覆盖小区",
+            "已救助",
+            "找到新家",
+            "医疗救助",
+            "爱心支持",
         ):
             self.assertIn(marker, html)
         self.assertIn(".editorial-hero", styles)
@@ -89,10 +93,10 @@ class RescueH5ContractTests(unittest.TestCase):
             'class="desktop-nav"',
             'class="mobile-menu-button"',
             'class="editorial-metric-icon',
-            'class="home-editorial-grid"',
+            'class="reference-content-grid home-editorial-grid"',
             '<h2>猫咪档案</h2>',
             '<h2>救助任务</h2>',
-            'class="metric-card metric-support"',
+            'class="metric-card"',
         ):
             self.assertIn(marker, html)
         for marker in (
@@ -105,6 +109,32 @@ class RescueH5ContractTests(unittest.TestCase):
             self.assertIn(marker, styles)
         self.assertNotIn("background: var(--editorial-ink)", styles)
         self.assertIn(".editorial-hero:before { content: none; }", styles)
+
+    def test_home_matches_confirmed_reference_content_and_responsive_navigation(self):
+        html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
+        script = (ROOT / "app" / "rescue" / "app.js").read_text(encoding="utf-8")
+        styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
+        for marker in (
+            'class="reference-hero editorial-hero"', 'class="impact-strip metric-grid"',
+            'class="reference-content-grid home-editorial-grid"',
+            'id="metric-rescued"', 'id="metric-adopted"', 'id="metric-medical"',
+            'id="metric-supporters"', "已救助", "找到新家", "医疗救助", "爱心支持",
+            '<span>77 的故事</span>', '<span>需要帮助</span>', '<span>猫咪档案</span>',
+            '<span>救助任务</span>',
+        ):
+            self.assertIn(marker, html)
+        for marker in (
+            '{ key: "rescued", label: "已救助" }',
+            '{ key: "adopted", label: "找到新家" }',
+            '{ key: "medical", label: "医疗救助" }',
+            '{ key: "supporters", label: "爱心支持" }',
+            '["rescued", "adopted", "medical", "supporters"]',
+            "state.cats.slice(0, 4)", "state.tasks.slice(0, 1)",
+        ):
+            self.assertIn(marker, script)
+        self.assertIn("@media (min-width: 721px)", styles)
+        self.assertIn(".bottom-nav { display: none; }", styles)
+        self.assertIn("padding-bottom: calc(78px + env(safe-area-inset-bottom))", styles)
 
     def test_rescue_story_route_is_shareable_and_actionable(self):
         html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
@@ -130,11 +160,11 @@ class RescueH5ContractTests(unittest.TestCase):
             'api.request("/api/v1/public/metrics")',
             'state.metrics.status = "ready"',
             'state.metrics.status = "error"',
-            'value.textContent = "—"',
-            'label.textContent = "暂时无法获取"',
+            'value.textContent = "0"',
+            'value.setAttribute("aria-label", definition.label + "暂时无法获取")',
             'new Intl.NumberFormat("zh-CN")',
             "return String(value)",
-            'key: "communities"',
+            'key: "supporters"',
         ):
             self.assertIn(marker, html + script)
         render_metrics = script[script.index("function renderMetrics()"):script.index("function checkForUpdate()")]
@@ -277,7 +307,7 @@ class RescueH5ContractTests(unittest.TestCase):
         version_script = (ROOT / "app" / "rescue" / "version.js").read_text(encoding="utf-8")
         styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
         for marker in (
-            'data-app-version="20260811-77-editorial-r2"',
+            'data-app-version="20260812-reference-home-r1"',
             'id="version-update"',
             'id="reload-version"',
         ):
@@ -288,7 +318,7 @@ class RescueH5ContractTests(unittest.TestCase):
             'fetchPage(path, { cache: "no-store" })',
             "if (!response.ok)",
             "if (match && match[1] !== current)",
-            'CURRENT_VERSION = "20260811-77-editorial-r2"',
+            'CURRENT_VERSION = "20260812-reference-home-r1"',
             "current: CURRENT_VERSION",
         ):
             self.assertIn(marker, version_script)
@@ -306,7 +336,7 @@ class RescueH5ContractTests(unittest.TestCase):
 
     def test_rescue_assets_are_versioned_in_dependency_order(self):
         html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
-        version = "20260811-77-editorial-r2"
+        version = "20260812-reference-home-r1"
         for asset in ("styles.css", "api.js", "community-form.js", "version.js", "story-77.js", "app.js"):
             self.assertIn(f'{asset}?v={version}', html)
         api_index = html.index(f'api.js?v={version}')
@@ -344,7 +374,7 @@ class RescueH5ContractTests(unittest.TestCase):
         self.assertIn('<button class="story-back" type="button"', story)
         self.assertIn('<button class="button primary" type="button" data-story-action="cats">', story)
         self.assertIn('<button class="button secondary" type="button" data-story-action="create-cat">', story)
-        self.assertIn('story-77.js?v=20260811-77-editorial-r2', html)
+        self.assertIn('story-77.js?v=20260812-reference-home-r1', html)
 
     def test_primary_and_update_actions_meet_77_accessibility_contract(self):
         styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")

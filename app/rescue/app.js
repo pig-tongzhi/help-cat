@@ -104,9 +104,10 @@
 
   function renderMetrics() {
     var definitions = [
-      { key: "cats", label: "公开猫咪" },
-      { key: "tasks", label: "开放任务" },
-      { key: "communities", label: "覆盖小区" }
+      { key: "rescued", label: "已救助" },
+      { key: "adopted", label: "找到新家" },
+      { key: "medical", label: "医疗救助" },
+      { key: "supporters", label: "爱心支持" }
     ];
     definitions.forEach(function (definition) {
       var value = byId("metric-" + definition.key);
@@ -116,9 +117,9 @@
         value.textContent = formatMetric(state.metrics.values[definition.key]);
         label.textContent = definition.label;
       } else {
-        value.textContent = "—";
-        label.textContent = "暂时无法获取";
-        if (state.metrics.status === "loading") label.textContent = "正在加载";
+        value.textContent = "0";
+        label.textContent = definition.label;
+        if (state.metrics.status === "error") value.setAttribute("aria-label", definition.label + "暂时无法获取");
       }
     });
   }
@@ -127,7 +128,7 @@
     state.metrics.status = "loading";
     renderMetrics();
     return api.request("/api/v1/public/metrics").then(function (metrics) {
-      if (["cats", "tasks", "communities"].some(function (key) { return typeof metrics[key] !== "number"; })) {
+      if (["rescued", "adopted", "medical", "supporters"].some(function (key) { return typeof metrics[key] !== "number"; })) {
         throw { code: "invalid_metrics", message: "公开指标响应无效" };
       }
       state.metrics.values = metrics;
@@ -150,7 +151,7 @@
   }
 
   function loadPublicData() {
-    showStatus("正在同步社区救助数据…", false);
+    showStatus("", false);
     return Promise.all([
       api.request("/api/v1/communities?limit=24"),
       api.request("/api/v1/cats?limit=24"),
@@ -165,7 +166,8 @@
       showStatus("", false);
       renderApp();
     }).catch(function (error) {
-      showStatus(errorText(error), true);
+      showStatus("", false);
+      toast(errorText(error));
       renderApp();
     });
   }
@@ -275,8 +277,13 @@
 
   function renderCats() {
     var cats = filteredCats();
+    var homeCats = state.cats.slice(0, 4);
+    var storyIndex = state.cats.findIndex(function (cat) { return cat.profile_key === "story-77"; });
+    if (storyIndex > 0) {
+      homeCats = [state.cats[storyIndex]].concat(state.cats.filter(function (_, index) { return index !== storyIndex; })).slice(0, 4);
+    }
     byId("cat-result-count").textContent = "共 " + cats.length + " 只已审核猫咪";
-    byId("home-cats").innerHTML = state.cats.length ? state.cats.slice(0, 3).map(catCard).join("") : emptyCard("还没有公开档案", "登录后可以提交第一只社区猫咪。");
+    byId("home-cats").innerHTML = homeCats.length ? homeCats.map(catCard).join("") : emptyCard("还没有公开档案", "登录后可以提交第一只社区猫咪。");
     byId("cat-list").innerHTML = cats.length ? cats.map(catCard).join("") : emptyCard("没有找到匹配档案", "试试更换名称或小区筛选条件。");
     byId("load-more-cats").hidden = !state.cursors.cats;
   }
@@ -285,7 +292,7 @@
     byId("open-task-count").textContent = formatMetric(uniqueCollectionCount(state.tasks));
     var content = state.tasks.length ? state.tasks.map(taskCard).join("") : emptyCard("暂时没有开放任务", "有新的救助行动时会在这里及时发布。");
     byId("task-list").innerHTML = content;
-    byId("home-tasks").innerHTML = state.tasks.length ? state.tasks.slice(0, 2).map(taskCard).join("") : content;
+    byId("home-tasks").innerHTML = state.tasks.length ? state.tasks.slice(0, 1).map(taskCard).join("") : content;
     byId("load-more-tasks").hidden = !state.cursors.tasks;
   }
 
@@ -387,7 +394,7 @@
       view.hidden = !active;
     });
     document.querySelectorAll(".nav-item").forEach(function (button) {
-      button.classList.toggle("active", button.dataset.nav === state.view);
+      button.classList.toggle("active", button.dataset.nav === state.view || (state.view === "home" && button.dataset.nav === "story-77"));
     });
     var storyActive = state.view === "story-77";
     byId("floating-add-cat").hidden = storyActive || state.view === "profile";
@@ -896,7 +903,7 @@
     renderAccount();
     return Promise.all([loadPublicData(), initialMetrics, user ? loadSubmissions() : Promise.resolve()]);
   }).catch(function (error) {
-    showStatus(errorText(error), true);
+    showStatus("", false);
     return Promise.all([loadPublicData(), initialMetrics]);
   });
 }());

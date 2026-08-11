@@ -395,3 +395,79 @@ body { background: radial-gradient(circle at 8% 2%, rgba(255,224,207,.42), trans
   .privacy-banner { margin: 0 16px 28px; }
   .bottom-nav { bottom: max(10px, env(safe-area-inset-bottom)); }
 }
+
+/* 2026-08-12 confirmed reference: this final layer is the homepage visual contract. */
+body { background: #f5f5f3; }
+.app-shell { width: min(1440px, 100%); background: #fbfbfa; }
+.app-header { position: relative; min-height: 76px; padding-inline: clamp(28px, 6.4vw, 92px); background: #fff; backdrop-filter: none; }
+.brand-logo { width: 44px; height: 44px; }
+.desktop-nav { gap: clamp(30px, 4vw, 58px); }
+.profile-button { display: none; }
+.reference-hero { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); min-height: 430px; border: 0; background: #f2efea; }
+.reference-hero .editorial-hero-copy { padding: clamp(52px, 7vw, 102px); }
+.reference-hero h1 { max-width: 530px; font-size: clamp(48px, 5.2vw, 74px); line-height: 1.16; }
+.reference-hero .editorial-story-link { min-height: 38px; font-family: Georgia, "Songti SC", serif; font-size: 15px; }
+.reference-hero .editorial-hero-visual img { object-position: 58% center; }
+.impact-strip { min-height: 104px; margin: 0; border-top: 1px solid rgba(23,23,23,.1); border-bottom: 1px solid rgba(23,23,23,.1); background: #fff; }
+.impact-strip .metric-card { min-height: 104px; border-right: 1px solid rgba(23,23,23,.1); }
+.impact-strip .metric-card:last-child { border-right: 0; }
+.impact-strip .metric-card strong { min-width: 82px; font-size: 31px; }
+.impact-strip .metric-card small { color: #595959; font-size: 12px; }
+.reference-content-grid { grid-template-columns: minmax(0, 3fr) minmax(230px, 1fr); gap: 46px; padding: 34px clamp(28px, 6.4vw, 92px) 56px; background: #fbfbfa; }
+.reference-content-grid .section-title { min-height: 44px; margin-bottom: 16px; }
+.reference-content-grid .section-title h2 { position: relative; margin: 0; padding-bottom: 12px; font-size: 27px; }
+.reference-content-grid .section-title h2:after { content: ""; position: absolute; left: 0; bottom: 0; width: 30px; height: 2px; background: var(--brand); }
+.reference-content-grid .compact-grid { grid-template-columns: repeat(4, minmax(0,1fr)); gap: 16px; }
+.reference-content-grid .cat-card { display: flex; min-width: 0; border: 1px solid rgba(23,23,23,.12); border-radius: 4px; background: #fff; box-shadow: none; }
+.reference-content-grid .cat-photo { aspect-ratio: 4 / 3; }
+.reference-content-grid .cat-card-body { gap: 4px; padding: 12px 13px; }
+.reference-content-grid .cat-title h3 { color: #171717; font-family: Georgia, "Songti SC", serif; font-size: 17px; }
+.reference-content-grid .cat-title > span,
+.reference-content-grid .cat-meta,
+.reference-content-grid .health-badge { display: none; }
+.reference-content-grid .cat-community { padding-left: 0; color: #555; font-size: 11px; }
+.reference-content-grid .cat-community:before { display: none; }
+.reference-content-grid .task-card { min-height: 210px; align-content: start; border: 1px solid rgba(23,23,23,.12); border-radius: 4px; background: #fff; box-shadow: none; }
+.reference-content-grid .task-priority,
+.reference-content-grid .task-badge { justify-self: start; min-height: 30px; background: transparent; color: var(--brand); }
+.reference-content-grid .task-card .button { justify-self: end; align-self: end; width: 44px; min-height: 44px; overflow: hidden; padding: 0; color: transparent; }
+.reference-content-grid .task-card .button:after { content: "→"; color: #171717; font-size: 24px; }
+.floating-action { display: none; }
+
+@media (min-width: 721px) {
+  .bottom-nav { display: none; }
+}
+
+@media (max-width: 720px) {
+  body { background: #fff; }
+  .app-shell { padding-bottom: calc(78px + env(safe-area-inset-bottom)); background: #fff; }
+  .app-header { min-height: 64px; padding: 8px 16px; }
+  .brand-logo { width: 38px; height: 38px; }
+  .mobile-menu-button { display: block; }
+  .reference-hero { min-height: 274px; }
+  .reference-hero .editorial-hero-copy { min-height: 274px; padding: 28px 20px 34px; background: linear-gradient(90deg, rgba(242,239,234,.94) 0%, rgba(242,239,234,.58) 44%, rgba(242,239,234,0) 70%); }
+  .reference-hero h1 { max-width: 205px; font-size: 28px; line-height: 1.35; }
+  .reference-hero .editorial-hero-visual img { object-position: 64% center; }
+  .impact-strip { min-height: 76px; margin: 0; }
+  .impact-strip .metric-card { min-width: 0; min-height: 76px; flex-direction: row; gap: 4px; padding: 8px 3px; }
+  .impact-strip .metric-card strong { min-width: 0; font-size: 15px; }
+  .impact-strip .metric-card small { font-size: 8px; white-space: nowrap; }
+  .impact-strip .editorial-metric-icon { width: 25px; height: 25px; font-size: 14px; }
+  .reference-content-grid { grid-template-columns: 1fr; gap: 24px; padding: 28px 14px 36px; }
+  .reference-content-grid .section-title { margin-bottom: 12px; }
+  .reference-content-grid .section-title h2 { font-size: 22px; }
+  .reference-content-grid .compact-grid { grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; }
+  .reference-content-grid .compact-grid .cat-card:nth-child(n+3) { display: flex; }
+  .reference-content-grid .cat-photo { aspect-ratio: 4 / 3; }
+  .reference-content-grid .cat-card-body { padding: 8px 10px; }
+  .reference-content-grid .cat-title h3 { font-size: 14px; }
+  .reference-content-grid .task-card { min-height: 122px; grid-template-columns: 1fr 92px; }
+  .reference-content-grid .task-card .button { grid-column: 2; grid-row: 1 / 3; width: 100%; height: 100%; }
+  .bottom-nav { display: grid; bottom: 0; width: 100%; padding: 5px 8px calc(5px + env(safe-area-inset-bottom)); border: 0; border-top: 1px solid rgba(23,23,23,.1); border-radius: 0; background: rgba(255,255,255,.96); box-shadow: 0 -8px 24px rgba(23,23,23,.06); }
+  .nav-item { min-height: 58px; border-radius: 0; }
+  .nav-item.active { background: transparent; color: var(--brand); }
+  .story-nav-icon:before { content: ""; position: absolute; inset: 3px 2px; border: 1.5px solid currentColor; border-radius: 2px 8px 8px 2px; }
+  .story-nav-icon:after { content: ""; position: absolute; left: 50%; top: 4px; bottom: 4px; width: 1px; background: currentColor; }
+  .heart-nav-icon:before { content: "♡"; position: absolute; inset: -5px 0 0; font-family: Georgia, serif; font-size: 30px; line-height: 1; }
+  .brand-footer { padding-bottom: 84px; }
+}
