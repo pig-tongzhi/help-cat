@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN" data-app-version="20260811-77-editorial-r1">
+<html lang="zh-CN" data-app-version="20260811-77-editorial-r2">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/brand/favicon.svg">
   <link rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="styles.css?v=20260811-77-editorial-r1">
+  <link rel="stylesheet" href="styles.css?v=20260811-77-editorial-r2">
   <style>
     .brand-logo.brand-logo-77 { background: transparent url("assets/brand/helpcat-77-mark.svg") center / contain no-repeat; border-radius: 0; box-shadow: none; }
     .brand-logo.brand-logo-77::before, .brand-logo.brand-logo-77::after { content: none; }
@@ -23,10 +23,17 @@
         <span class="brand-logo brand-logo-77" aria-hidden="true"></span>
         <span><strong>帮帮小猫</strong><small>HELP CAT · HANGZHOU</small></span>
       </a>
+      <nav class="desktop-nav" aria-label="桌面导航">
+        <button type="button" data-nav="story-77">77 的故事</button>
+        <button type="button" data-nav="tasks">需要帮助</button>
+        <button type="button" data-nav="cats">猫咪档案</button>
+        <button type="button" data-nav="tasks">救助任务</button>
+      </nav>
       <button class="profile-button" id="profile-button" type="button" data-nav="profile" aria-label="打开我的页面">
         <span class="profile-avatar" id="profile-avatar">志</span>
         <span id="profile-label">登录</span>
       </button>
+      <button class="mobile-menu-button" type="button" data-nav="profile" aria-label="打开我的页面"><span></span><span></span></button>
     </header>
 
     <div class="app-status" id="app-status" role="status" aria-live="polite" hidden></div>
@@ -35,35 +42,35 @@
       <section class="view active" data-view="home" aria-labelledby="home-title">
         <section class="editorial-hero">
           <div class="editorial-hero-copy">
-            <p class="editorial-eyebrow">77 / 社区猫咪公共档案</p>
             <h1 id="home-title">让每一只小猫，<br>都被认真看见</h1>
-            <p class="editorial-deck">从一份可信档案开始，让社区里的发现、照料与救助成为可以接力的日常。</p>
             <div class="editorial-hero-actions">
-              <button class="button primary" type="button" id="home-add-cat">为猫咪建档</button>
-              <button class="editorial-story-link" type="button" data-nav="story-77">阅读 77 的故事 <span aria-hidden="true">↗</span></button>
+              <button class="editorial-story-link" type="button" data-nav="story-77">77 的故事</button>
             </div>
           </div>
           <picture class="editorial-hero-visual">
-            <source media="(max-width: 720px)" srcset="assets/77/hero-mobile.webp">
-            <img src="assets/77/hero-desktop.webp" alt="77，一只白底黑斑的猫咪" width="960" height="720" decoding="async">
+            <source media="(max-width: 720px)" srcset="assets/77/hero-mobile.webp?v=20260811-77-editorial-r2">
+            <img src="assets/77/hero-desktop.webp?v=20260811-77-editorial-r2" alt="77，一只白底黑斑的猫咪" width="960" height="720" decoding="async">
           </picture>
         </section>
 
         <div class="metric-grid" aria-label="社区救助概况">
-          <article class="metric-card" data-metric-state="loading"><span class="metric-index" aria-hidden="true">01</span><div><strong id="metric-cats">—</strong><small id="metric-cats-label">公开猫咪</small></div></article>
-          <article class="metric-card" data-metric-state="loading"><span class="metric-index" aria-hidden="true">02</span><div><strong id="metric-tasks">—</strong><small id="metric-tasks-label">开放任务</small></div></article>
-          <article class="metric-card" data-metric-state="loading"><span class="metric-index" aria-hidden="true">03</span><div><strong id="metric-communities">—</strong><small id="metric-communities-label">覆盖小区</small></div></article>
+          <article class="metric-card" data-metric-state="loading"><span class="editorial-metric-icon heart-icon" aria-hidden="true">♡</span><div><strong id="metric-cats">—</strong><small id="metric-cats-label">公开猫咪</small></div></article>
+          <article class="metric-card" data-metric-state="loading"><span class="editorial-metric-icon home-metric-icon" aria-hidden="true">⌂</span><div><strong id="metric-communities">—</strong><small id="metric-communities-label">覆盖小区</small></div></article>
+          <article class="metric-card" data-metric-state="loading"><span class="editorial-metric-icon rescue-icon" aria-hidden="true">♧</span><div><strong id="metric-tasks">—</strong><small id="metric-tasks-label">开放任务</small></div></article>
+          <article class="metric-card metric-support"><span class="editorial-metric-icon support-icon" aria-hidden="true">◎</span><div><strong>隐私</strong><small>位置保护</small></div></article>
         </div>
 
-        <section class="content-section">
-          <div class="section-title"><div><span class="section-kicker">COMMUNITY CATS</span><h2>最近更新的猫咪</h2></div><button class="text-button" type="button" data-nav="cats">查看全部 <span>→</span></button></div>
-          <div class="cat-grid compact-grid" id="home-cats"><div class="skeleton card-skeleton"></div><div class="skeleton card-skeleton"></div></div>
-        </section>
+        <div class="home-editorial-grid">
+          <section class="content-section">
+            <div class="section-title"><div><h2>猫咪档案</h2></div><button class="text-button" type="button" data-nav="cats">查看全部 <span>→</span></button></div>
+            <div class="cat-grid compact-grid" id="home-cats"><div class="skeleton card-skeleton"></div><div class="skeleton card-skeleton"></div></div>
+          </section>
 
-        <section class="content-section task-feature">
-          <div class="section-title"><div><span class="section-kicker">RESCUE TASKS</span><h2>现在需要帮助</h2></div><button class="text-button" type="button" data-nav="tasks">全部任务 <span>→</span></button></div>
-          <div class="task-list" id="home-tasks"><div class="skeleton row-skeleton"></div></div>
-        </section>
+          <section class="content-section task-feature">
+            <div class="section-title"><div><h2>救助任务</h2></div><button class="text-button" type="button" data-nav="tasks">全部任务 <span>→</span></button></div>
+            <div class="task-list" id="home-tasks"><div class="skeleton row-skeleton"></div></div>
+          </section>
+        </div>
 
         <aside class="privacy-banner">
           <span class="privacy-symbol" aria-hidden="true"></span>
@@ -210,10 +217,10 @@
     <button id="reload-version" type="button">立即刷新</button>
   </aside>
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
-  <script src="api.js?v=20260811-77-editorial-r1"></script>
-  <script src="community-form.js?v=20260811-77-editorial-r1"></script>
-  <script src="version.js?v=20260811-77-editorial-r1"></script>
-  <script src="story-77.js?v=20260811-77-editorial-r1"></script>
-  <script src="app.js?v=20260811-77-editorial-r1"></script>
+  <script src="api.js?v=20260811-77-editorial-r2"></script>
+  <script src="community-form.js?v=20260811-77-editorial-r2"></script>
+  <script src="version.js?v=20260811-77-editorial-r2"></script>
+  <script src="story-77.js?v=20260811-77-editorial-r2"></script>
+  <script src="app.js?v=20260811-77-editorial-r2"></script>
 </body>
 </html>

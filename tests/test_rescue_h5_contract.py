@@ -31,7 +31,7 @@ class RescueH5ContractTests(unittest.TestCase):
         for path in ("assets/77/hero-desktop.webp", "assets/77/hero-mobile.webp"):
             self.assertIn(path, html)
         self.assertIn(
-            '<img src="assets/77/hero-desktop.webp" alt="77，一只白底黑斑的猫咪" width="960" height="720"',
+            '<img src="assets/77/hero-desktop.webp?v=20260811-77-editorial-r2" alt="77，一只白底黑斑的猫咪" width="960" height="720"',
             html,
         )
 
@@ -81,6 +81,30 @@ class RescueH5ContractTests(unittest.TestCase):
         self.assertNotIn('class="region-chip"', html)
         self.assertNotIn('class="hero-mark"', html)
         self.assertNotIn(".hero-mark", styles)
+
+    def test_home_matches_approved_editorial_layout_contract(self):
+        html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
+        styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
+        for marker in (
+            'class="desktop-nav"',
+            'class="mobile-menu-button"',
+            'class="editorial-metric-icon',
+            'class="home-editorial-grid"',
+            '<h2>猫咪档案</h2>',
+            '<h2>救助任务</h2>',
+            'class="metric-card metric-support"',
+        ):
+            self.assertIn(marker, html)
+        for marker in (
+            "grid-template-columns: minmax(0, 1fr) minmax(0, 1fr)",
+            "grid-template-columns: minmax(0, 3fr) minmax(220px, 1fr)",
+            "object-fit: cover",
+            ".desktop-nav",
+            ".mobile-menu-button",
+        ):
+            self.assertIn(marker, styles)
+        self.assertNotIn("background: var(--editorial-ink)", styles)
+        self.assertIn(".editorial-hero:before { content: none; }", styles)
 
     def test_rescue_story_route_is_shareable_and_actionable(self):
         html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
@@ -253,7 +277,7 @@ class RescueH5ContractTests(unittest.TestCase):
         version_script = (ROOT / "app" / "rescue" / "version.js").read_text(encoding="utf-8")
         styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
         for marker in (
-            'data-app-version="20260811-77-editorial-r1"',
+            'data-app-version="20260811-77-editorial-r2"',
             'id="version-update"',
             'id="reload-version"',
         ):
@@ -264,7 +288,7 @@ class RescueH5ContractTests(unittest.TestCase):
             'fetchPage(path, { cache: "no-store" })',
             "if (!response.ok)",
             "if (match && match[1] !== current)",
-            'CURRENT_VERSION = "20260811-77-editorial-r1"',
+            'CURRENT_VERSION = "20260811-77-editorial-r2"',
             "current: CURRENT_VERSION",
         ):
             self.assertIn(marker, version_script)
@@ -282,7 +306,7 @@ class RescueH5ContractTests(unittest.TestCase):
 
     def test_rescue_assets_are_versioned_in_dependency_order(self):
         html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
-        version = "20260811-77-editorial-r1"
+        version = "20260811-77-editorial-r2"
         for asset in ("styles.css", "api.js", "community-form.js", "version.js", "story-77.js", "app.js"):
             self.assertIn(f'{asset}?v={version}', html)
         api_index = html.index(f'api.js?v={version}')
@@ -320,7 +344,7 @@ class RescueH5ContractTests(unittest.TestCase):
         self.assertIn('<button class="story-back" type="button"', story)
         self.assertIn('<button class="button primary" type="button" data-story-action="cats">', story)
         self.assertIn('<button class="button secondary" type="button" data-story-action="create-cat">', story)
-        self.assertIn('story-77.js?v=20260811-77-editorial-r1', html)
+        self.assertIn('story-77.js?v=20260811-77-editorial-r2', html)
 
     def test_primary_and_update_actions_meet_77_accessibility_contract(self):
         styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
