@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, text as sql_text
+from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, text as sql_text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -135,4 +135,24 @@ class Task(Base):
     claimed_by: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     claimed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_qa: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sql_text("0"), nullable=False, index=True)
+
+
+class ImpactEvent(Base):
+    __tablename__ = "impact_events"
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('RESCUED','ADOPTED','MEDICAL','SUPPORTER')",
+            name="ck_impact_events_kind",
+        ),
+        CheckConstraint("amount > 0", name="ck_impact_events_amount_positive"),
+    )
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    kind: Mapped[str] = mapped_column(String(20), index=True)
+    amount: Mapped[int] = mapped_column(Integer, default=1)
+    note: Mapped[str] = mapped_column(Text, default="")
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    reversed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    reversed_by: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
     is_qa: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sql_text("0"), nullable=False, index=True)

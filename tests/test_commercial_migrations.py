@@ -92,6 +92,30 @@ class CommercialMigrationTests(unittest.TestCase):
         for marker in ("profile_key", "uq_cats_profile_key", "story-77", "2025-06-02 相遇"):
             self.assertIn(marker, migration)
 
+    def test_impact_event_migration_declares_auditable_ledger(self):
+        path = Path("server/helpcat/migrations/versions/006_impact_events.py")
+        self.assertTrue(path.is_file())
+        migration = path.read_text(encoding="utf-8")
+        self.assertIn('revision = "006_impact_events"', migration)
+        self.assertIn('down_revision = "005_public_profiles"', migration)
+        for marker in (
+            "impact_events", "RESCUED", "ADOPTED", "MEDICAL", "SUPPORTER",
+            "ck_impact_events_kind", "ck_impact_events_amount_positive",
+            "occurred_at", "reversed_at", "reversed_by", "is_qa",
+            "ix_impact_events_is_qa", "ix_impact_events_kind",
+        ):
+            self.assertIn(marker, migration)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            engine, _ = make_session_factory("sqlite:///" + str(Path(tmp) / "impact.db"))
+            ensure_schema(engine)
+            self.assertIn("impact_events", inspect(engine).get_table_names())
+            columns = {item["name"] for item in inspect(engine).get_columns("impact_events")}
+            self.assertTrue({
+                "kind", "amount", "note", "occurred_at", "created_by",
+                "reversed_at", "reversed_by", "is_qa",
+            }.issubset(columns))
+
     def test_bootstrap_backfills_one_legacy_story_profile_and_rejects_duplicate_markers(self):
         with tempfile.TemporaryDirectory() as tmp:
             engine, session_factory = make_session_factory("sqlite:///" + str(Path(tmp) / "one.db"))
