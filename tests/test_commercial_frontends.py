@@ -1,5 +1,6 @@
 import json
 import pathlib
+import re
 import unittest
 
 
@@ -57,7 +58,14 @@ class CommercialFrontendContractTests(unittest.TestCase):
         self.assertIn('class="side-brand" href="/help-cat/rescue/index.html#home"', html)
         self.assertIn('aria-label="返回帮帮小猫首页"', html)
         self.assertIn('title="返回帮帮小猫首页"', html)
-        self.assertEqual(html.count(brand_source), 2)
+        self.assertRegex(
+            html,
+            r'<div class="login-brand"><img class="brand-mark" ' + re.escape(brand_source) + r' alt="">',
+        )
+        self.assertRegex(
+            html,
+            r'<a class="side-brand"[^>]*><img class="brand-mark" ' + re.escape(brand_source) + r' alt="">',
+        )
         self.assertEqual(html.count('<img class="brand-mark"'), 2)
         self.assertNotIn('<span class="brand-mark"', html)
         self.assertNotIn("access_token=", html + script)

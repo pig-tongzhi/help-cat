@@ -48,9 +48,9 @@ class RescueH5ContractTests(unittest.TestCase):
         page = (ROOT / "app/rescue/index.html").read_text()
         for marker in (
             '<meta name="theme-color" content="#F7F5F1">',
-            'rel="icon" href="assets/brand/favicon.svg"',
-            'rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png"',
-            'rel="manifest" href="manifest.webmanifest"',
+            'rel="icon" href="assets/brand/favicon.svg?v=20260812-brand-hero-r2"',
+            'rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png?v=20260812-brand-hero-r2"',
+            'rel="manifest" href="manifest.webmanifest?v=20260812-brand-hero-r2"',
             'class="brand-logo brand-logo-77"',
         ):
             self.assertIn(marker, page)
@@ -67,7 +67,10 @@ class RescueH5ContractTests(unittest.TestCase):
         version = "20260812-brand-hero-r2"
         master = "assets/brand/helpcat-77-mark.svg?v=" + version
 
-        self.assertIn(master, page)
+        self.assertRegex(
+            page,
+            r'\.brand-logo\.brand-logo-77\s*\{[^}]*url\(["\']' + re.escape(master) + r'["\']\)',
+        )
         self.assertIn('rel="icon" href="assets/brand/favicon.svg?v=' + version + '"', page)
         self.assertIn('rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png?v=' + version + '"', page)
         self.assertIn('rel="manifest" href="manifest.webmanifest?v=' + version + '"', page)
@@ -83,18 +86,40 @@ class RescueH5ContractTests(unittest.TestCase):
                 "assets/brand/icon-512.png?v=" + version,
             },
         )
+        svg = (ROOT / "app" / "rescue" / "assets" / "brand" / "helpcat-77-mark.svg").read_text(encoding="utf-8")
+        for feature in (
+            '<path fill="#FFFFFF" d="M13 24 16 8l12 11H13Z"/>',
+            '<path fill="#FFFFFF" d="m36 19 12-11 3 16H36Z"/>',
+            '<path fill="#FFFFFF" d="M12 26c0-7 8-11 20-11s20 4 20 11v12c0 11-8.9 18-20 18s-20-7-20-18Z"/>',
+            '<path fill="#171717" d="M35.5 20.5c4-3 10.5-1.8 13.2 2.7 2.6 4.4.5 10.8-4.8 13.8-4.7 2.7-10.6.2-12-4.8-1.1-4.2.3-9.2 3.6-11.7Z"/>',
+            '<ellipse cx="24" cy="31" rx="2.25" ry="3" fill="#171717" stroke="none"/>',
+            '<ellipse cx="41" cy="30.5" rx="2.25" ry="3" fill="#171717" stroke="#FFFFFF"/>',
+            '<path fill="#D99386" d="m28.5 39 3.5 3.5 3.5-3.5Z"/>',
+        ):
+            self.assertIn(feature, svg)
 
     def test_hero_uses_one_continuous_warm_backdrop(self):
         styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
-        for selector in (".editorial-hero", ".editorial-hero-copy", ".editorial-hero-visual"):
+        marker = "/* Brand hero final cascade: keep last. */"
+        self.assertEqual(styles.count(marker), 1, "the final hero cascade must have one explicit anchor")
+        _, final_cascade = styles.split(marker, 1)
+        self.assertTrue(final_cascade.strip(), "the final hero cascade must contain effective rules")
+        self.assertRegex(final_cascade, r":root\s*\{[^}]*--hero-backdrop:\s*#F5F1EB")
+        for selector in (
+            ".reference-hero",
+            ".reference-hero .editorial-hero-copy",
+            ".reference-hero .editorial-hero-visual",
+        ):
             self.assertRegex(
-                styles,
+                final_cascade,
                 r"(?s)(?:^|})[^{}]*" + re.escape(selector) + r"[^{}]*\{[^{}]*background:\s*var\(--hero-backdrop\)",
-                selector + " must use the shared hero backdrop token",
+                selector + " must use the final shared hero backdrop token",
             )
-        self.assertIn("--hero-backdrop: #F5F1EB", styles)
-        hero_rules = "\n".join(re.findall(r"\.editorial-hero[^\{]*\{[^}]*\}", styles))
-        self.assertNotIn("border-left", hero_rules)
+        competing_rules = "\n".join(
+            re.findall(r"(?:\.reference-hero|\.editorial-hero-copy|\.editorial-hero-visual)[^{]*\{[^}]*\}", final_cascade)
+        )
+        self.assertNotRegex(competing_rules, r"border(?:-left)?:\s*(?!0(?:[a-z]+)?\s*;)[^;]+")
+        self.assertNotRegex(competing_rules, r"background:\s*(?!var\(--hero-backdrop\)\s*;)[^;]+")
 
     def test_rescue_home_has_editorial_hero_and_story_entry(self):
         html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
