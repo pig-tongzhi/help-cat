@@ -1,6 +1,7 @@
 import json
 import hashlib
 import pathlib
+import re
 import unittest
 
 
@@ -59,6 +60,41 @@ class RescueH5ContractTests(unittest.TestCase):
         manifest = json.loads((ROOT / "app/rescue/manifest.webmanifest").read_text())
         self.assertEqual(manifest["name"], "帮帮小猫")
         self.assertEqual({icon["sizes"] for icon in manifest["icons"]}, {"192x192", "512x512"})
+
+    def test_brand_uses_one_77_master_across_all_surfaces(self):
+        page = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
+        manifest = json.loads((ROOT / "app" / "rescue" / "manifest.webmanifest").read_text(encoding="utf-8"))
+        version = "20260812-brand-hero-r2"
+        master = "assets/brand/helpcat-77-mark.svg?v=" + version
+
+        self.assertIn(master, page)
+        self.assertIn('rel="icon" href="assets/brand/favicon.svg?v=' + version + '"', page)
+        self.assertIn('rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png?v=' + version + '"', page)
+        self.assertIn('rel="manifest" href="manifest.webmanifest?v=' + version + '"', page)
+        self.assertEqual(
+            (ROOT / "app" / "rescue" / "assets" / "brand" / "favicon.svg").read_bytes(),
+            (ROOT / "app" / "rescue" / "assets" / "brand" / "helpcat-77-mark.svg").read_bytes(),
+            "favicon must reuse the one 77 SVG master rather than a second drawing",
+        )
+        self.assertEqual(
+            {icon["src"] for icon in manifest["icons"]},
+            {
+                "assets/brand/icon-192.png?v=" + version,
+                "assets/brand/icon-512.png?v=" + version,
+            },
+        )
+
+    def test_hero_uses_one_continuous_warm_backdrop(self):
+        styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
+        for selector in (".editorial-hero", ".editorial-hero-copy", ".editorial-hero-visual"):
+            self.assertRegex(
+                styles,
+                r"(?s)(?:^|})[^{}]*" + re.escape(selector) + r"[^{}]*\{[^{}]*background:\s*var\(--hero-backdrop\)",
+                selector + " must use the shared hero backdrop token",
+            )
+        self.assertIn("--hero-backdrop: #F5F1EB", styles)
+        hero_rules = "\n".join(re.findall(r"\.editorial-hero[^\{]*\{[^}]*\}", styles))
+        self.assertNotIn("border-left", hero_rules)
 
     def test_rescue_home_has_editorial_hero_and_story_entry(self):
         html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
