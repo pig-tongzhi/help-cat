@@ -4,6 +4,8 @@ import pathlib
 import re
 import unittest
 
+from PIL import Image
+
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -140,8 +142,27 @@ class RescueH5ContractTests(unittest.TestCase):
         self.assertNotIn("background: var(--hero-backdrop)", copy_rule.group("body"))
         self.assertIn("background: transparent", copy_rule.group("body"))
         self.assertIn("pointer-events: none", copy_rule.group("body"))
-        self.assertIn("object-fit: contain", image_rule.group("body"))
-        self.assertRegex(image_rule.group("body"), r"object-position:\s*right\s+(?:center|bottom)")
+        self.assertIn("object-fit: cover", image_rule.group("body"))
+        self.assertRegex(image_rule.group("body"), r"object-position:\s*76%\s+center")
+
+    def test_hero_assets_have_warm_edges_without_black_strip_or_hard_seam(self):
+        target = (245, 241, 235)
+        for name in ("hero-desktop.webp", "hero-mobile.webp"):
+            image = Image.open(ROOT / "app" / "rescue" / "assets" / "77" / name).convert("RGB")
+            edges = []
+            for x in range(image.width):
+                edges.extend((image.getpixel((x, 0)), image.getpixel((x, image.height - 1))))
+            for y in range(image.height):
+                edges.extend((image.getpixel((0, y)), image.getpixel((image.width - 1, y))))
+            self.assertEqual(sum(max(pixel) < 18 for pixel in edges), 0, name + " must not contain near-black outer-edge pixels")
+            distances = sorted(sum(abs(channel - expected) for channel, expected in zip(pixel, target)) for pixel in edges)
+            background_p85 = distances[int(len(distances) * .85)]
+            self.assertLess(background_p85, 42, name + " background edges must converge to the warm hero token")
+
+        desktop = Image.open(ROOT / "app" / "rescue" / "assets" / "77" / "hero-desktop.webp").convert("RGB")
+        seam_x = desktop.width // 2
+        jumps = [sum(abs(a - b) for a, b in zip(desktop.getpixel((seam_x - 1, y)), desktop.getpixel((seam_x, y)))) for y in range(desktop.height)]
+        self.assertLess(sum(jumps) / len(jumps), 8, "desktop hero must not encode a hard center seam")
 
     def test_rescue_home_has_editorial_hero_and_story_entry(self):
         html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")

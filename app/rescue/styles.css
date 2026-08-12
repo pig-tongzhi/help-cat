@@ -485,5 +485,5 @@ body { background: #f5f5f3; }
   .reference-hero h1 { max-width: 190px; font-size: 27px; }
   .reference-hero .editorial-hero-actions { pointer-events: auto; }
   .reference-hero .editorial-hero-visual { background: var(--hero-backdrop); }
-  .reference-hero .editorial-hero-visual img { object-fit: contain; object-position: right bottom; }
+  .reference-hero .editorial-hero-visual img { object-fit: cover; object-position: 76% center; }
 }
