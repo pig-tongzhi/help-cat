@@ -142,8 +142,11 @@ class RescueH5ContractTests(unittest.TestCase):
         self.assertNotIn("background: var(--hero-backdrop)", copy_rule.group("body"))
         self.assertIn("background: transparent", copy_rule.group("body"))
         self.assertIn("pointer-events: none", copy_rule.group("body"))
-        self.assertIn("object-fit: cover", image_rule.group("body"))
-        self.assertRegex(image_rule.group("body"), r"object-position:\s*76%\s+center")
+        self.assertIn("object-fit: contain", image_rule.group("body"))
+        self.assertNotIn("object-fit: cover", image_rule.group("body"))
+        self.assertIn("width: 60%", image_rule.group("body"))
+        self.assertIn("height: 100%", image_rule.group("body"))
+        self.assertRegex(image_rule.group("body"), r"object-position:\s*right\s+bottom")
 
     def test_hero_assets_have_warm_edges_without_black_strip_or_hard_seam(self):
         target = (245, 241, 235)
