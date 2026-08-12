@@ -88,15 +88,15 @@ class RescueH5ContractTests(unittest.TestCase):
         )
         svg = (ROOT / "app" / "rescue" / "assets" / "brand" / "helpcat-77-mark.svg").read_text(encoding="utf-8")
         for feature in (
-            '<path fill="#FFFFFF" d="M13 24 16 8l12 11H13Z"/>',
-            '<path fill="#FFFFFF" d="m36 19 12-11 3 16H36Z"/>',
-            '<path fill="#FFFFFF" d="M12 26c0-7 8-11 20-11s20 4 20 11v12c0 11-8.9 18-20 18s-20-7-20-18Z"/>',
-            '<path fill="#171717" d="M35.5 20.5c4-3 10.5-1.8 13.2 2.7 2.6 4.4.5 10.8-4.8 13.8-4.7 2.7-10.6.2-12-4.8-1.1-4.2.3-9.2 3.6-11.7Z"/>',
-            '<ellipse cx="24" cy="31" rx="2.25" ry="3" fill="#171717" stroke="none"/>',
-            '<ellipse cx="41" cy="30.5" rx="2.25" ry="3" fill="#171717" stroke="#FFFFFF"/>',
-            '<path fill="#D99386" d="m28.5 39 3.5 3.5 3.5-3.5Z"/>',
+            '<path fill="#FFFFFF" d="M14.2 23.5 16.5 8.5l11.7 10q3.8-1.3 7.6 0L47.8 8l2.4 15.5q2.5 5.1 1 12.2C50.1 46.9 43.2 54 32.2 54S14.3 46.9 13.1 35.7q-.8-7 1.1-12.2Z"/>',
+            '<path fill="#171717" d="m36.4 18.8 11.2-9.2 2 14.7c1.4 2.2 1.2 5.4-.4 7.8-1.8 2.8-5.2 4.3-8.4 3.4-3.7-1-6.2-4.3-6.3-8.3-.1-3 .5-5.6 1.9-8.4Z"/>',
+            '<ellipse cx="24.7" cy="29.7" rx="1.35" ry="2.15" fill="#171717" stroke="none"/>',
+            '<ellipse cx="41.3" cy="29.4" rx="1.65" ry="2.3" fill="#FFFFFF" stroke="none"/>',
+            '<ellipse cx="41.3" cy="29.5" rx=".62" ry="1.2" fill="#171717" stroke="none"/>',
+            '<path fill="#D99386" stroke="none" d="m30.7 37.3 1.3 1.25 1.3-1.25Z"/>',
         ):
             self.assertIn(feature, svg)
+        self.assertNotIn('d="M12 26c0-7 8-11 20-11s20 4 20 11', svg)
 
     def test_hero_uses_one_continuous_warm_backdrop(self):
         styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
