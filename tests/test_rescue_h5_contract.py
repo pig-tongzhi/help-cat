@@ -122,7 +122,26 @@ class RescueH5ContractTests(unittest.TestCase):
             for value in re.findall(r"border(?:-left)?:\s*([^;}]+)", rule):
                 self.assertEqual(value.strip(), "0")
             for value in re.findall(r"background:\s*([^;}]+)", rule):
-                self.assertEqual(value.strip(), "var(--hero-backdrop)")
+                self.assertIn(value.strip(), ("var(--hero-backdrop)", "transparent"))
+
+    def test_mobile_hero_keeps_77_visible_above_shared_backdrop(self):
+        styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
+        marker = "/* Brand hero final cascade: keep last. */"
+        _, final_cascade = styles.split(marker, 1)
+        mobile = re.search(r"@media\s*\(max-width:\s*720px\)\s*\{(?P<body>.*)\}\s*$", final_cascade, re.S)
+        self.assertIsNotNone(mobile)
+        mobile_css = mobile.group("body")
+        copy_rule = re.search(r"\.reference-hero\s+\.editorial-hero-copy\s*\{(?P<body>[^}]*)\}", mobile_css)
+        visual_rule = re.search(r"\.reference-hero\s+\.editorial-hero-visual\s*\{(?P<body>[^}]*)\}", mobile_css)
+        image_rule = re.search(r"\.reference-hero\s+\.editorial-hero-visual\s+img\s*\{(?P<body>[^}]*)\}", mobile_css)
+        self.assertIsNotNone(copy_rule)
+        self.assertIsNotNone(visual_rule)
+        self.assertIsNotNone(image_rule)
+        self.assertNotIn("background: var(--hero-backdrop)", copy_rule.group("body"))
+        self.assertIn("background: transparent", copy_rule.group("body"))
+        self.assertIn("pointer-events: none", copy_rule.group("body"))
+        self.assertIn("object-fit: contain", image_rule.group("body"))
+        self.assertRegex(image_rule.group("body"), r"object-position:\s*right\s+(?:center|bottom)")
 
     def test_rescue_home_has_editorial_hero_and_story_entry(self):
         html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")

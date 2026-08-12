@@ -477,11 +477,13 @@ body { background: #f5f5f3; }
 .reference-hero { background: var(--hero-backdrop); }
 .reference-hero .editorial-hero-copy { background: var(--hero-backdrop); }
 .reference-hero .editorial-hero-visual { background: var(--hero-backdrop); }
-.reference-hero .editorial-hero-visual img { object-fit: cover; object-position: 60% center; }
+.reference-hero .editorial-hero-visual img { object-fit: contain; object-position: right center; }
 
 @media (max-width: 720px) {
-  .reference-hero { min-height: 274px; }
-  .reference-hero .editorial-hero-copy { background: var(--hero-backdrop); }
+  .reference-hero { min-height: 324px; }
+  .reference-hero .editorial-hero-copy { min-height: 324px; padding: 28px 20px 46px; background: transparent; pointer-events: none; }
+  .reference-hero h1 { max-width: 190px; font-size: 27px; }
+  .reference-hero .editorial-hero-actions { pointer-events: auto; }
   .reference-hero .editorial-hero-visual { background: var(--hero-backdrop); }
-  .reference-hero .editorial-hero-visual img { object-position: center; }
+  .reference-hero .editorial-hero-visual img { object-fit: contain; object-position: right bottom; }
 }
