@@ -471,3 +471,17 @@ body { background: #f5f5f3; }
   .heart-nav-icon:before { content: "♡"; position: absolute; inset: -5px 0 0; font-family: Georgia, serif; font-size: 30px; line-height: 1; }
   .brand-footer { padding-bottom: 84px; }
 }
+
+/* Brand hero final cascade: keep last. */
+:root { --brand: #D9683A; --hero-backdrop: #F5F1EB; }
+.reference-hero { background: var(--hero-backdrop); }
+.reference-hero .editorial-hero-copy { background: var(--hero-backdrop); }
+.reference-hero .editorial-hero-visual { background: var(--hero-backdrop); }
+.reference-hero .editorial-hero-visual img { object-fit: cover; object-position: 60% center; }
+
+@media (max-width: 720px) {
+  .reference-hero { min-height: 274px; }
+  .reference-hero .editorial-hero-copy { background: var(--hero-backdrop); }
+  .reference-hero .editorial-hero-visual { background: var(--hero-backdrop); }
+  .reference-hero .editorial-hero-visual img { object-position: center; }
+}
