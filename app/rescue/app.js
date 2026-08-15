@@ -231,7 +231,7 @@
     return '<article class="cat-card">' +
       '<div class="cat-photo ' + (image ? "has-photo" : "") + '">' +
       '<span class="cat-placeholder" aria-hidden="true"><i></i><small>暂无照片</small></span>' +
-      (image ? '<img data-cat-photo data-original-src="' + escapeHtml(originalImage) + '" src="' + escapeHtml(image) + '" alt="' + escapeHtml(cat.nickname) + '的照片" loading="lazy">' : '') +
+      (image ? '<img data-cat-photo data-original-src="' + escapeHtml(originalImage) + '" src="' + escapeHtml(image) + '" alt="' + escapeHtml(cat.nickname) + '的照片" width="640" height="480" loading="lazy" decoding="async">' : '') +
       '<span class="health-badge ' + healthTone(cat.health_status) + '">' + escapeHtml(healthLabel(cat.health_status)) + '</span></div>' +
       '<div class="cat-card-body"><div class="cat-title"><h3>' + escapeHtml(cat.nickname) + '</h3><span>' + escapeHtml(cat.code) + '</span></div>' +
       '<p class="cat-community">' + escapeHtml(communityName(cat.community_id, cat.community_name)) + '</p>' +

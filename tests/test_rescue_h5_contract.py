@@ -336,6 +336,13 @@ class RescueH5ContractTests(unittest.TestCase):
             self.assertIn(legacy_value, script)
         self.assertLess(script.index("cat-placeholder"), script.index("data-cat-photo"))
 
+    def test_list_cat_images_use_lazy_async_decoding_and_one_original_fallback(self):
+        script = (ROOT / "app" / "rescue" / "app.js").read_text(encoding="utf-8")
+        self.assertIn('width="640" height="480" loading="lazy" decoding="async"', script)
+        self.assertIn('data-original-src="', script)
+        self.assertIn('target.dataset.photoRetry !== "original"', script)
+        self.assertIn('media.classList.add("image-failed")', script)
+
     def test_cat_card_styles_match_markup_and_adapt_desktop_tablet_mobile(self):
         script = (ROOT / "app" / "rescue" / "app.js").read_text(encoding="utf-8")
         styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
