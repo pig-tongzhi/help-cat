@@ -1,10 +1,14 @@
 from logging.config import fileConfig
+import os
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 from server.helpcat.db import Base
 from server.helpcat import models  # noqa: F401
 
 config = context.config
+deployment_database_url = os.getenv("HELPCAT_DATABASE_URL")
+if deployment_database_url:
+    config.set_main_option("sqlalchemy.url", deployment_database_url)
 if config.config_file_name:
     fileConfig(config.config_file_name)
 target_metadata = Base.metadata

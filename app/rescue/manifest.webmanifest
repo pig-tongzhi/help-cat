@@ -1,0 +1,12 @@
+{
+  "name": "帮帮小猫",
+  "short_name": "帮帮小猫",
+  "start_url": "./index.html#home",
+  "display": "standalone",
+  "background_color": "#F7F5F1",
+  "theme_color": "#F7F5F1",
+  "icons": [
+    {"src": "assets/brand/icon-192.png?v=20260816-image-cache-r2", "sizes": "192x192", "type": "image/png"},
+    {"src": "assets/brand/icon-512.png?v=20260816-image-cache-r2", "sizes": "512x512", "type": "image/png"}
+  ]
+}

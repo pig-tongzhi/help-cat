@@ -1,15 +1,18 @@
 import json
 import asyncio
+import io
 import tempfile
 import unittest
 import urllib.error
 import urllib.request
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from sqlalchemy import select
+from PIL import Image, TiffImagePlugin
 
 from server.helpcat.app import create_app
-from server.helpcat.models import AuditLog, User
+from server.helpcat.models import AuditLog, Cat, Community, DailyCatQuota, ImpactEvent, MediaAsset, Task, User
 
 
 class CommercialApiTests(unittest.TestCase):
@@ -31,8 +34,8 @@ class CommercialApiTests(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def request(self, method, path, token=None, payload=None, file_tuple=None):
-        headers = {}
+    def request(self, method, path, token=None, payload=None, file_tuple=None, extra_headers=None):
+        headers = dict(extra_headers or {})
         if token:
             headers["Authorization"] = "Bearer " + token
         if file_tuple:
@@ -46,7 +49,36 @@ class CommercialApiTests(unittest.TestCase):
                 headers["Content-Type"] = "application/json"
         return asyncio.run(self.asgi_request(method, path, headers, body))
 
+    def import_draft(self, token, community_id, image_bytes, idempotency_key="help-cat-story-77-import-v1", profile_key="story-77"):
+        boundary = "----HelpCatDraftImportBoundary"
+        fields = {
+            "community_id": community_id,
+            "profile_key": profile_key,
+            "nickname": "77",
+            "living_status": "已进入家庭",
+            "health_status": "UNKNOWN",
+            "location_note": "公开位置已保护；2025-06-02 相遇",
+        }
+        chunks = []
+        for name, value in fields.items():
+            chunks.append((
+                "--%s\r\nContent-Disposition: form-data; name=\"%s\"\r\n\r\n%s\r\n"
+                % (boundary, name, value)
+            ).encode())
+        chunks.append(
+            ("--%s\r\nContent-Disposition: form-data; name=\"file\"; filename=\"77.jpg\"\r\n"
+             "Content-Type: image/jpeg\r\n\r\n" % boundary).encode() + image_bytes + b"\r\n"
+        )
+        chunks.append(("--%s--\r\n" % boundary).encode())
+        headers = {
+            "Authorization": "Bearer " + token,
+            "Content-Type": "multipart/form-data; boundary=" + boundary,
+            "Idempotency-Key": idempotency_key,
+        }
+        return asyncio.run(self.asgi_request("POST", "/api/v1/admin/cat-drafts/import", headers, b"".join(chunks)))
+
     async def asgi_request(self, method, path, headers, body):
+        parsed = urlsplit(path)
         sent = False
         messages = []
 
@@ -61,14 +93,95 @@ class CommercialApiTests(unittest.TestCase):
             messages.append(message)
 
         scope = {
-            "type": "http", "http_version": "1.1", "method": method, "path": path,
-            "raw_path": path.encode(), "query_string": b"", "headers": [(k.lower().encode(), v.encode()) for k, v in headers.items()],
+            "type": "http", "http_version": "1.1", "method": method, "path": parsed.path,
+            "raw_path": parsed.path.encode(), "query_string": parsed.query.encode(), "headers": [(k.lower().encode(), v.encode()) for k, v in headers.items()],
             "client": ("testclient", 50000), "server": ("testserver", 80), "scheme": "http",
         }
         await self.app(scope, receive, send)
         status = next(item["status"] for item in messages if item["type"] == "http.response.start")
         content = b"".join(item.get("body", b"") for item in messages if item["type"] == "http.response.body")
         return status, json.loads(content.decode())
+
+    def request_bytes(self, method, path, token=None):
+        headers = {"Authorization": "Bearer " + token} if token else {}
+        return asyncio.run(self.asgi_request_bytes(method, path, headers))
+
+    def request_media(self, path, token=None):
+        headers = {"Authorization": "Bearer " + token} if token else {}
+        return asyncio.run(self.asgi_request_media(path, headers))
+
+    async def asgi_request_bytes(self, method, path, headers):
+        parsed = urlsplit(path)
+        sent = False
+        messages = []
+
+        async def receive():
+            nonlocal sent
+            if sent:
+                return {"type": "http.disconnect"}
+            sent = True
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        async def send(message):
+            messages.append(message)
+
+        scope = {
+            "type": "http", "http_version": "1.1", "method": method, "path": parsed.path,
+            "raw_path": parsed.path.encode(), "query_string": parsed.query.encode(),
+            "headers": [(key.lower().encode(), value.encode()) for key, value in headers.items()],
+            "client": ("testclient", 50000), "server": ("testserver", 80), "scheme": "http",
+        }
+        await self.app(scope, receive, send)
+        status = next(item["status"] for item in messages if item["type"] == "http.response.start")
+        content = b"".join(item.get("body", b"") for item in messages if item["type"] == "http.response.body")
+        return status, content
+
+    async def asgi_request_media(self, path, headers):
+        parsed = urlsplit(path)
+        sent = False
+        messages = []
+
+        async def receive():
+            nonlocal sent
+            if sent:
+                return {"type": "http.disconnect"}
+            sent = True
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        async def send(message):
+            messages.append(message)
+
+        scope = {
+            "type": "http", "http_version": "1.1", "method": "GET", "path": parsed.path,
+            "raw_path": parsed.path.encode(), "query_string": parsed.query.encode(),
+            "headers": [(key.lower().encode(), value.encode()) for key, value in headers.items()],
+            "client": ("testclient", 50000), "server": ("testserver", 80), "scheme": "http",
+        }
+        await self.app(scope, receive, send)
+        start = next(item for item in messages if item["type"] == "http.response.start")
+        response_headers = {key.decode().lower(): value.decode() for key, value in start["headers"]}
+        content = b"".join(item.get("body", b"") for item in messages if item["type"] == "http.response.body")
+        return start["status"], response_headers, content
+
+    @staticmethod
+    def jpeg_bytes(size=(32, 24), with_private_exif=False):
+        image = Image.new("RGB", size, (231, 220, 205))
+        buffer = io.BytesIO()
+        if not with_private_exif:
+            image.save(buffer, format="JPEG", quality=90)
+            return buffer.getvalue()
+        exif = Image.Exif()
+        exif[0x010F] = "Private Phone"
+        exif[0x0110] = "Private Camera Model"
+        exif[0x9003] = "2026:08:11 12:34:56"
+        exif[0x8825] = {
+            1: "N",
+            2: (TiffImagePlugin.IFDRational(30, 1), TiffImagePlugin.IFDRational(15, 1), TiffImagePlugin.IFDRational(0, 1)),
+            3: "E",
+            4: (TiffImagePlugin.IFDRational(120, 1), TiffImagePlugin.IFDRational(10, 1), TiffImagePlugin.IFDRational(0, 1)),
+        }
+        image.save(buffer, format="JPEG", quality=90, exif=exif)
+        return buffer.getvalue()
 
     def login(self, openid):
         status, body = self.request("POST", "/api/v1/auth/wechat-login", payload={"code": "fake:" + openid})
@@ -109,6 +222,85 @@ class CommercialApiTests(unittest.TestCase):
         for sensitive in ("password_hash", "openid", "access_token", "token"):
             self.assertNotIn(sensitive, zack)
 
+    def test_users_tasks_and_personal_submissions_are_cursor_paginated(self):
+        for index in range(3):
+            self.login("paged-user-%d" % index)
+        status, first_users = self.request("GET", "/api/v1/admin/users?limit=2", self.super_token)
+        self.assertEqual((status, len(first_users["items"])), (200, 2))
+        self.assertTrue(first_users["next_cursor"])
+        status, second_users = self.request(
+            "GET", "/api/v1/admin/users?limit=2&cursor=" + first_users["next_cursor"], self.super_token,
+        )
+        self.assertEqual(status, 200)
+        self.assertFalse({item["id"] for item in first_users["items"]} & {item["id"] for item in second_users["items"]})
+
+        with self.app.state.session_factory() as db:
+            for index in range(3):
+                db.add(Task(title="分页任务%d" % index, description="", created_by=self.super_id))
+            db.commit()
+        status, first_tasks = self.request("GET", "/api/v1/tasks?limit=2")
+        self.assertEqual((status, len(first_tasks["items"])), (200, 2))
+        self.assertTrue(first_tasks["next_cursor"])
+
+        _, community = self.request("POST", "/api/v1/communities", self.admin_token, {
+            "name": "个人提交分页小区", "street": "银湖街道",
+        })
+        for index in range(2):
+            self.request("POST", "/api/v1/cats", self.user_token, {
+                "community_id": community["id"], "nickname": "个人猫%d" % index, "location_note": "东门",
+            }, extra_headers={"Idempotency-Key": "personal-cat-%d" % index})
+        status, submissions = self.request("GET", "/api/v1/me/submissions?limit=1", self.user_token)
+        self.assertEqual((status, len(submissions["cats"])), (200, 1))
+        self.assertTrue(submissions["next_cursor"]["cats"])
+
+    def test_personal_submission_dual_cursor_stops_exhausted_side_without_reloading_first_page(self):
+        for index in range(3):
+            self.request("POST", "/api/v1/communities", self.user_token, {
+                "name": "双游标小区%d" % index, "street": "银湖街道",
+            })
+        _, active = self.request("POST", "/api/v1/communities", self.admin_token, {
+            "name": "双游标正式小区", "street": "银湖街道",
+        })
+        for index in range(3):
+            self.request("POST", "/api/v1/cats", self.user_token, {
+                "community_id": active["id"], "nickname": "双游标猫%d" % index, "location_note": "东门",
+            }, extra_headers={"Idempotency-Key": "dual-cursor-cat-%d" % index})
+        with self.app.state.session_factory() as db:
+            for index in range(3, 5):
+                db.add(Cat(
+                    community_id=active["id"], code="HC-DUAL-%d" % index,
+                    nickname="双游标猫%d" % index, location_note="东门", created_by=self.user_id,
+                ))
+            db.commit()
+
+        cat_cursor = None
+        community_cursor = None
+        cat_done = False
+        community_done = False
+        cat_ids = []
+        community_ids = []
+        while not (cat_done and community_done):
+            query = ["limit=2"]
+            if cat_cursor:
+                query.append("cat_cursor=" + cat_cursor)
+            if community_cursor:
+                query.append("community_cursor=" + community_cursor)
+            if cat_done:
+                query.append("cat_done=true")
+            if community_done:
+                query.append("community_done=true")
+            status, page = self.request("GET", "/api/v1/me/submissions?" + "&".join(query), self.user_token)
+            self.assertEqual(status, 200)
+            cat_ids.extend(item["id"] for item in page["cats"])
+            community_ids.extend(item["id"] for item in page["communities"])
+            cat_cursor = page["next_cursor"]["cats"]
+            community_cursor = page["next_cursor"]["communities"]
+            cat_done = cat_done or cat_cursor is None
+            community_done = community_done or community_cursor is None
+        self.assertEqual(len(cat_ids), len(set(cat_ids)))
+        self.assertEqual(len(community_ids), len(set(community_ids)))
+        self.assertEqual((len(cat_ids), len(community_ids)), (5, 3))
+
     def test_super_admin_can_promote_and_demote_user_with_audit(self):
         status, body = self.request("POST", "/api/v1/admin/users/%s/role" % self.user_id, self.super_token, {"role": "ADMIN"})
         self.assertEqual((status, body["role"]), (200, "ADMIN"))
@@ -139,6 +331,24 @@ class CommercialApiTests(unittest.TestCase):
         self.assertEqual(status, 201)
         self.assertEqual(community["status"], "ACTIVE")
 
+    def test_live_community_names_are_normalized_and_database_unique(self):
+        status, first = self.request("POST", "/api/v1/communities", self.user_token, {
+            "name": " 星河　家园！ ", "street": "银湖街道",
+        })
+        self.assertEqual(status, 201)
+        status, body = self.request("POST", "/api/v1/communities", self.admin_token, {
+            "name": "星河家园", "street": "银湖街道",
+        })
+        self.assertEqual((status, body["code"]), (409, "community_exists"))
+        status, _ = self.request("POST", f"/api/v1/communities/{first['id']}/review", self.admin_token, {
+            "action": "reject", "note": "重复候选", "version": first["version"],
+        })
+        self.assertEqual(status, 200)
+        status, replacement = self.request("POST", "/api/v1/communities", self.admin_token, {
+            "name": "星河家园", "street": "银湖街道",
+        })
+        self.assertEqual((status, replacement["status"]), (201, "ACTIVE"))
+
     def test_admin_cat_creation_is_approved_immediately(self):
         _, community = self.request("POST", "/api/v1/communities", self.admin_token, {"name": "管理员审核小区", "street": "银湖街道"})
         status, cat = self.request("POST", "/api/v1/cats", self.admin_token, {"community_id": community["id"], "nickname": "管理员猫", "location_note": "东门"})
@@ -167,6 +377,337 @@ class CommercialApiTests(unittest.TestCase):
         self.assertEqual(status, 429)
         self.assertEqual(body["code"], "daily_cat_limit_reached")
 
+    def test_user_creates_cat_with_pending_community_atomically(self):
+        payload = {
+            "community_candidate": {"name": "新湖家园", "street": "银湖街道", "note": "北门"},
+            "nickname": "团团",
+            "location_note": "北门绿化带",
+        }
+        status, cat = self.request("POST", "/api/v1/cats", self.user_token, payload)
+        self.assertEqual(status, 201)
+        self.assertEqual(cat["community_status"], "PENDING_REVIEW")
+        self.assertEqual(cat["community_review_blocker"], "COMMUNITY_PENDING_REVIEW")
+        with self.app.state.session_factory() as db:
+            communities = db.scalars(select(Community).where(Community.name == "新湖家园")).all()
+            cats = db.scalars(select(Cat).where(Cat.nickname == "团团")).all()
+            logs = db.scalars(select(AuditLog).where(AuditLog.entity_id.in_([cat["community_id"], cat["id"]]))).all()
+            self.assertEqual(len(communities), 1)
+            self.assertEqual(len(cats), 1)
+            self.assertEqual(communities[0].id, cats[0].community_id)
+            self.assertEqual(len(logs), 2)
+
+    def test_cat_creation_idempotency_returns_original_without_consuming_quota_twice(self):
+        payload = {
+            "community_candidate": {"name": "幂等花园", "street": "银湖街道"},
+            "nickname": "幂幂",
+            "location_note": "南门",
+        }
+        headers = {"Idempotency-Key": "cat-create-20260802-0001"}
+        first_status, first = self.request("POST", "/api/v1/cats", self.user_token, payload, extra_headers=headers)
+        second_status, second = self.request("POST", "/api/v1/cats", self.user_token, payload, extra_headers=headers)
+        self.assertEqual((first_status, second_status), (201, 201))
+        self.assertEqual(first["id"], second["id"])
+        with self.app.state.session_factory() as db:
+            self.assertEqual(len(db.scalars(select(Cat).where(Cat.nickname == "幂幂")).all()), 1)
+            self.assertEqual(len(db.scalars(select(Community).where(Community.name == "幂等花园")).all()), 1)
+            quota = db.scalar(select(DailyCatQuota).where(DailyCatQuota.user_id == self.user_id))
+            self.assertEqual(quota.used_count, 1)
+
+    def test_cat_requires_exactly_one_community_source(self):
+        base = {"nickname": "团团", "location_note": "北门绿化带"}
+        status, _ = self.request("POST", "/api/v1/cats", self.user_token, base)
+        self.assertEqual(status, 422)
+        _, community = self.request("POST", "/api/v1/communities", self.admin_token, {"name": "已审核小区", "street": "银湖街道"})
+        status, _ = self.request(
+            "POST",
+            "/api/v1/cats",
+            self.user_token,
+            dict(base, community_id=community["id"], community_candidate={"name": "候选小区", "street": "银湖街道"}),
+        )
+        self.assertEqual(status, 422)
+
+    def test_failed_photo_validation_rolls_back_inline_candidate(self):
+        payload = {
+            "community_candidate": {"name": "不应残留的小区", "street": "银湖街道"},
+            "nickname": "团团",
+            "location_note": "北门绿化带",
+            "photo_asset_id": "not-owned",
+        }
+        status, body = self.request("POST", "/api/v1/cats", self.user_token, payload)
+        self.assertEqual(status, 403)
+        self.assertEqual(body["code"], "photo_asset_forbidden")
+        with self.app.state.session_factory() as db:
+            self.assertIsNone(db.scalar(select(Community).where(Community.name == "不应残留的小区")))
+            self.assertIsNone(db.scalar(select(Cat).where(Cat.nickname == "团团")))
+
+    def test_candidate_owner_edit_uses_version_and_resubmits_changes(self):
+        _, cat = self.request("POST", "/api/v1/cats", self.user_token, {
+            "community_candidate": {"name": "待纠正小区", "street": "银湖街道"},
+            "nickname": "点点", "location_note": "东门",
+        })
+        community_id = cat["community_id"]
+        other_token = self.login("other-user-openid")
+        status, _ = self.request("PATCH", f"/api/v1/communities/{community_id}", other_token, {
+            "name": "别人的修改", "street": "银湖街道", "note": "", "version": 1,
+        })
+        self.assertEqual(status, 403)
+        status, changed = self.request("PATCH", f"/api/v1/communities/{community_id}", self.user_token, {
+            "name": "待纠正家园", "street": "银湖街道", "note": "补充东门照片", "version": 1,
+        })
+        self.assertEqual(status, 200)
+        self.assertEqual((changed["name"], changed["version"], changed["status"]), ("待纠正家园", 2, "PENDING_REVIEW"))
+        status, body = self.request("PATCH", f"/api/v1/communities/{community_id}", self.user_token, {
+            "name": "过期写入", "street": "银湖街道", "note": "", "version": 1,
+        })
+        self.assertEqual(status, 409)
+        self.assertEqual(body["code"], "stale_community_version")
+
+    def test_candidate_review_actions_require_notes_and_admin_permissions(self):
+        _, candidate = self.request("POST", "/api/v1/communities", self.user_token, {"name": "联审小区", "street": "银湖街道"})
+        candidate_id = candidate["id"]
+        status, _ = self.request("POST", f"/api/v1/communities/{candidate_id}/review", self.user_token, {
+            "action": "approve", "version": 1,
+        })
+        self.assertEqual(status, 403)
+        status, body = self.request("POST", f"/api/v1/communities/{candidate_id}/review", self.admin_token, {
+            "action": "request_changes", "note": "", "version": 1,
+        })
+        self.assertEqual(status, 422)
+        self.assertEqual(body["code"], "review_note_required")
+        status, changed = self.request("POST", f"/api/v1/communities/{candidate_id}/review", self.admin_token, {
+            "action": "request_changes", "note": "请补充街道", "version": 1,
+        })
+        self.assertEqual((status, changed["status"], changed["version"]), (200, "NEEDS_CHANGES", 2))
+        status, legacy = self.request("POST", f"/api/v1/communities/{candidate_id}/review", self.admin_token, {
+            "approved": True,
+        })
+        self.assertEqual((status, legacy["code"]), (409, "legacy_review_version_required"))
+        status, approved = self.request("POST", f"/api/v1/communities/{candidate_id}/review", self.super_token, {
+            "action": "approve", "version": 2,
+        })
+        self.assertEqual((status, approved["status"]), (200, "ACTIVE"))
+
+        _, rejected = self.request("POST", "/api/v1/communities", self.user_token, {"name": "广告小区", "street": "银湖街道"})
+        status, _ = self.request("POST", f"/api/v1/communities/{rejected['id']}/review", self.super_token, {
+            "action": "reject", "note": "", "version": 1,
+        })
+        self.assertEqual(status, 422)
+        status, rejected_body = self.request("POST", f"/api/v1/communities/{rejected['id']}/review", self.super_token, {
+            "action": "reject", "note": "垃圾广告", "version": 1,
+        })
+        self.assertEqual((status, rejected_body["status"]), (200, "REJECTED"))
+
+    def test_explicit_community_mutations_require_current_version(self):
+        _, candidate = self.request("POST", "/api/v1/communities", self.user_token, {
+            "name": "版本花园", "street": "银湖街道",
+        })
+        status, _ = self.request("PATCH", f"/api/v1/communities/{candidate['id']}", self.user_token, {
+            "name": "版本花园二期", "street": "银湖街道", "note": "",
+        })
+        self.assertEqual(status, 422)
+        status, _ = self.request("POST", f"/api/v1/communities/{candidate['id']}/review", self.admin_token, {
+            "action": "approve",
+        })
+        self.assertEqual(status, 422)
+
+        _, active = self.request("POST", "/api/v1/communities", self.admin_token, {
+            "name": "归档版本小区", "street": "银湖街道",
+        })
+        status, _ = self.request("POST", f"/api/v1/communities/{active['id']}/archive", self.admin_token, {})
+        self.assertEqual(status, 422)
+        status, archived = self.request("POST", f"/api/v1/communities/{active['id']}/archive", self.admin_token, {"version": 1})
+        self.assertEqual((status, archived["status"], archived["version"]), (200, "ARCHIVED", 2))
+        status, stale = self.request("POST", f"/api/v1/communities/{active['id']}/archive", self.super_token, {"version": 1})
+        self.assertEqual((status, stale["code"]), (409, "stale_community_version"))
+
+    def test_admin_can_reassign_cat_after_candidate_rejection_then_approve_it(self):
+        _, target = self.request("POST", "/api/v1/communities", self.admin_token, {
+            "name": "正式安置小区", "street": "银湖街道",
+        })
+        _, cat = self.request("POST", "/api/v1/cats", self.user_token, {
+            "community_candidate": {"name": "错误小区名", "street": "银湖街道"},
+            "nickname": "待安置猫", "location_note": "北门",
+        }, extra_headers={"Idempotency-Key": "reassign-cat-0001"})
+        status, rejected = self.request("POST", f"/api/v1/communities/{cat['community_id']}/review", self.admin_token, {
+            "action": "reject", "note": "地点名称无效", "version": 1,
+        })
+        self.assertEqual((status, rejected["status"]), (200, "REJECTED"))
+        status, moved = self.request("POST", f"/api/v1/cats/{cat['id']}/community", self.admin_token, {
+            "community_id": target["id"], "version": cat["version"],
+        })
+        self.assertEqual((status, moved["community_id"], moved["community_name"]), (200, target["id"], "正式安置小区"))
+        self.assertEqual(moved["version"], cat["version"] + 1)
+        status, approved = self.request("POST", f"/api/v1/cats/{cat['id']}/review", self.admin_token, {"approved": True})
+        self.assertEqual((status, approved["review_status"]), (200, "APPROVED"))
+
+    def test_legacy_community_rejection_keeps_hidden_state_during_rolling_deploy(self):
+        _, candidate = self.request("POST", "/api/v1/communities", self.user_token, {
+            "name": "旧客户端候选", "street": "银湖街道",
+        })
+        status, hidden = self.request(
+            "POST", f"/api/v1/communities/{candidate['id']}/review", self.admin_token, {"approved": False},
+        )
+        self.assertEqual((status, hidden["status"]), (200, "HIDDEN"))
+
+    def test_merge_reassigns_linked_cats_and_publication_waits_for_active_community(self):
+        _, target = self.request("POST", "/api/v1/communities", self.admin_token, {"name": "正式小区", "street": "银湖街道"})
+        _, cat = self.request("POST", "/api/v1/cats", self.user_token, {
+            "community_candidate": {"name": "正式小区北区", "street": "银湖街道"},
+            "nickname": "联审猫", "location_note": "北门",
+        })
+        status, blocked = self.request("POST", f"/api/v1/cats/{cat['id']}/review", self.admin_token, {"approved": True})
+        self.assertEqual(status, 409)
+        self.assertEqual(blocked["code"], "community_not_active")
+        status, merged = self.request("POST", f"/api/v1/communities/{cat['community_id']}/merge", self.super_token, {
+            "target_community_id": target["id"], "version": 1,
+        })
+        self.assertEqual((status, merged["status"], merged["merged_into_id"]), (200, "MERGED", target["id"]))
+        with self.app.state.session_factory() as db:
+            self.assertEqual(db.get(Cat, cat["id"]).community_id, target["id"])
+        status, approved = self.request("POST", f"/api/v1/cats/{cat['id']}/review", self.admin_token, {"approved": True})
+        self.assertEqual((status, approved["review_status"], approved["community_status"]), (200, "APPROVED", "ACTIVE"))
+
+    def test_admin_community_page_includes_server_derived_bounded_linked_cat_preview(self):
+        _, candidate = self.request("POST", "/api/v1/communities", self.user_token, {
+            "name": "联审预览小区", "street": "银湖街道",
+        })
+        with self.app.state.session_factory() as db:
+            for index in range(5):
+                db.add(Cat(
+                    community_id=candidate["id"], code="HC-PREVIEW-%d" % index,
+                    nickname="预览猫%d" % index, location_note="北门", created_by=self.user_id,
+                ))
+            db.commit()
+        status, body = self.request("GET", "/api/v1/admin/communities?limit=1", self.admin_token)
+        self.assertEqual(status, 200)
+        item = body["items"][0]
+        self.assertEqual(item["linked_cat_count"], 5)
+        self.assertEqual(len(item["linked_cats"]), 3)
+        self.assertTrue(all({"id", "nickname", "code"}.issubset(preview) for preview in item["linked_cats"]))
+
+    def test_collection_cursor_pagination_is_bounded_and_stable(self):
+        for index in range(30):
+            status, _ = self.request("POST", "/api/v1/communities", self.admin_token, {
+                "name": f"分页小区{index:02d}", "street": "银湖街道",
+            })
+            self.assertEqual(status, 201)
+        status, first = self.request("GET", "/api/v1/communities?limit=10")
+        self.assertEqual(status, 200)
+        self.assertEqual(len(first["items"]), 10)
+        self.assertTrue(first["next_cursor"])
+        status, second = self.request("GET", "/api/v1/communities?limit=10&cursor=" + first["next_cursor"])
+        self.assertEqual(status, 200)
+        self.assertEqual(len(second["items"]), 10)
+        self.assertTrue(set(item["id"] for item in first["items"]).isdisjoint(item["id"] for item in second["items"]))
+        status, _ = self.request("GET", "/api/v1/communities?limit=101")
+        self.assertEqual(status, 422)
+        status, body = self.request("GET", "/api/v1/communities?cursor=%25%25%25")
+        self.assertEqual(status, 422)
+        self.assertEqual(body["code"], "invalid_cursor")
+
+    def test_impact_events_are_admin_audited_reversible_and_publicly_aggregated(self):
+        status, forbidden = self.request("POST", "/api/v1/admin/impact-events", self.user_token, {
+            "kind": "RESCUED", "amount": 1, "note": "普通用户不能录入",
+        })
+        self.assertEqual(status, 403)
+        self.assertEqual(forbidden["code"], "forbidden")
+        status, invalid = self.request("POST", "/api/v1/admin/impact-events", self.admin_token, {
+            "kind": "RESCUED", "amount": 0, "note": "无效数量",
+        })
+        self.assertEqual(status, 422)
+
+        created = []
+        for kind, amount in (("RESCUED", 12), ("ADOPTED", 8), ("MEDICAL", 23), ("SUPPORTER", 36)):
+            status, event = self.request("POST", "/api/v1/admin/impact-events", self.admin_token, {
+                "kind": kind, "amount": amount, "note": "真实成果记录",
+            })
+            self.assertEqual(status, 201)
+            created.append(event)
+        with self.app.state.session_factory() as db:
+            db.add(ImpactEvent(kind="RESCUED", amount=99, note="QA 不公开", created_by=self.super_id, is_qa=True))
+            db.commit()
+
+        responses = []
+        for token in (None, self.user_token, self.admin_token, self.super_token):
+            status, metrics = self.request("GET", "/api/v1/public/metrics", token)
+            self.assertEqual(status, 200)
+            responses.append(metrics)
+        expected = {"rescued": 12, "adopted": 8, "medical": 23, "supporters": 36}
+        self.assertEqual(responses, [expected] * 4)
+
+        status, page = self.request("GET", "/api/v1/admin/impact-events?limit=2", self.admin_token)
+        self.assertEqual(status, 200)
+        self.assertEqual(len(page["items"]), 2)
+        self.assertTrue(page["next_cursor"])
+
+        status, reversed_event = self.request(
+            "POST", "/api/v1/admin/impact-events/%s/reverse" % created[0]["id"], self.super_token,
+        )
+        self.assertEqual(status, 200)
+        self.assertIsNotNone(reversed_event["reversed_at"])
+        status, repeated = self.request(
+            "POST", "/api/v1/admin/impact-events/%s/reverse" % created[0]["id"], self.super_token,
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(repeated["reversed_at"], reversed_event["reversed_at"])
+        status, metrics = self.request("GET", "/api/v1/public/metrics")
+        self.assertEqual(status, 200)
+        self.assertEqual(metrics, {"rescued": 0, "adopted": 8, "medical": 23, "supporters": 36})
+
+        with self.app.state.session_factory() as db:
+            actions = {row.action for row in db.scalars(select(AuditLog).where(AuditLog.entity_type == "impact_event"))}
+        self.assertEqual(actions, {"IMPACT_EVENT_CREATE", "IMPACT_EVENT_REVERSE"})
+
+    def test_admin_draft_import_is_atomic_idempotent_and_requires_manual_publish(self):
+        _, community = self.request("POST", "/api/v1/communities", self.admin_token, {
+            "name": "77 档案小区", "street": "银湖街道",
+        })
+        source = self.jpeg_bytes(with_private_exif=True)
+
+        first_status, first = self.import_draft(self.admin_token, community["id"], source)
+        second_status, second = self.import_draft(self.admin_token, community["id"], source)
+
+        self.assertEqual((first_status, second_status), (201, 201))
+        self.assertTrue(first["changed"])
+        self.assertFalse(second["changed"])
+        self.assertEqual(first["cat"]["id"], second["cat"]["id"])
+        self.assertEqual(first["media"]["id"], second["media"]["id"])
+        self.assertEqual(first["cat"]["profile_key"], "story-77")
+        self.assertEqual(first["cat"]["review_status"], "PENDING_REVIEW")
+        self.assertEqual(first["cat"]["visibility_status"], "HIDDEN")
+        with self.app.state.session_factory() as db:
+            self.assertEqual(len(db.scalars(select(Cat).where(Cat.profile_key == "story-77")).all()), 1)
+            self.assertEqual(len(db.scalars(select(MediaAsset)).all()), 1)
+            actions = db.scalars(select(AuditLog.action).where(AuditLog.entity_id == first["cat"]["id"])).all()
+            self.assertNotIn("REVIEW", actions)
+            self.assertNotIn("VISIBILITY", actions)
+
+        status, body = self.request("GET", "/api/v1/public/profiles/story-77", self.admin_token)
+        self.assertEqual((status, body["code"]), (404, "public_profile_not_found"))
+        self.request("POST", "/api/v1/cats/%s/review" % first["cat"]["id"], self.admin_token, {"approved": True})
+        self.assertEqual(self.request("GET", "/api/v1/public/profiles/story-77")[0], 404)
+        self.request("POST", "/api/v1/cats/%s/visibility" % first["cat"]["id"], self.admin_token, {"visible": True})
+        status, public_profile = self.request("GET", "/api/v1/public/profiles/story-77", self.super_token)
+        self.assertEqual(status, 200)
+        self.assertEqual((public_profile["id"], public_profile["profile_key"]), (first["cat"]["id"], "story-77"))
+
+        repeat_status, repeat = self.import_draft(self.admin_token, community["id"], source)
+        self.assertEqual(repeat_status, 201)
+        self.assertFalse(repeat["changed"])
+        self.assertEqual((repeat["cat"]["review_status"], repeat["cat"]["visibility_status"]), ("APPROVED", "ACTIVE"))
+        duplicate_status, duplicate = self.import_draft(
+            self.admin_token, community["id"], source, idempotency_key="different-story-77-import-key",
+        )
+        self.assertEqual((duplicate_status, duplicate["code"]), (409, "profile_key_exists"))
+
+    def test_failed_admin_draft_import_leaves_no_media_row_or_file(self):
+        status, body = self.import_draft(self.admin_token, "missing-community", self.jpeg_bytes())
+        self.assertEqual((status, body["code"]), (404, "community_not_found"))
+        with self.app.state.session_factory() as db:
+            self.assertEqual(len(db.scalars(select(MediaAsset)).all()), 0)
+            self.assertEqual(len(db.scalars(select(Cat)).all()), 0)
+        self.assertEqual(list(Path(self.tmp.name).iterdir()), [])
+
     def test_admin_can_approve_hide_and_archive_cat(self):
         _, community = self.request("POST", "/api/v1/communities", self.admin_token, {"name": "管理小区", "street": "银湖街道"})
         _, cat = self.request("POST", "/api/v1/cats", self.user_token, {"community_id": community["id"], "nickname": "小拉", "location_note": "3幢附近"})
@@ -181,14 +722,75 @@ class CommercialApiTests(unittest.TestCase):
         self.assertEqual(self.request("GET", "/api/v1/cats")[1]["items"], [])
         self.assertEqual(len(self.request("GET", "/api/v1/cats", self.admin_token)[1]["items"]), 1)
 
+    def test_revoked_admin_session_cannot_read_nonpublic_cats(self):
+        _, community = self.request("POST", "/api/v1/communities", self.admin_token, {"name": "撤销会话小区", "street": "银湖街道"})
+        _, pending = self.request("POST", "/api/v1/cats", self.user_token, {
+            "community_id": community["id"], "nickname": "待审核猫", "location_note": "东门",
+        })
+        status, admin_view = self.request("GET", "/api/v1/cats", self.admin_token)
+        self.assertEqual(status, 200)
+        self.assertIn(pending["id"], [item["id"] for item in admin_view["items"]])
+        self.assertEqual(self.request("POST", "/api/v1/auth/logout", self.admin_token)[0], 200)
+        status, public_view = self.request("GET", "/api/v1/cats", self.admin_token)
+        self.assertEqual(status, 200)
+        self.assertNotIn(pending["id"], [item["id"] for item in public_view["items"]])
+
     def test_image_upload_rejects_non_image_and_accepts_small_image(self):
         status, _ = self.request("POST", "/api/v1/media/images", self.user_token, file_tuple=("note.txt", b"hello", "text/plain"))
         self.assertEqual(status, 415)
         status, _ = self.request("POST", "/api/v1/media/images", self.user_token, file_tuple=("fake.jpg", b"not-an-image", "image/jpeg"))
         self.assertEqual(status, 415)
-        status, body = self.request("POST", "/api/v1/media/images", self.user_token, file_tuple=("cat.jpg", b"\xff\xd8\xff\xe0fake-jpeg", "image/jpeg"))
+        status, body = self.request("POST", "/api/v1/media/images", self.user_token, file_tuple=("cat.jpg", self.jpeg_bytes(), "image/jpeg"))
         self.assertEqual(status, 201)
         self.assertTrue(body["object_key"])
+
+    def test_public_upload_is_decoded_reencoded_and_strips_gps_exif(self):
+        source = self.jpeg_bytes(with_private_exif=True)
+        self.assertIn(b"Private Phone", source)
+
+        status, asset = self.request(
+            "POST", "/api/v1/media/images", self.user_token,
+            file_tuple=("private-cat.jpg", source, "image/jpeg"),
+        )
+        self.assertEqual(status, 201)
+
+        download_status, public_bytes = self.request_bytes("GET", "/api/v1/media/" + asset["id"])
+        self.assertEqual(download_status, 200)
+        self.assertNotEqual(public_bytes, source)
+        self.assertNotIn(b"Private Phone", public_bytes)
+        self.assertNotIn(b"Private Camera Model", public_bytes)
+        with Image.open(io.BytesIO(public_bytes)) as public_image:
+            public_image.load()
+            self.assertEqual(public_image.size, (32, 24))
+            self.assertEqual(len(public_image.getexif()), 0)
+
+    def test_uploaded_image_has_cached_webp_thumbnail(self):
+        source = self.jpeg_bytes(size=(1280, 960))
+        status, asset = self.request(
+            "POST", "/api/v1/media/images", self.user_token,
+            file_tuple=("large-cat.jpg", source, "image/jpeg"),
+        )
+        self.assertEqual(status, 201)
+
+        thumb_status, headers, thumb_bytes = self.request_media(
+            "/api/v1/media/%s?variant=thumb" % asset["id"],
+        )
+        self.assertEqual(thumb_status, 200)
+        self.assertEqual(headers["content-type"], "image/webp")
+        self.assertEqual(headers["cache-control"], "public, max-age=31536000, immutable")
+        with Image.open(io.BytesIO(thumb_bytes)) as thumb:
+            thumb.load()
+            self.assertEqual(thumb.format, "WEBP")
+            self.assertLessEqual(max(thumb.size), 640)
+
+    def test_image_upload_rejects_decoded_pixel_count_above_limit(self):
+        self.app.state.settings.max_image_pixels = 100
+        status, body = self.request(
+            "POST", "/api/v1/media/images", self.user_token,
+            file_tuple=("too-many-pixels.jpg", self.jpeg_bytes(size=(11, 10)), "image/jpeg"),
+        )
+        self.assertEqual(status, 413)
+        self.assertEqual(body["code"], "image_too_many_pixels")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,15 @@
+<view class="page">
+  <view class="brand"><image class="brand-mark" mode="aspectFit" src="/assets/brand-77.png"/><text>帮帮小猫</text></view>
+  <view class="hero">
+    <image class="hero-image" mode="aspectFill" src="/assets/hero-77.webp" />
+    <view class="hero-copy"><view class="hero-title"><view>让每一只小猫，</view><view>都被认真看见</view></view><view class="story-link" bindtap="openStory">77 的故事</view></view>
+  </view>
+  <view wx:if="{{loading}}" class="state loading">正在连接社区…</view>
+  <view wx:elif="{{error}}" class="state error">{{error}}</view>
+  <block wx:else>
+    <view class="metrics"><view class="metric"><text>{{metrics.rescued||0}}</text><view class="metric-label">已救助</view></view><view class="metric"><text>{{metrics.adopted||0}}</text><view class="metric-label">找到新家</view></view><view class="metric"><text>{{metrics.medical||0}}</text><view class="metric-label">医疗救助</view></view><view class="metric"><text>{{metrics.supporters||0}}</text><view class="metric-label">爱心支持</view></view></view>
+    <view class="section-title">猫咪档案</view><view wx:if="{{empty}}" class="state empty">还没有公开档案</view>
+    <view class="grid"><view class="card" wx:for="{{cats}}" wx:key="id"><image wx:if="{{!item.photo_failed && item.photo_url}}" class="card-image" mode="aspectFill" lazy-load="{{true}}" src="{{item.photo_url}}" data-index="{{index}}" data-collection="cats" binderror="onPhotoError"/><view wx:else class="card-image card-image-placeholder">暂无照片</view><view class="card-body"><view class="card-title">{{item.nickname}}</view><view class="meta">{{item.community_name}}</view></view></view></view>
+    <view class="section-title">救助任务</view><view class="list"><view class="row" wx:for="{{tasks}}" wx:key="id"><view class="card-title">{{item.title}}</view><view class="meta">{{item.description}}</view></view></view>
+  </block>
+</view>

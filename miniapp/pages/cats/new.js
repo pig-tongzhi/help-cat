@@ -1,8 +1,20 @@
 const api = require("../../utils/api.js");
+
+function compressPhoto(src) {
+  return new Promise((resolve) => wx.compressImage({
+    src, quality: 80,
+    success: (result) => resolve(result.tempFilePath || src),
+    fail: () => resolve(src)
+  }));
+}
+
 Page({
-  data: { photoPath: "", photoAssetId: "", latitude: null, longitude: null, form: { communityName: "", nickname: "", location_note: "", living_status: "", notes: "" } },
+  photoUploadVersion: 0,
+  data: { photoPath: "", photoAssetId: "", uploading: false, uploadError: false, latitude: null, longitude: null, form: { communityName: "", nickname: "", location_note: "", living_status: "", notes: "" } },
   onInput(e) { const form = this.data.form; form[e.currentTarget.dataset.key] = e.detail.value; this.setData({ form }); },
   getLocation() { wx.getLocation({ type: "gcj02", success: (res) => { this.setData({ latitude: res.latitude, longitude: res.longitude, "form.location_note": "已获取当前位置（地图点位）" }); wx.showToast({ title: "定位成功" }); }, fail: () => wx.showToast({ title: "定位失败，可手动填写", icon: "none" }) }); },
-  choosePhoto() { api.ensureLogin().then(() => new Promise((resolve) => wx.chooseMedia({ count: 1, mediaType: ["image"], sourceType: ["album", "camera"], success: resolve, fail: () => resolve(null) }))).then((res) => { if (!res) return; const path = res.tempFiles[0].tempFilePath; this.setData({ photoPath: path }); api.uploadImage(path).then((asset) => this.setData({ photoAssetId: asset.id })).catch(() => wx.showToast({ title: "照片上传失败", icon: "none" })); }).catch(() => wx.showToast({ title: "请先完成登录", icon: "none" })); },
-  submit() { const f = this.data.form; if (!f.communityName || !f.nickname || !f.location_note) return wx.showToast({ title: "请补全小区、名称和位置", icon: "none" }); api.ensureLogin().then(() => api.request("/api/v1/communities?q=" + encodeURIComponent(f.communityName))).then((data) => { const community = (data.items || [])[0]; if (!community) throw new Error("community_not_found"); return api.request("/api/v1/cats", { method: "POST", data: { community_id: community.id, nickname: f.nickname, location_note: f.location_note, living_status: f.living_status, photo_asset_id: this.data.photoAssetId || null, latitude: this.data.latitude, longitude: this.data.longitude } }); }).then(() => { wx.showToast({ title: "已提交待审核" }); setTimeout(() => wx.navigateBack(), 500); }).catch(() => wx.showToast({ title: "提交失败，请先登录并检查小区", icon: "none" })); }
+  uploadPhoto(path, uploadVersion) { return compressPhoto(path).then((compressedPath) => api.uploadImage(compressedPath)).then((asset) => { if (uploadVersion !== this.photoUploadVersion) return; this.setData({ photoAssetId: asset.id, uploading: false, uploadError: false }); }).catch(() => { if (uploadVersion !== this.photoUploadVersion) return; this.setData({ uploading: false, uploadError: true }); wx.showToast({ title: "照片上传失败", icon: "none" }); }); },
+  choosePhoto() { api.ensureLogin().then(() => new Promise((resolve) => wx.chooseMedia({ count: 1, mediaType: ["image"], sourceType: ["album", "camera"], success: resolve, fail: () => resolve(null) }))).then((res) => { if (!res) return; const path = res.tempFiles[0].tempFilePath; const uploadVersion = ++this.photoUploadVersion; this.setData({ photoPath: path, photoAssetId: "", uploading: true, uploadError: false }); return this.uploadPhoto(path, uploadVersion); }).catch(() => wx.showToast({ title: "请先完成登录", icon: "none" })); },
+  retryPhoto() { const path = this.data.photoPath; if (!path) return; const uploadVersion = ++this.photoUploadVersion; this.setData({ photoAssetId: "", uploading: true, uploadError: false }); this.uploadPhoto(path, uploadVersion); },
+  submit() { if (this.data.photoPath && (this.data.uploading || this.data.uploadError)) return wx.showToast({ title: "照片仍在上传或上传失败，请完成上传后再提交", icon: "none" }); const acceptedPhotoAssetId = this.data.photoAssetId || null; const f = this.data.form; if (!f.communityName || !f.nickname || !f.location_note) return wx.showToast({ title: "请补全小区、名称和位置", icon: "none" }); api.ensureLogin().then(() => api.request("/api/v1/communities?q=" + encodeURIComponent(f.communityName))).then((data) => { const community = (data.items || [])[0]; if (!community) throw new Error("community_not_found"); return api.request("/api/v1/cats", { method: "POST", data: { community_id: community.id, nickname: f.nickname, location_note: f.location_note, living_status: f.living_status, photo_asset_id: acceptedPhotoAssetId, latitude: this.data.latitude, longitude: this.data.longitude } }); }).then(() => { wx.showToast({ title: "已提交待审核" }); setTimeout(() => wx.navigateBack(), 500); }).catch(() => wx.showToast({ title: "提交失败，请先登录并检查小区", icon: "none" })); }
 });

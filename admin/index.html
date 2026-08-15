@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="theme-color" content="#f4f6f3">
+  <meta name="theme-color" content="#F5F5F7">
   <meta name="description" content="帮帮小猫管理后台，用于猫咪、小区和用户权限治理。">
   <title>帮帮小猫 · 管理后台</title>
-  <link rel="stylesheet" href="styles.css?v=20260731-access">
+  <link rel="stylesheet" href="styles.css?v=20260802-premium-community-r2">
 </head>
 <body>
   <section class="login-view" id="login-view">
-    <div class="login-brand"><span class="brand-mark" aria-hidden="true"><i></i></span><div><strong>帮帮小猫</strong><small>HELP CAT ADMIN</small></div></div>
+    <div class="login-brand"><img class="brand-mark" src="/help-cat/rescue/assets/brand/helpcat-77-mark.svg?v=20260815-brand-hero-r3" alt=""><div><strong>帮帮小猫</strong><small>HELP CAT ADMIN</small></div></div>
     <div class="login-card">
       <span class="eyebrow">SECURE CONSOLE</span>
       <h1>管理员登录</h1>
@@ -27,7 +27,7 @@
 
   <div class="admin-shell" id="admin-shell" hidden>
     <aside class="sidebar">
-      <a class="side-brand" href="#overview"><span class="brand-mark" aria-hidden="true"><i></i></span><span><strong>帮帮小猫</strong><small>管理后台</small></span></a>
+      <a class="side-brand" href="/help-cat/rescue/index.html#home" aria-label="返回帮帮小猫首页" title="返回帮帮小猫首页"><img class="brand-mark" src="/help-cat/rescue/assets/brand/helpcat-77-mark.svg?v=20260815-brand-hero-r3" alt=""><span><strong>帮帮小猫</strong><small>管理后台</small></span></a>
       <nav aria-label="后台导航">
         <button class="side-nav active" type="button" data-section="overview"><span class="nav-dot overview-dot"></span>总览</button>
         <button class="side-nav" type="button" data-section="cats"><span class="nav-dot cat-dot"></span>猫咪档案</button>
@@ -59,12 +59,14 @@
         <div class="section-heading"><div><span class="eyebrow">CAT ARCHIVE</span><h2>猫咪档案库</h2><p>审核、公开、隐藏或归档社区猫咪档案。</p></div><button class="button secondary" id="refresh" type="button">刷新数据</button></div>
         <label class="search-box">搜索猫咪<input id="cat-search" placeholder="名称、编号或位置"></label>
         <div id="cats" class="list"></div>
+        <div class="load-more-row"><button class="button secondary" id="load-more-admin-cats" type="button" hidden>加载更多猫咪</button></div>
       </section>
 
       <section class="admin-section" data-admin-section="communities" hidden>
         <div class="section-heading"><div><span class="eyebrow">COMMUNITY GOVERNANCE</span><h2>小区管理</h2><p>新增小区会立即开放，居民建议需要管理员审核。</p></div></div>
         <form class="inline-form" id="community-form"><label>小区名称<input id="community-name" required placeholder="例如：聚源福小区"></label><label>所属街道<input id="community-street" required value="银湖街道"></label><button class="button primary" type="submit">新增小区</button></form>
         <div id="communities" class="list"></div>
+        <div class="load-more-row"><button class="button secondary" id="load-more-admin-communities" type="button" hidden>加载更多小区</button></div>
       </section>
 
       <section class="admin-section users-panel" id="users-panel" data-admin-section="users" hidden>
@@ -72,11 +74,15 @@
         <label class="search-box">搜索用户<input id="user-search" placeholder="用户名或昵称"></label>
         <p class="panel-message" id="user-message" role="status"></p>
         <div id="users" class="list"></div>
+        <div class="load-more-row"><button class="button secondary" id="load-more-admin-users" type="button" hidden>加载更多用户</button></div>
       </section>
+      <footer class="brand-footer admin-footer"><small>安得广厦千万间，大庇天下小猫俱欢颜</small></footer>
     </main>
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
-  <script src="app.js?v=20260731-access"></script>
+  <script src="session.js?v=20260802-premium-community-r2"></script>
+  <script src="community-review.js?v=20260802-premium-community-r2"></script>
+  <script src="app.js?v=20260802-premium-community-r2"></script>
 </body>
 </html>

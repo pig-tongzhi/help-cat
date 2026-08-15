@@ -1,8 +1,12 @@
 import hashlib
 import hmac
+import json
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
+from urllib.request import urlopen
 
 from fastapi import Depends, Header, HTTPException
 from sqlalchemy import select
@@ -41,7 +45,21 @@ class WechatProvider:
             return code[5:]
         if not self.settings.wechat_app_id or not self.settings.wechat_app_secret:
             raise HTTPException(status_code=503, detail={"code": "wechat_not_configured"})
-        raise HTTPException(status_code=501, detail={"code": "wechat_provider_pending"})
+        query = urlencode({
+            "appid": self.settings.wechat_app_id,
+            "secret": self.settings.wechat_app_secret,
+            "js_code": code,
+            "grant_type": "authorization_code",
+        })
+        try:
+            with urlopen("https://api.weixin.qq.com/sns/jscode2session?" + query, timeout=8) as response:
+                payload = json.load(response)
+        except (HTTPError, URLError, TimeoutError, OSError, ValueError):
+            raise HTTPException(status_code=502, detail={"code": "wechat_code_exchange_unavailable"})
+        openid = payload.get("openid") if isinstance(payload, dict) else None
+        if not openid or payload.get("errcode"):
+            raise HTTPException(status_code=502, detail={"code": "wechat_code_exchange_failed"})
+        return str(openid)
 
 
 def issue_session(db: DbSession, user: User, days: int) -> str:

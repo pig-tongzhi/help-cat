@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, text as sql_text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -39,12 +39,27 @@ class Session(Base):
 
 class Community(Base):
     __tablename__ = "communities"
+    __table_args__ = (
+        Index(
+            "uq_communities_live_location_name",
+            "city", "district", "normalized_name",
+            unique=True,
+            sqlite_where=sql_text("status NOT IN ('MERGED','REJECTED','ARCHIVED','HIDDEN')"),
+            postgresql_where=sql_text("status NOT IN ('MERGED','REJECTED','ARCHIVED','HIDDEN')"),
+        ),
+    )
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
     city: Mapped[str] = mapped_column(String(40), default="杭州市")
     district: Mapped[str] = mapped_column(String(40), default="富阳区")
     street: Mapped[str] = mapped_column(String(80))
     name: Mapped[str] = mapped_column(String(120), index=True)
+    normalized_name: Mapped[str] = mapped_column(String(120), default="", index=True)
     status: Mapped[str] = mapped_column(String(20), default="PENDING_REVIEW", index=True)
+    review_note: Mapped[str] = mapped_column(Text, default="")
+    merged_into_id: Mapped[Optional[str]] = mapped_column(ForeignKey("communities.id"), nullable=True, index=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    is_qa: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sql_text("0"), nullable=False, index=True)
+    __mapper_args__ = {"version_id_col": version, "version_id_generator": False}
     created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
     reviewed_by: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
@@ -53,8 +68,13 @@ class Community(Base):
 
 class Cat(Base):
     __tablename__ = "cats"
+    __table_args__ = (
+        UniqueConstraint("created_by", "idempotency_key", name="uq_cats_actor_idempotency"),
+        UniqueConstraint("profile_key", name="uq_cats_profile_key"),
+    )
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
     community_id: Mapped[str] = mapped_column(ForeignKey("communities.id"), index=True)
+    community: Mapped[Community] = relationship(foreign_keys=[community_id])
     code: Mapped[str] = mapped_column(String(40), unique=True, index=True)
     nickname: Mapped[str] = mapped_column(String(80))
     living_status: Mapped[str] = mapped_column(String(80), default="")
@@ -66,6 +86,11 @@ class Cat(Base):
     review_status: Mapped[str] = mapped_column(String(20), default="PENDING_REVIEW", index=True)
     visibility_status: Mapped[str] = mapped_column(String(20), default="ACTIVE", index=True)
     created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    idempotency_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    profile_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    is_qa: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sql_text("0"), nullable=False, index=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    __mapper_args__ = {"version_id_col": version, "version_id_generator": False}
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
 
@@ -110,3 +135,25 @@ class Task(Base):
     claimed_by: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     claimed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_qa: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sql_text("0"), nullable=False, index=True)
+
+
+class ImpactEvent(Base):
+    __tablename__ = "impact_events"
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('RESCUED','ADOPTED','MEDICAL','SUPPORTER')",
+            name="ck_impact_events_kind",
+        ),
+        CheckConstraint("amount > 0", name="ck_impact_events_amount_positive"),
+    )
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    kind: Mapped[str] = mapped_column(String(20), index=True)
+    amount: Mapped[int] = mapped_column(Integer, default=1)
+    note: Mapped[str] = mapped_column(Text, default="")
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    reversed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    reversed_by: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    is_qa: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sql_text("0"), nullable=False, index=True)

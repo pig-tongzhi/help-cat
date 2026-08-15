@@ -1,0 +1,28 @@
+{
+  "pages": [
+    "pages/home/index",
+    "pages/cats/index",
+    "pages/tasks/index",
+    "pages/profile/index"
+  ],
+  "window": {
+    "navigationBarTitleText": "帮帮小猫",
+    "navigationBarBackgroundColor": "#F5F1EB",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#F5F1EB"
+  },
+  "tabBar": {
+    "color": "#6B6965",
+    "selectedColor": "#D9683A",
+    "backgroundColor": "#FFFFFF",
+    "borderStyle": "white",
+    "list": [
+      {"pagePath": "pages/home/index", "text": "77 的故事"},
+      {"pagePath": "pages/cats/index", "text": "猫咪档案"},
+      {"pagePath": "pages/tasks/index", "text": "救助任务"},
+      {"pagePath": "pages/profile/index", "text": "我的"}
+    ]
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

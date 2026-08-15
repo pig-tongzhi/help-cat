@@ -1,0 +1,2 @@
+/* Uses the global editorial card system. */
+.card-image-placeholder { height: 210rpx; display: flex; align-items: center; justify-content: center; background: #eeeae4; color: #77736d; font-size: 24rpx; }
