@@ -8,6 +8,15 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
 class CommercialFrontendContractTests(unittest.TestCase):
+    def test_miniapp_photo_upload_compresses_and_preserves_retryable_state(self):
+        source = (ROOT / "miniapp/pages/cats/new.js").read_text(encoding="utf-8")
+        view = (ROOT / "miniapp/pages/cats/new.wxml").read_text(encoding="utf-8")
+        self.assertIn("wx.compressImage", source)
+        self.assertIn("quality: 80", source)
+        self.assertIn("uploading", source)
+        self.assertIn("uploadError", source)
+        self.assertIn("重新上传照片", view)
+
     def test_mini_program_has_production_pages_and_no_demo_identity_switch(self):
         app_json = json.loads((ROOT / "miniapp" / "app.json").read_text(encoding="utf-8"))
         pages = " ".join(app_json["pages"])
