@@ -24,6 +24,21 @@ class CommercialFrontendContractTests(unittest.TestCase):
         self.assertRegex(source, r"uploadPhoto\(path, uploadVersion\)")
         self.assertRegex(source, r"if \(uploadVersion !== this\.photoUploadVersion\) return;")
 
+    def test_miniapp_submit_blocks_pending_or_failed_selected_photo_and_snapshots_asset(self):
+        source = (ROOT / "miniapp/pages/cats/new.js").read_text(encoding="utf-8")
+        submit = source.split("  submit() {", 1)[1]
+        self.assertRegex(
+            submit,
+            r"if \(this\.data\.photoPath && \(this\.data\.uploading \|\| this\.data\.uploadError\)\) "
+            r"return wx\.showToast\(\{ title: \"照片仍在上传或上传失败，请完成上传后再提交\", icon: \"none\" \}\);",
+        )
+        self.assertIn("const acceptedPhotoAssetId = this.data.photoAssetId || null;", submit)
+        self.assertLess(
+            submit.index("const acceptedPhotoAssetId = this.data.photoAssetId || null;"),
+            submit.index("api.ensureLogin()"),
+        )
+        self.assertIn("photo_asset_id: acceptedPhotoAssetId", submit)
+
     def test_mini_program_has_production_pages_and_no_demo_identity_switch(self):
         app_json = json.loads((ROOT / "miniapp" / "app.json").read_text(encoding="utf-8"))
         pages = " ".join(app_json["pages"])
