@@ -17,6 +17,13 @@ class CommercialFrontendContractTests(unittest.TestCase):
         self.assertIn("uploadError", source)
         self.assertIn("重新上传照片", view)
 
+    def test_miniapp_photo_upload_ignores_stale_selection_completions(self):
+        source = (ROOT / "miniapp/pages/cats/new.js").read_text(encoding="utf-8")
+        self.assertIn("photoUploadVersion", source)
+        self.assertRegex(source, r"const uploadVersion = \+\+this\.photoUploadVersion;")
+        self.assertRegex(source, r"uploadPhoto\(path, uploadVersion\)")
+        self.assertRegex(source, r"if \(uploadVersion !== this\.photoUploadVersion\) return;")
+
     def test_mini_program_has_production_pages_and_no_demo_identity_switch(self):
         app_json = json.loads((ROOT / "miniapp" / "app.json").read_text(encoding="utf-8"))
         pages = " ".join(app_json["pages"])
