@@ -40,6 +40,20 @@ class MiniProgramContractTests(unittest.TestCase):
         self.assertNotIn("app_secret", source.lower())
         self.assertNotIn("HELPCAT_WECHAT_APP_SECRET", source)
 
+    def test_public_photo_lists_use_thumbnails_lazy_loading_and_error_fallback(self):
+        cats_js = (MINI / "pages/cats/index.js").read_text()
+        cats_wxml = (MINI / "pages/cats/index.wxml").read_text()
+        home_js = (MINI / "pages/home/index.js").read_text()
+        home_wxml = (MINI / "pages/home/index.wxml").read_text()
+        for source in (cats_js, home_js):
+            self.assertIn("photo_failed:false", source)
+            self.assertIn("onPhotoError", source)
+            self.assertIn("api.mediaUrl", source)
+        for source in (cats_wxml, home_wxml):
+            self.assertIn('lazy-load="{{true}}"', source)
+            self.assertIn('binderror="onPhotoError"', source)
+            self.assertIn("wx:else", source)
+
 
 if __name__ == "__main__":
     unittest.main()
