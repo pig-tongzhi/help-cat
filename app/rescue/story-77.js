@@ -20,9 +20,9 @@
 
   function renderChapter(chapter, index) {
     var visual = chapter.image
-      ? '<figure class="story-visual story-visual-' + (index + 1) + '" style="position:relative">' +
-        '<img src="' + escapeHtml(chapter.image) + '" alt="' + escapeHtml(chapter.alt) + '" width="' + chapter.width + '" height="' + chapter.height + '"' + (index === 0 ? '' : ' loading="lazy"') + ' style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">' +
-        '<span>' + escapeHtml(chapter.marker) + '</span></figure>'
+      ? '<figure class="story-visual story-visual-' + (index + 1) + ' has-image">' +
+        '<img data-story-image data-story-source="' + escapeHtml(chapter.image) + '" src="' + escapeHtml(chapter.image) + '" alt="' + escapeHtml(chapter.alt) + '" width="' + chapter.width + '" height="' + chapter.height + '"' + (index === 0 ? '' : ' loading="lazy"') + '>' +
+        '<span>' + escapeHtml(chapter.marker) + '</span><button class="story-image-retry" type="button" data-story-retry hidden>重新加载照片</button></figure>'
       : '<figure class="story-visual story-visual-' + (index + 1) + '" aria-hidden="true"><span>' + escapeHtml(chapter.marker) + '</span></figure>';
     return '<article class="story-chapter">' +
       visual +
@@ -55,6 +55,22 @@
         if (action === "cats" && typeof handlers.openCats === "function") handlers.openCats();
         if (action === "create-cat" && typeof handlers.openCreateCat === "function") handlers.openCreateCat();
         if (action === "back-home" && typeof handlers.backHome === "function") handlers.backHome();
+      });
+    });
+    Array.prototype.forEach.call(container.querySelectorAll("[data-story-image]"), function (image) {
+      if (!image || !image.dataset || !image.dataset.storySource) return;
+      var visual = typeof image.closest === "function" ? image.closest(".story-visual") : null;
+      if (!visual) return;
+      image.addEventListener("error", function () {
+        visual.classList.add("image-failed");
+        var retry = visual.querySelector("[data-story-retry]");
+        if (retry) retry.hidden = false;
+      });
+      var retry = visual.querySelector("[data-story-retry]");
+      if (retry) retry.addEventListener("click", function () {
+        visual.classList.remove("image-failed");
+        retry.hidden = true;
+        image.src = image.dataset.storySource + "?retry=" + Date.now();
       });
     });
     var profileLink = typeof container.querySelector === "function" ? container.querySelector("[data-story-profile-link]") : null;

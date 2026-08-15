@@ -34,7 +34,7 @@ class RescueH5ContractTests(unittest.TestCase):
         for path in ("assets/77/hero-desktop.webp", "assets/77/hero-mobile.webp"):
             self.assertIn(path, html)
         self.assertIn(
-            '<img src="assets/77/hero-desktop.webp?v=20260815-brand-hero-r3" alt="77，一只白底黑斑的猫咪" width="960" height="720"',
+            '<img src="assets/77/hero-desktop.webp?v=20260816-story-media-r1" alt="77，一只白底黑斑的猫咪" width="960" height="720"',
             html,
         )
 
@@ -46,13 +46,25 @@ class RescueH5ContractTests(unittest.TestCase):
         self.assertIn("alt=\"' + escapeHtml(chapter.alt) + '\" width=\"", story)
         self.assertIn("index === 0 ? '' : ' loading=\"lazy\"'", story)
 
+    def test_story_media_is_complete_and_retryable(self):
+        styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
+        story = (ROOT / "app" / "rescue" / "story-77.js").read_text(encoding="utf-8")
+        self.assertIn('data-story-image', story)
+        self.assertIn('data-story-retry', story)
+        self.assertIn('data-story-source', story)
+        self.assertIn('.story-visual.has-image img', styles)
+        image_rule = re.search(r"\.story-visual\.has-image\s+img\s*\{(?P<body>[^}]*)\}", styles)
+        self.assertIsNotNone(image_rule)
+        self.assertIn("object-fit: contain", image_rule.group("body"))
+        self.assertNotIn("object-fit: cover", image_rule.group("body"))
+
     def test_77_brand_assets_and_manifest_are_wired(self):
         page = (ROOT / "app/rescue/index.html").read_text()
         for marker in (
             '<meta name="theme-color" content="#F7F5F1">',
-            'rel="icon" href="assets/brand/favicon.svg?v=20260815-brand-hero-r3"',
-            'rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png?v=20260815-brand-hero-r3"',
-            'rel="manifest" href="manifest.webmanifest?v=20260815-brand-hero-r3"',
+            'rel="icon" href="assets/brand/favicon.svg?v=20260816-story-media-r1"',
+            'rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png?v=20260816-story-media-r1"',
+            'rel="manifest" href="manifest.webmanifest?v=20260816-story-media-r1"',
             'class="brand-logo brand-logo-77"',
         ):
             self.assertIn(marker, page)
@@ -66,7 +78,7 @@ class RescueH5ContractTests(unittest.TestCase):
     def test_brand_uses_one_77_master_across_all_surfaces(self):
         page = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
         manifest = json.loads((ROOT / "app" / "rescue" / "manifest.webmanifest").read_text(encoding="utf-8"))
-        version = "20260815-brand-hero-r3"
+        version = "20260816-story-media-r1"
         master = "assets/brand/helpcat-77-mark.svg?v=" + version
 
         self.assertRegex(
@@ -414,7 +426,7 @@ class RescueH5ContractTests(unittest.TestCase):
         version_script = (ROOT / "app" / "rescue" / "version.js").read_text(encoding="utf-8")
         styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
         for marker in (
-            'data-app-version="20260815-brand-hero-r3"',
+            'data-app-version="20260816-story-media-r1"',
             'id="version-update"',
             'id="reload-version"',
         ):
@@ -425,7 +437,7 @@ class RescueH5ContractTests(unittest.TestCase):
             'fetchPage(path, { cache: "no-store" })',
             "if (!response.ok)",
             "if (match && match[1] !== current)",
-            'CURRENT_VERSION = "20260815-brand-hero-r3"',
+            'CURRENT_VERSION = "20260816-story-media-r1"',
             "current: CURRENT_VERSION",
         ):
             self.assertIn(marker, version_script)
@@ -443,7 +455,7 @@ class RescueH5ContractTests(unittest.TestCase):
 
     def test_rescue_assets_are_versioned_in_dependency_order(self):
         html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
-        version = "20260815-brand-hero-r3"
+        version = "20260816-story-media-r1"
         for asset in ("styles.css", "api.js", "community-form.js", "version.js", "story-77.js", "app.js"):
             self.assertIn(f'{asset}?v={version}', html)
         api_index = html.index(f'api.js?v={version}')
@@ -481,7 +493,7 @@ class RescueH5ContractTests(unittest.TestCase):
         self.assertIn('<button class="story-back" type="button"', story)
         self.assertIn('<button class="button primary" type="button" data-story-action="cats">', story)
         self.assertIn('<button class="button secondary" type="button" data-story-action="create-cat">', story)
-        self.assertIn('story-77.js?v=20260815-brand-hero-r3', html)
+        self.assertIn('story-77.js?v=20260816-story-media-r1', html)
 
     def test_primary_and_update_actions_meet_77_accessibility_contract(self):
         styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")

@@ -65,6 +65,16 @@ test("77 story module exposes its approved timeline and action hooks", () => {
   assert.match(html, /data-story-action="create-cat"/);
 });
 
+test("77 story images retain a complete-view and retry contract", () => {
+  const story = loadStory();
+  const html = story.renderToString();
+
+  assert.match(html, /data-story-image/);
+  assert.match(html, /data-story-source="assets\/77\/rescue-day\.webp"/);
+  assert.match(html, /data-story-retry/);
+  assert.doesNotMatch(html, /object-fit:cover/);
+});
+
 test("77 story render connects its injected actions without inline handlers", () => {
   const story = loadStory();
   const listeners = {};

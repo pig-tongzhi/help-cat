@@ -87,6 +87,12 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .story-visual:before { content: "77"; color: rgba(255,255,255,.36); font-family: Georgia, "Times New Roman", serif; font-size: clamp(130px, 20vw, 250px); font-weight: 700; line-height: .7; letter-spacing: -.14em; }
 .story-visual span { position: relative; color: rgba(255,255,255,.85); font-size: 10px; font-weight: 800; letter-spacing: .13em; }
 .story-visual-2, .story-visual-5 { background: linear-gradient(145deg, #e9ddd3, #d99386 55%, #a24f41); }.story-visual-3, .story-visual-6 { background: linear-gradient(145deg, #dfe8e1, #8fa49a 55%, #415950); }.story-visual-4 { background: linear-gradient(145deg, #e8e2d8, #b8a589 55%, #725d4d); }
+.story-visual.has-image { position: relative; display: grid; place-items: end start; padding: 20px; background: #F5F1EB; }
+.story-visual.has-image:before { content: none; }
+.story-visual.has-image img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: contain; object-position: center; }
+.story-visual.has-image span { z-index: 1; padding: 6px 8px; background: rgba(23,23,23,.48); border-radius: 999px; }
+.story-image-retry { position: relative; z-index: 2; margin: auto; padding: 9px 12px; border: 1px solid rgba(23,23,23,.2); border-radius: 999px; background: #fff; color: #171717; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.story-visual.has-image.image-failed img, .story-visual.has-image.image-failed span { display: none; }
 .story-chapter-copy { max-width: 370px; padding: 22px 0; background: var(--canvas); }.story-chapter h2 { margin: 13px 0; font-family: Georgia, "Songti SC", "STSong", serif; font-size: clamp(30px, 4vw, 48px); font-weight: 500; letter-spacing: -.06em; }.story-chapter p { margin: 0; color: var(--ink-2); font-size: 15px; line-height: 1.95; }
 .story-actions { display: grid; justify-items: start; gap: 11px; margin-top: 28px; }.story-actions .button { text-align: left; }.story-signoff { margin-top: clamp(66px, 11vw, 136px); padding-top: 24px; border-top: 1px solid rgba(23,23,23,.13); color: rgba(23,23,23,.55); font-family: Georgia, "Songti SC", serif; font-size: 14px; text-align: center; }
 .button { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 11px 17px; border: 0; border-radius: var(--radius-sm); font-weight: 760; cursor: pointer; transition: transform .16s ease, box-shadow .16s ease, background .16s ease; }
