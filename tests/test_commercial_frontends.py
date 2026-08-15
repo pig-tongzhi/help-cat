@@ -54,7 +54,7 @@ class CommercialFrontendContractTests(unittest.TestCase):
     def test_admin_brand_returns_home_and_linked_review_is_versioned_and_paged(self):
         html = (ROOT / "admin" / "index.html").read_text(encoding="utf-8")
         script = (ROOT / "admin" / "app.js").read_text(encoding="utf-8")
-        brand_source = 'src="/help-cat/rescue/assets/brand/helpcat-77-mark.svg?v=20260812-brand-hero-r2"'
+        brand_source = 'src="/help-cat/rescue/assets/brand/helpcat-77-mark.svg?v=20260815-brand-hero-r3"'
         self.assertIn('class="side-brand" href="/help-cat/rescue/index.html#home"', html)
         self.assertIn('aria-label="返回帮帮小猫首页"', html)
         self.assertIn('title="返回帮帮小猫首页"', html)
