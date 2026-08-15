@@ -1,0 +1,2 @@
+const api = require('../../utils/api');
+Page({data:{loading:true,error:'',empty:false,items:[]},onLoad(){this.load();},onPullDownRefresh(){this.load().finally(wx.stopPullDownRefresh);},load(){this.setData({loading:true,error:''});return api.request('/cats?limit=24').then(data=>{const items=(data.items||[]).map(item=>Object.assign({},item,{photo_url:api.mediaUrl(item.photo_asset_id)}));this.setData({items,empty:!items.length,loading:false});}).catch(()=>this.setData({error:'档案加载失败，请稍后重试',loading:false}));}});

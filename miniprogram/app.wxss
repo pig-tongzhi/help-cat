@@ -1,0 +1,21 @@
+page { background: #fbfaf8; color: #171717; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; }
+.page { min-height: 100vh; padding: 28rpx 28rpx 80rpx; box-sizing: border-box; }
+.brand { display: flex; align-items: center; gap: 16rpx; font-size: 32rpx; font-weight: 700; }
+.brand-mark { width: 60rpx; height: 60rpx; display: block; }
+.hero { position: relative; min-height: 540rpx; margin: 24rpx -28rpx 0; padding: 80rpx 40rpx; overflow: hidden; box-sizing: border-box; background: #f5f1eb; }
+.hero-image { position: absolute; inset: 0; width: 100%; height: 100%; }
+.hero-copy { position: relative; z-index: 1; width: 47%; padding-top: 86rpx; }
+.hero-title { font-family: "Songti SC", serif; font-size: 56rpx; line-height: 1.28; }
+.story-link { margin-top: 38rpx; color: #d9683a; font-size: 26rpx; border-bottom: 2rpx solid #d9683a; display: inline-block; }
+.metrics { display: grid; grid-template-columns: repeat(4,1fr); margin: 0 -28rpx 38rpx; border-bottom: 1rpx solid #e4e0da; background:#fff; }
+.metric { padding: 22rpx 4rpx; text-align:center; border-right:1rpx solid #ece8e2; }
+.metric text { display:block; font-size:24rpx; font-weight:700; }.metric-label { font-size:18rpx; color:#77736d; }
+.section-title { margin: 38rpx 0 22rpx; font-family:"Songti SC",serif; font-size:38rpx; }
+.section-title::after { content:""; display:block; width:46rpx; height:4rpx; margin-top:12rpx; background:#d9683a; }
+.grid { display:grid; grid-template-columns:repeat(2,1fr); gap:18rpx; }
+.card { overflow:hidden; border:1rpx solid #e2ded8; border-radius:12rpx; background:#fff; }
+.card-image { width:100%; height:210rpx; background:#eeeae4; }.card-body { padding:18rpx; }.card-title { font-weight:700; }.meta { margin-top:8rpx; color:#77736d; font-size:22rpx; }
+.list { display:grid; gap:18rpx; }.row { padding:24rpx; border:1rpx solid #e2ded8; border-radius:14rpx; background:#fff; }
+.state { padding:80rpx 24rpx; text-align:center; color:#77736d; }.error { color:#a7442d; }.empty { color:#77736d; }
+.button { margin-top:22rpx; border-radius:999rpx; background:#d9683a; color:#fff; font-weight:700; }.button.secondary { background:#fff; color:#171717; border:1rpx solid #ded9d2; }
+.account { margin-top:30rpx; padding:34rpx; border:1rpx solid #e2ded8; border-radius:18rpx; background:#fff; }
