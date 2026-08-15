@@ -27,7 +27,7 @@ function wechatLogin() {
 }
 
 function mediaUrl(assetId) {
-  return assetId ? BASE_URL + '/media/' + encodeURIComponent(assetId) : '';
+  return assetId ? BASE_URL + '/media/' + encodeURIComponent(assetId) + '?variant=thumb' : '';
 }
 
 module.exports = { request, wechatLogin, mediaUrl, BASE_URL };

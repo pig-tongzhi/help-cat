@@ -34,6 +34,24 @@ PUBLIC_IMAGE_FORMATS = {
     "PNG": ("image/png", ".png"),
     "WEBP": ("image/webp", ".webp"),
 }
+MEDIA_CACHE_HEADERS = {"Cache-Control": "public, max-age=31536000, immutable"}
+MEDIA_THUMBNAIL_SIZE = 640
+
+
+def media_thumbnail_path(storage_root, object_key):
+    return storage_root / (Path(object_key).stem + ".thumb.webp")
+
+
+def create_media_thumbnail(source_path, target_path):
+    """Create a small, metadata-free list thumbnail without changing the original asset."""
+    with Image.open(source_path) as source:
+        thumbnail = ImageOps.exif_transpose(source).convert("RGB")
+        thumbnail.thumbnail((MEDIA_THUMBNAIL_SIZE, MEDIA_THUMBNAIL_SIZE), Image.Resampling.LANCZOS)
+        output = io.BytesIO()
+        thumbnail.save(output, format="WEBP", quality=76, method=6)
+    temporary_path = target_path.with_suffix(target_path.suffix + ".tmp")
+    temporary_path.write_bytes(output.getvalue())
+    temporary_path.replace(target_path)
 
 
 def sanitize_public_image(content, claimed_content_type, max_image_pixels, max_image_bytes):
@@ -901,6 +919,11 @@ def create_app(database_url=None, storage_root=None, fake_admin_openids=None):
         asset = MediaAsset(object_key=new_id() + extension, content_type=content_type, byte_size=len(sanitized), created_by=actor[0])
         target = settings.storage_root / asset.object_key
         target.write_bytes(sanitized)
+        try:
+            create_media_thumbnail(target, media_thumbnail_path(settings.storage_root, asset.object_key))
+        except OSError:
+            target.unlink(missing_ok=True)
+            error(500, "thumbnail_generation_failed")
         db.add(asset)
         db.flush()
         audit(db, actor[0], "UPLOAD", "media", asset.id, after={"content_type": asset.content_type, "byte_size": asset.byte_size})
@@ -908,14 +931,22 @@ def create_app(database_url=None, storage_root=None, fake_admin_openids=None):
         return {"id": asset.id, "object_key": asset.object_key, "content_type": asset.content_type, "byte_size": asset.byte_size}
 
     @app.get("/api/v1/media/{asset_id}")
-    def get_media(asset_id: str, db: DbSession = Depends(db_session)):
+    def get_media(asset_id: str, variant: str = Query(default="original", pattern="^(original|thumb)$"), db: DbSession = Depends(db_session)):
         asset = db.get(MediaAsset, asset_id)
         if not asset:
             error(404, "media_not_found")
         path = settings.storage_root / asset.object_key
         if not path.is_file():
             error(404, "media_file_not_found")
-        return FileResponse(path, media_type=asset.content_type)
+        if variant == "thumb":
+            thumbnail_path = media_thumbnail_path(settings.storage_root, asset.object_key)
+            if not thumbnail_path.is_file():
+                try:
+                    create_media_thumbnail(path, thumbnail_path)
+                except OSError:
+                    error(500, "thumbnail_generation_failed")
+            return FileResponse(thumbnail_path, media_type="image/webp", headers=MEDIA_CACHE_HEADERS)
+        return FileResponse(path, media_type=asset.content_type, headers=MEDIA_CACHE_HEADERS)
 
     return app
 

@@ -318,7 +318,7 @@ class RescueH5ContractTests(unittest.TestCase):
 
     def test_cat_card_contract_has_permanent_placeholder_and_broken_image_fallback(self):
         script = (ROOT / "app" / "rescue" / "app.js").read_text(encoding="utf-8")
-        for text in ("healthTone", "cat-placeholder", "data-cat-photo", "image-failed", 'addEventListener("error"', "target.hidden = true"):
+        for text in ("healthTone", "cat-placeholder", "data-cat-photo", "image-failed", 'addEventListener("error"', "target.hidden = true", "variant=thumb", "data-original-src", "photoRetry"):
             self.assertIn(text, script)
         for legacy_value in ('"良好": "healthy"', '"需要观察": "attention"', '"需要帮助": "attention"'):
             self.assertIn(legacy_value, script)

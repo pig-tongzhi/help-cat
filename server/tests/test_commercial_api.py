@@ -106,6 +106,10 @@ class CommercialApiTests(unittest.TestCase):
         headers = {"Authorization": "Bearer " + token} if token else {}
         return asyncio.run(self.asgi_request_bytes(method, path, headers))
 
+    def request_media(self, path, token=None):
+        headers = {"Authorization": "Bearer " + token} if token else {}
+        return asyncio.run(self.asgi_request_media(path, headers))
+
     async def asgi_request_bytes(self, method, path, headers):
         parsed = urlsplit(path)
         sent = False
@@ -131,6 +135,33 @@ class CommercialApiTests(unittest.TestCase):
         status = next(item["status"] for item in messages if item["type"] == "http.response.start")
         content = b"".join(item.get("body", b"") for item in messages if item["type"] == "http.response.body")
         return status, content
+
+    async def asgi_request_media(self, path, headers):
+        parsed = urlsplit(path)
+        sent = False
+        messages = []
+
+        async def receive():
+            nonlocal sent
+            if sent:
+                return {"type": "http.disconnect"}
+            sent = True
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        async def send(message):
+            messages.append(message)
+
+        scope = {
+            "type": "http", "http_version": "1.1", "method": "GET", "path": parsed.path,
+            "raw_path": parsed.path.encode(), "query_string": parsed.query.encode(),
+            "headers": [(key.lower().encode(), value.encode()) for key, value in headers.items()],
+            "client": ("testclient", 50000), "server": ("testserver", 80), "scheme": "http",
+        }
+        await self.app(scope, receive, send)
+        start = next(item for item in messages if item["type"] == "http.response.start")
+        response_headers = {key.decode().lower(): value.decode() for key, value in start["headers"]}
+        content = b"".join(item.get("body", b"") for item in messages if item["type"] == "http.response.body")
+        return start["status"], response_headers, content
 
     @staticmethod
     def jpeg_bytes(size=(32, 24), with_private_exif=False):
@@ -732,6 +763,25 @@ class CommercialApiTests(unittest.TestCase):
             public_image.load()
             self.assertEqual(public_image.size, (32, 24))
             self.assertEqual(len(public_image.getexif()), 0)
+
+    def test_uploaded_image_has_cached_webp_thumbnail(self):
+        source = self.jpeg_bytes(size=(1280, 960))
+        status, asset = self.request(
+            "POST", "/api/v1/media/images", self.user_token,
+            file_tuple=("large-cat.jpg", source, "image/jpeg"),
+        )
+        self.assertEqual(status, 201)
+
+        thumb_status, headers, thumb_bytes = self.request_media(
+            "/api/v1/media/%s?variant=thumb" % asset["id"],
+        )
+        self.assertEqual(thumb_status, 200)
+        self.assertEqual(headers["content-type"], "image/webp")
+        self.assertEqual(headers["cache-control"], "public, max-age=31536000, immutable")
+        with Image.open(io.BytesIO(thumb_bytes)) as thumb:
+            thumb.load()
+            self.assertEqual(thumb.format, "WEBP")
+            self.assertLessEqual(max(thumb.size), 640)
 
     def test_image_upload_rejects_decoded_pixel_count_above_limit(self):
         self.app.state.settings.max_image_pixels = 100

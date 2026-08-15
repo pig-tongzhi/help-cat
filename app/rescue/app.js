@@ -51,8 +51,10 @@
     var item = all.find(function (community) { return community.id === id; });
     return item ? item.name : (fallback || "社区范围内");
   }
-  function photoUrl(cat) {
-    return cat.photo_asset_id ? api.API_BASE + "/api/v1/media/" + encodeURIComponent(cat.photo_asset_id) : "";
+  function photoUrl(cat, variant) {
+    if (!cat.photo_asset_id) return "";
+    var source = api.API_BASE + "/api/v1/media/" + encodeURIComponent(cat.photo_asset_id);
+    return variant === "thumb" ? source + "?variant=thumb" : source;
   }
   function healthLabel(value) {
     return { HEALTHY: "状态良好", NEEDS_HELP: "需要关注", UNKNOWN: "待观察" }[value] || value || "待观察";
@@ -224,11 +226,12 @@
   }
 
   function catCard(cat) {
-    var image = photoUrl(cat);
+    var image = photoUrl(cat, "thumb");
+    var originalImage = photoUrl(cat);
     return '<article class="cat-card">' +
       '<div class="cat-photo ' + (image ? "has-photo" : "") + '">' +
       '<span class="cat-placeholder" aria-hidden="true"><i></i><small>暂无照片</small></span>' +
-      (image ? '<img data-cat-photo src="' + escapeHtml(image) + '" alt="' + escapeHtml(cat.nickname) + '的照片" loading="lazy">' : '') +
+      (image ? '<img data-cat-photo data-original-src="' + escapeHtml(originalImage) + '" src="' + escapeHtml(image) + '" alt="' + escapeHtml(cat.nickname) + '的照片" loading="lazy">' : '') +
       '<span class="health-badge ' + healthTone(cat.health_status) + '">' + escapeHtml(healthLabel(cat.health_status)) + '</span></div>' +
       '<div class="cat-card-body"><div class="cat-title"><h3>' + escapeHtml(cat.nickname) + '</h3><span>' + escapeHtml(cat.code) + '</span></div>' +
       '<p class="cat-community">' + escapeHtml(communityName(cat.community_id, cat.community_name)) + '</p>' +
@@ -783,6 +786,11 @@
   document.addEventListener("error", function (event) {
     var target = event.target;
     if (!target || !target.matches || !target.matches("[data-cat-photo]")) return;
+    if (target.dataset.photoRetry !== "original" && target.dataset.originalSrc) {
+      target.dataset.photoRetry = "original";
+      target.src = target.dataset.originalSrc;
+      return;
+    }
     target.hidden = true;
     var media = target.closest(".cat-photo");
     if (media) media.classList.add("image-failed");
