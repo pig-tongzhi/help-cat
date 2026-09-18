@@ -526,6 +526,61 @@ class RescueH5ContractTests(unittest.TestCase):
         for width in ("1024px", "820px", "430px", "390px", "360px"):
             self.assertIn(width, styles)
 
+    def test_h5_redesign_has_public_product_path(self):
+        html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
+        styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
+        script = (ROOT / "app" / "rescue" / "app.js").read_text(encoding="utf-8")
+        for marker in (
+            'data-product-section="home-hero"',
+            'data-product-section="primary-actions"',
+            'data-product-section="cat-preview"',
+            'data-product-section="task-preview"',
+            'data-product-section="trust"',
+            'id="home-create-cat"',
+            'id="home-view-tasks"',
+            'id="home-view-cats"',
+            "让每一只小猫，",
+            "为猫咪建档",
+            "查看救助任务",
+            "隐私保护",
+            "社区审核",
+        ):
+            self.assertIn(marker, html)
+        self.assertIn(".product-shell", styles)
+        self.assertIn(".primary-action-grid", styles)
+        self.assertIn("renderHomeModuleState", script)
+
+    def test_h5_redesign_uses_module_level_fallbacks(self):
+        html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
+        script = (ROOT / "app" / "rescue" / "app.js").read_text(encoding="utf-8")
+        for marker in (
+            'id="home-cats-status"',
+            'id="home-tasks-status"',
+            'id="home-metrics-status"',
+            "state.publicDataStatus",
+            'cats: "loading"',
+            'tasks: "loading"',
+            'communities: "loading"',
+            'renderHomeModuleState("cats"',
+            'renderHomeModuleState("tasks"',
+        ):
+            self.assertIn(marker, html + script)
+        self.assertNotIn('showStatus(errorText(error), true)', script)
+
+    def test_h5_redesign_responsive_contracts_for_mobile_and_tablet(self):
+        styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
+        for marker in (
+            "@media (max-width: 1024px)",
+            "@media (max-width: 720px)",
+            "@media (max-width: 360px)",
+            "grid-template-columns: repeat(4, minmax(0, 1fr))",
+            "aspect-ratio: 4 / 3",
+            "padding-bottom: calc(112px + env(safe-area-inset-bottom))",
+            "overflow-wrap: anywhere",
+        ):
+            self.assertIn(marker, styles)
+        self.assertNotIn("font-size: 12vw", styles)
+
 
 if __name__ == "__main__":
     unittest.main()
