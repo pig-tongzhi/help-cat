@@ -234,6 +234,11 @@ class ProductH5ContractTests(unittest.TestCase):
         self.assertIn('el.setAttribute("aria-hidden", "true")', script)
         self.assertIn('sheet.querySelector("[data-close-sheet]")', script, "没有输入框的弹层也要把焦点收进来")
         self.assertIn("document.contains(sheetReturnFocus)", script, "归还焦点前要确认元素还在文档里")
+        # 打开与关闭必须成对地切换背景隔离，否则关闭后整页会变成不可交互的「死页」
+        open_sheet = script[script.index("function openSheet"):script.index("function closeSheets")]
+        close_sheet = script[script.index("function closeSheets"):script.index("function openAuth")]
+        self.assertIn("setSheetBackgroundInert(true)", open_sheet)
+        self.assertIn("setSheetBackgroundInert(false)", close_sheet)
 
     def test_no_leftover_browser_probe_files(self):
         leftovers = sorted(p.name for p in (ROOT / "app" / "rescue").iterdir() if p.name.startswith("__"))
