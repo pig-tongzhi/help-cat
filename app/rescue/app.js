@@ -361,7 +361,8 @@
     if (storyIndex > 0) {
       homeCats = [state.cats[storyIndex]].concat(state.cats.filter(function (_, index) { return index !== storyIndex; })).slice(0, 4);
     }
-    byId("cat-result-count").textContent = "共 " + cats.length + " 只已审核猫咪";
+    // 服务端只返回一页，因此这里说"已显示"而不是伪造总数。
+    byId("cat-result-count").textContent = "已显示 " + cats.length + " 只已审核猫咪" + (state.cursors.cats ? "（还有更多，可加载下一页）" : "");
     byId("home-cats").innerHTML = homeCats.length ? homeCats.map(catCard).join("") : emptyCard("还没有公开档案", "登录后可以提交第一只社区猫咪。");
     byId("cat-list").innerHTML = cats.length ? cats.map(catCard).join("") : emptyCard("没有找到匹配档案", "试试更换名称或小区筛选条件。");
     byId("load-more-cats").hidden = !state.cursors.cats;
@@ -973,6 +974,15 @@
         return false;
       }
     }
+    if (state.catStep === 3) {
+      // 档案没有单独的备注字段，补充说明会并入位置说明；超长时明确报错，不静默截断。
+      var combined = byId("cat-location").value.trim() + "；" + byId("cat-notes").value.trim();
+      if (combined.length > 240) {
+        byId("cat-message").textContent = "活动位置加补充说明最多 240 字，请精简后再提交。";
+        byId("cat-notes").focus();
+        return false;
+      }
+    }
     byId("cat-message").textContent = "";
     return true;
   }
@@ -1040,7 +1050,7 @@
     upload.then(function (asset) {
       var locationNote = byId("cat-location").value.trim();
       var notes = byId("cat-notes").value.trim();
-      if (notes) locationNote = (locationNote + "；" + notes).slice(0, 240);
+      if (notes) locationNote = locationNote + "；" + notes;
       var communityPayload = currentCatCommunityPayload();
       return api.request("/api/v1/cats", {
         method: "POST",

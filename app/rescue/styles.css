@@ -637,3 +637,7 @@ body { background: #f5f5f3; }
 .primary-action-icon.care-icon { background: #FDECEC; }
 .primary-action-icon.cat-icon { background: #EEF4FF; }
 .primary-action-icon.join-icon { background: #EAF6F0; }
+
+/* 定位提示默认隐藏，只在 app.js 加上 .visible 后显示（原来一直可见） */
+.location-fallback { display: none; }
+.location-fallback.visible { display: block; }
