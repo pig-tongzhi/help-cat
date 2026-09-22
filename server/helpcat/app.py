@@ -4,12 +4,12 @@ import mimetypes
 import secrets
 import base64
 import io
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 from zoneinfo import ZoneInfo
 
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, Response, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import and_, func, or_, select
@@ -22,8 +22,8 @@ from .auth import DUMMY_PASSWORD_HASH, WechatProvider, current_user_factory, has
 from .config import Settings
 from .community_rules import normalize_community_name
 from .db import Base, ensure_schema, make_session_factory
-from .models import AuditLog, Cat, CatEvent, Community, DailyCatQuota, FeedingLog, FeedingPoint, ImpactEvent, LeadMessage, MediaAsset, Session as AuthSession, Task, User, new_id
-from .schemas import CatCommunityReassign, CatCreate, CatEventCreate, CommunityArchive, CommunityCreate, CommunityEdit, CommunityMerge, CommunityReview, FeedingLogCreate, FeedingPointCreate, FeedingPointEdit, ImpactEventCreate, LeadMessageCreate, LeadMessageStatusUpdate, PasswordLoginRequest, RegisterRequest, ReviewRequest, RoleUpdate, TaskCancel, TaskComplete, TaskCreate, TaskReassign, VisibilityRequest, WechatLoginRequest
+from .models import AuditLog, Cat, CatEvent, Community, DailyCatQuota, FeedingLog, FeedingPoint, FeedingShift, ImpactEvent, LeadMessage, MediaAsset, Session as AuthSession, Task, User, new_id
+from .schemas import CatCommunityReassign, CatCreate, CatEventCreate, CommunityArchive, CommunityCreate, CommunityEdit, CommunityMerge, CommunityReview, FeedingLogCreate, FeedingPointCreate, FeedingPointEdit, FeedingShiftClaim, ImpactEventCreate, LeadMessageCreate, LeadMessageStatusUpdate, PasswordLoginRequest, RegisterRequest, ReviewRequest, RoleUpdate, TaskCancel, TaskComplete, TaskCreate, TaskReassign, VisibilityRequest, WechatLoginRequest
 
 
 def error(status, code, message=None):
@@ -252,6 +252,22 @@ def feeding_log_payload(item, point_name=""):
     }
 
 
+def public_user_label(user):
+    """Mask a volunteer's identity in public responses: 张阿姨 -> 张**."""
+    name = (user.nickname or "").strip() or (user.username or "").strip()
+    if not name:
+        return "志愿者"
+    return name[0] + "**"
+
+
+def feeding_shift_payload(item, point_name="", user_label="", is_mine=False):
+    return {
+        "id": item.id, "point_id": item.point_id, "point_name": point_name,
+        "shift_date": item.shift_date, "status": item.status,
+        "user_label": user_label, "is_mine": is_mine, "note": item.note,
+    }
+
+
 def cat_event_payload(item):
     return {
         "id": item.id, "cat_id": item.cat_id, "kind": item.kind, "title": item.title,
@@ -261,6 +277,18 @@ def cat_event_payload(item):
 
 def shanghai_today():
     return datetime.now(ZoneInfo("Asia/Shanghai")).date().isoformat()
+
+
+FEEDING_SHIFT_MAX_DAYS = 14
+FEEDING_SHIFT_LOOKAHEAD_DAYS = 13
+
+
+def parse_shift_date(value):
+    """A calendar date in the same YYYY-MM-DD shape stored on feeding shifts."""
+    try:
+        return date.fromisoformat(str(value).strip())
+    except (TypeError, ValueError):
+        error(422, "invalid_shift_date")
 
 
 EARTH_RADIUS_M = 6371000
@@ -1350,6 +1378,18 @@ def create_app(database_url=None, storage_root=None, fake_admin_openids=None):
         db.flush()
         audit(db, actor[0], "FEED", "feeding_point", point.id, after={"fed_on": today, "log_id": item.id})
         db.commit()
+        try:
+            # A volunteer who claimed today's slot has just carried it out; a
+            # failure here must never turn a valid check-in into an error.
+            shift = db.scalar(select(FeedingShift).where(
+                FeedingShift.point_id == point.id, FeedingShift.user_id == actor[0],
+                FeedingShift.shift_date == today, FeedingShift.status == "CLAIMED",
+            ))
+            if shift:
+                shift.status = "DONE"
+                db.commit()
+        except Exception:
+            db.rollback()
         return feeding_log_payload(item, point.name)
 
     @app.get("/api/v1/feeding-logs/mine")
@@ -1404,6 +1444,144 @@ def create_app(database_url=None, storage_root=None, fake_admin_openids=None):
             "last_fed_on": max(days).isoformat() if days else None,
             "next_milestone": next((value for value in FEEDING_STREAK_MILESTONES if value > streak_days), None),
             "points_checked_today": points_checked_today,
+        }
+
+    # ---- 排班认领 ------------------------------------------------------
+
+    @app.get("/api/v1/feeding-shifts")
+    def list_feeding_shifts(
+        from_: Optional[str] = Query(default=None, alias="from"),
+        days: int = Query(default=7, ge=1, le=FEEDING_SHIFT_MAX_DAYS),
+        actor=Depends(optional_user),
+        db: DbSession = Depends(db_session),
+    ):
+        """The public feeding schedule: which volunteer owns which point and day."""
+        start = parse_shift_date(from_) if from_ else date.fromisoformat(shanghai_today())
+        end = start + timedelta(days=days - 1)
+        rows = db.scalars(
+            select(FeedingShift)
+            .join(FeedingPoint, FeedingShift.point_id == FeedingPoint.id)
+            .where(
+                FeedingShift.is_qa.is_(False), FeedingPoint.is_qa.is_(False),
+                FeedingPoint.status == "ACTIVE",
+                # Cancelled rows are history: the slot is free again and must not
+                # keep the public grid showing the day as taken.
+                FeedingShift.status != "CANCELLED",
+                FeedingShift.shift_date >= start.isoformat(),
+                FeedingShift.shift_date <= end.isoformat(),
+            )
+            .order_by(FeedingShift.shift_date.asc(), FeedingPoint.name.asc())
+        ).all()
+        point_names, labels = {}, {}
+        if rows:
+            point_names = dict(db.execute(
+                select(FeedingPoint.id, FeedingPoint.name).where(FeedingPoint.id.in_({item.point_id for item in rows}))
+            ).all())
+            for user in db.scalars(select(User).where(User.id.in_({item.user_id for item in rows}))):
+                labels[user.id] = public_user_label(user)
+        return {
+            "from": start.isoformat(), "days": days, "today": shanghai_today(),
+            "items": [
+                feeding_shift_payload(
+                    item, point_names.get(item.point_id, ""), labels.get(item.user_id, ""),
+                    bool(actor and item.user_id == actor[0]),
+                )
+                for item in rows
+            ],
+        }
+
+    @app.post("/api/v1/feeding-points/{point_id}/shifts", status_code=201)
+    def claim_feeding_shift(
+        point_id: str,
+        payload: FeedingShiftClaim,
+        response: Response,
+        actor=Depends(current_user),
+        db: DbSession = Depends(db_session),
+    ):
+        """Claim the feeding duty for one point on one day."""
+        today = date.fromisoformat(shanghai_today())
+        shift_date = parse_shift_date(payload.shift_date)
+        if not today <= shift_date <= today + timedelta(days=FEEDING_SHIFT_LOOKAHEAD_DAYS):
+            error(422, "shift_date_out_of_range")
+        point = db.get(FeedingPoint, point_id)
+        if not point or point.status != "ACTIVE":
+            error(404, "feeding_point_not_found")
+        label = public_user_label(db.get(User, actor[0]))
+        existing = db.scalar(select(FeedingShift).where(
+            FeedingShift.point_id == point.id, FeedingShift.shift_date == payload.shift_date,
+            FeedingShift.status != "CANCELLED",
+        ))
+        if existing:
+            if existing.user_id == actor[0]:
+                # Re-claiming your own live slot reports the original claim.
+                response.status_code = 200
+                return feeding_shift_payload(existing, point.name, label, True)
+            error(409, "shift_already_claimed")
+        item = FeedingShift(
+            point_id=point.id, user_id=actor[0], shift_date=payload.shift_date,
+            status="CLAIMED", note=payload.note, is_qa=False,
+        )
+        db.add(item)
+        db.flush()
+        audit(db, actor[0], "CREATE", "feeding_shift", item.id, after={
+            "point_id": item.point_id, "shift_date": item.shift_date, "status": item.status,
+        })
+        db.commit()
+        return feeding_shift_payload(item, point.name, label, True)
+
+    @app.post("/api/v1/feeding-shifts/{shift_id}/release")
+    def release_feeding_shift(shift_id: str, actor=Depends(current_user), db: DbSession = Depends(db_session)):
+        """The claimer, or an admin acting for them, gives the day back."""
+        item = db.get(FeedingShift, shift_id)
+        if not item:
+            error(404, "feeding_shift_not_found")
+        if item.status == "CANCELLED":
+            error(409, "shift_already_cancelled")
+        is_admin = actor[1] in {"ADMIN", "SUPER_ADMIN"}
+        if item.user_id != actor[0] and not is_admin:
+            error(403, "forbidden")
+        if item.status == "DONE" and not is_admin:
+            error(403, "shift_done_locked")
+        before = {"status": item.status}
+        item.status = "CANCELLED"
+        audit(db, actor[0], "UPDATE", "feeding_shift", item.id, before=before, after={"status": item.status})
+        db.commit()
+        point = db.get(FeedingPoint, item.point_id)
+        return feeding_shift_payload(
+            item, point.name if point else "", public_user_label(db.get(User, item.user_id)),
+            item.user_id == actor[0],
+        )
+
+    @app.get("/api/v1/feeding-shifts/mine")
+    def list_my_feeding_shifts(
+        cursor: Optional[str] = None,
+        limit: int = Query(default=24, ge=1, le=100),
+        actor=Depends(current_user),
+        db: DbSession = Depends(db_session),
+    ):
+        """This volunteer's upcoming claims.
+
+        `paginated_items` pages by created_at desc, id desc; a later claim may
+        cover an earlier date, so creation order is the accepted page order.
+        """
+        today = shanghai_today()
+        stmt = select(FeedingShift).where(
+            FeedingShift.is_qa.is_(False), FeedingShift.user_id == actor[0],
+            FeedingShift.shift_date >= today,
+        )
+        items, next_cursor = paginated_items(db, stmt, FeedingShift, cursor, limit)
+        point_names = {}
+        if items:
+            point_names = dict(db.execute(
+                select(FeedingPoint.id, FeedingPoint.name).where(FeedingPoint.id.in_({item.point_id for item in items}))
+            ).all())
+        label = public_user_label(db.get(User, actor[0]))
+        return {
+            "items": [
+                feeding_shift_payload(item, point_names.get(item.point_id, ""), label, True)
+                for item in items
+            ],
+            "next_cursor": next_cursor,
         }
 
     @app.post("/api/v1/admin/feeding-points", status_code=201)

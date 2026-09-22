@@ -13,6 +13,8 @@
     feedingPoints: [],
     homeFeeding: [],
     myFeedingSummary: null,
+    shifts: null,
+    shiftIndex: {},
     nearby: null,
     feedingStats: null,
     myFeedingLogs: [],
@@ -626,7 +628,8 @@
       (point.distance_m != null ? '<span class="feeding-distance">约 ' + escapeHtml(formatDistance(point.distance_m)) + '</span>' : "") +
       '</span>' +
       (point.caretaker_note ? '<p class="feeding-note">' + escapeHtml(point.caretaker_note) + '</p>' : '') +
-      '<small class="feeding-today">今天已有 ' + point.fed_today + ' 人打卡</small></div>' +
+      '<small class="feeding-today">今天已有 ' + point.fed_today + ' 人打卡</small>' +
+      (state.shifts ? '<span class="feeding-shift-line">' + todayShiftLine(point) + '</span>' : '') + '</div>' +
       (point.fed_by_me
         ? '<span class="feeding-done">今天已打卡 ✓</span>'
         : '<span class="feeding-actions">' +
@@ -636,6 +639,13 @@
       '</article>';
   }
 
+  function todayShiftLine(point) {
+    var shift = state.shiftIndex[shiftKey(point.id, shanghaiDateKey(0))];
+    if (!shift) return "今天的排班还空着，可以在下面认领";
+    if (shift.is_mine) return shift.status === "DONE" ? "今天我负责，已完成投喂" : "今天我负责，别忘了打卡";
+    return "今天由 " + shift.user_label + (shift.status === "DONE" ? " 完成投喂" : " 负责");
+  }
+
   function formatDistance(metres) {
     if (metres == null) return "";
     return metres < 1000 ? metres + " 米" : (metres / 1000).toFixed(1) + " 公里";
@@ -643,6 +653,115 @@
 
   function pad2(value) {
     return (value < 10 ? "0" : "") + value;
+  }
+
+  // ---- 排班认领：未来 7 天谁负责 ----------------------------------------
+
+  function shanghaiDateKey(offsetDays) {
+    var todayKey = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Shanghai" });
+    var base = new Date(todayKey + "T00:00:00");
+    var day = new Date(base.getTime() + (offsetDays || 0) * 86400000);
+    return day.getFullYear() + "-" + pad2(day.getMonth() + 1) + "-" + pad2(day.getDate());
+  }
+
+  function shiftKey(pointId, date) { return pointId + "|" + date; }
+
+  function loadShifts() {
+    return api.request("/api/v1/feeding-shifts?days=7").then(function (payload) {
+      state.shifts = payload;
+      var index = {};
+      (payload.items || []).forEach(function (item) {
+        // 已取消的班次视同空档：即使后端仍返回，也不能占住格子
+        if (item.status === "CANCELLED") return;
+        index[shiftKey(item.point_id, item.shift_date)] = item;
+      });
+      state.shiftIndex = index;
+      renderShiftGrid();
+      renderFeeding();
+      renderHomeFeeding();
+    }).catch(function () {
+      state.shifts = null;
+      state.shiftIndex = {};
+      renderShiftGrid();
+      var status = byId("shift-status");
+      if (status) { status.textContent = "排班加载失败，稍后会自动重试。"; status.hidden = false; status.classList.add("error"); }
+    });
+  }
+
+  function renderShiftGrid() {
+    var head = byId("shift-head-row");
+    var body = byId("shift-grid-body");
+    if (!head || !body) return;
+    var status = byId("shift-status");
+    if (status) { status.hidden = true; status.textContent = ""; }
+
+    var labels = ["日", "一", "二", "三", "四", "五", "六"];
+    var headers = '<th class="shift-corner">喂食点</th>';
+    for (var offset = 0; offset < 7; offset++) {
+      var key = shanghaiDateKey(offset);
+      headers += "<th>" + (offset === 0 ? "今" : labels[new Date(key + "T00:00:00").getDay()]) + "</th>";
+    }
+    head.innerHTML = headers;
+
+    var points = state.feedingPoints.slice(0, 6);
+    body.innerHTML = points.length ? points.map(function (point) {
+      var cells = '<td><span class="shift-point" title="' + escapeHtml(point.name) + '">' + escapeHtml(point.name) + "</span></td>";
+      for (var offset = 0; offset < 7; offset++) {
+        var date = shanghaiDateKey(offset);
+        var shift = state.shiftIndex[shiftKey(point.id, date)];
+        var cls = "shift-cell" + (offset === 0 ? " is-today" : "");
+        if (shift && shift.status === "DONE") {
+          cells += '<td><span class="' + cls + ' is-done" title="已完成">完成</span></td>';
+        } else if (shift && shift.is_mine) {
+          cells += '<td><button class="' + cls + ' is-mine" type="button" data-shift-release="' + escapeHtml(shift.id) + '" title="点击取消我这一天的认领">我</button></td>';
+        } else if (shift) {
+          cells += '<td><span class="' + cls + ' is-taken" title="已被认领">' + escapeHtml(shift.user_label) + "</span></td>";
+        } else {
+          cells += '<td><button class="' + cls + '" type="button" data-shift-claim="' + escapeHtml(point.id + "|" + date) + '" title="认领这一天的投喂">认领</button></td>';
+        }
+      }
+      return "<tr>" + cells + "</tr>";
+    }).join("") : '<tr><td class="shift-corner" colspan="8">还没有可排班的喂食点。</td></tr>';
+
+    var summary = byId("shift-summary");
+    if (!summary) return;
+    if (!points.length) { summary.textContent = "还没有可排班的喂食点。"; return; }
+    var today = shanghaiDateKey(0);
+    var takenToday = points.filter(function (point) { return state.shiftIndex[shiftKey(point.id, today)]; }).length;
+    var mine = ((state.shifts && state.shifts.items) || []).filter(function (item) { return item.is_mine; }).length;
+    summary.textContent = "今天 " + takenToday + "/" + points.length + " 个喂食点已有人负责" +
+      (mine ? "；我已认领 " + mine + " 天" : "；点某一天的「认领」挑一天你来负责");
+  }
+
+  function claimShift(token, button) {
+    var parts = String(token || "").split("|");
+    if (parts.length !== 2 || !requireLogin() || state.submitting) return;
+    state.submitting = true;
+    button.disabled = true;
+    button.textContent = "…";
+    api.request("/api/v1/feeding-points/" + encodeURIComponent(parts[0]) + "/shifts", {
+      method: "POST", body: { shift_date: parts[1] }
+    }).then(function () {
+      toast("已认领 " + parts[1] + " 的投喂，记得打卡");
+      return loadShifts();
+    }).catch(function (error) {
+      toast(errorText(error));
+      button.disabled = false;
+      button.textContent = "认领";
+    }).finally(function () { state.submitting = false; });
+  }
+
+  function releaseShift(shiftId, button) {
+    if (state.submitting) return;
+    state.submitting = true;
+    button.disabled = true;
+    api.request("/api/v1/feeding-shifts/" + encodeURIComponent(shiftId) + "/release", { method: "POST" })
+      .then(function () {
+        toast("已取消这一天的认领");
+        return loadShifts();
+      })
+      .catch(function (error) { toast(errorText(error)); button.disabled = false; })
+      .finally(function () { state.submitting = false; });
   }
 
   function loadFeedingPoints(append) {
@@ -676,6 +795,8 @@
       ? state.feedingPoints.map(feedingPointCard).join("")
       : emptyCard("还没有喂食点", "管理员发布喂食点后，这里就能打卡记录投喂。");
     byId("load-more-feeding").hidden = !state.cursors.feedingPoints || Boolean(state.nearby);
+    // 排班表按喂食点分行，喂食点列表可能比排班后到，所以这里也要重画一次
+    renderShiftGrid();
     var line = byId("feeding-today-line");
     if (line) {
       var pending = state.feedingPoints.filter(function (point) { return point.needs_feed; }).length;
@@ -783,7 +904,8 @@
     }).then(function () {
       toast("打卡成功，谢谢你的投喂");
       return Promise.all([
-        loadFeedingPoints(false), loadFeedingStats(), loadMyFeedingLogs(), loadHomeFeeding(), loadFeedingSummary()
+        loadFeedingPoints(false), loadFeedingStats(), loadMyFeedingLogs(), loadHomeFeeding(),
+        loadFeedingSummary(), loadShifts()
       ]);
     }).then(function () { return true; }).catch(function (error) {
       toast(errorText(error));
@@ -867,6 +989,7 @@
     loadFeedingStats();
     loadMyFeedingLogs();
     loadFeedingSummary();
+    loadShifts();
     if (!state.feedingPoints.length) return loadFeedingPoints(false);
     return Promise.resolve();
   }
@@ -1419,6 +1542,10 @@
     if (checkInButton) { checkIn(checkInButton.dataset.feedingCheckin, checkInButton); return; }
     var feedDetailButton = event.target.closest("[data-feeding-detail]");
     if (feedDetailButton) { openFeedSheet(feedDetailButton.dataset.feedingDetail); return; }
+    var shiftClaimButton = event.target.closest("[data-shift-claim]");
+    if (shiftClaimButton) { claimShift(shiftClaimButton.dataset.shiftClaim, shiftClaimButton); return; }
+    var shiftReleaseButton = event.target.closest("[data-shift-release]");
+    if (shiftReleaseButton) { releaseShift(shiftReleaseButton.dataset.shiftRelease, shiftReleaseButton); return; }
     var reportButton = event.target.closest("[data-task-report]");
     if (reportButton) { openTaskSheet(reportButton.dataset.taskReport); return; }
     var claim = event.target.closest(".claim-task");
@@ -1447,6 +1574,7 @@
   byId("load-more-feeding").addEventListener("click", function () { loadFeedingPoints(true); });
   byId("sort-nearby").addEventListener("click", function (event) { sortNearby(event.currentTarget); });
   byId("feed-form").addEventListener("submit", submitFeed);
+  byId("refresh-shifts").addEventListener("click", function () { loadShifts(); });
   byId("refresh-my-feeding").addEventListener("click", function () { loadFeedingStats(); loadMyFeedingLogs(); });
   byId("auth-form").addEventListener("submit", handleAuth);
   byId("community-form").addEventListener("submit", handleCommunity);

@@ -172,6 +172,21 @@ class FeedingLogCreate(BaseModel):
     photo_asset_id: Optional[str] = Field(default=None, max_length=32)
 
 
+class FeedingShiftClaim(BaseModel):
+    """One volunteer claiming the feeding duty for a point on one day."""
+
+    shift_date: str = Field(min_length=10, max_length=10)
+    note: str = Field(default="", max_length=200)
+
+    @field_validator("shift_date")
+    @classmethod
+    def require_iso_calendar_date(cls, value: str) -> str:
+        try:
+            return datetime.strptime(value, "%Y-%m-%d").date().isoformat()
+        except (TypeError, ValueError):
+            raise ValueError("invalid_shift_date")
+
+
 class TaskComplete(BaseModel):
     note: str = Field(default="", max_length=1000)
     evidence_asset_id: Optional[str] = Field(default=None, max_length=32)

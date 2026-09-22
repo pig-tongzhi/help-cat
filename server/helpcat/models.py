@@ -188,6 +188,35 @@ class FeedingLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
 
 
+class FeedingShift(Base):
+    """A volunteer's claim to feed one point on one Asia/Shanghai calendar day.
+
+    Cancelled claims are kept as history, so the live-slot uniqueness is a
+    partial index that only covers rows which are not CANCELLED.
+    """
+
+    __tablename__ = "feeding_shifts"
+    __table_args__ = (
+        CheckConstraint("status IN ('CLAIMED','DONE','CANCELLED')", name="ck_feeding_shifts_status"),
+        Index(
+            "uq_feeding_shifts_live_slot",
+            "point_id", "shift_date",
+            unique=True,
+            sqlite_where=sql_text("status != 'CANCELLED'"),
+            postgresql_where=sql_text("status != 'CANCELLED'"),
+        ),
+    )
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    point_id: Mapped[str] = mapped_column(ForeignKey("feeding_points.id"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    shift_date: Mapped[str] = mapped_column(String(10), index=True)
+    status: Mapped[str] = mapped_column(String(20), default="CLAIMED", index=True)
+    note: Mapped[str] = mapped_column(Text, default="")
+    is_qa: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sql_text("0"), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+
 class CatEvent(Base):
     """A dated entry in a cat's public timeline (相遇、投喂、就医、检查、领养…)."""
 

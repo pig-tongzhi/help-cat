@@ -60,6 +60,8 @@
 
 固定喂食点。保存名称、可选小区、位置说明、投喂时间、照看说明、可选经纬度（`latitude`/`longitude`，用于居民端「按距离排序」）和状态（`ACTIVE`/`PAUSED`/`ARCHIVED`）。
 
+`feeding_shifts` 记录排班认领：喂食点 + 日期 + 认领人，状态 `CLAIMED`/`DONE`/`CANCELLED`。同一喂食点同一天只保留一个非取消的认领；认领人当天打卡成功后，该班次自动置为 `DONE`。对外只暴露脱敏后的姓名（首字 + `**`），不返回 openid 或原始昵称。
+
 ### feeding_logs
 
 志愿者打卡。按 `(point_id, user_id, fed_on)` 唯一，`fed_on` 为 Asia/Shanghai 日期，因此同一个人同一天在同一喂食点只记一次。
@@ -163,6 +165,10 @@
 | POST | `/feeding-points/{id}/logs` | 登录 | 打卡投喂；同一人同一天重复提交返回原记录 |
 | GET | `/feeding-logs/mine` | 登录 | 我的打卡记录 |
 | GET | `/feeding-logs/mine/summary` | 登录 | 打卡进度：连续天数、本周/累计天数、今日是否打卡、下一里程碑（3/7/14/30/60 天）|
+| GET | `/feeding-shifts` | 公开 | 未来若干天（默认 7、最多 14）的排班：`point_id`/`shift_date`/`status`/`user_label`（脱敏，如 `张**`）/`is_mine` |
+| POST | `/feeding-points/{id}/shifts` | 登录 | 认领某一天的投喂；日期需在今天到 +13 天之间；该点该天已被人认领则 409 |
+| POST | `/feeding-shifts/{id}/release` | 认领者或管理员 | 取消认领（已完成的班次仅管理员可取消）|
+| GET | `/feeding-shifts/mine` | 登录 | 我认领的、今天及以后的班次（游标分页）|
 | POST | `/admin/feeding-points` | ADMIN+ | 新建喂食点 |
 | PATCH | `/admin/feeding-points/{id}` | ADMIN+ | 修改喂食点或状态 |
 | GET | `/admin/feeding-points` | ADMIN+ | 全部状态的喂食点分页 |
@@ -214,7 +220,7 @@
 ## 数据库迁移
 
 - SQLAlchemy 模型是运行时数据结构来源。
-- Alembic 位于 `server/helpcat/migrations/`；`002_community_candidates` 添加候选字段，`003_scale_integrity` 增加猫咪版本/幂等键和完整性约束，`004_public_metrics` 增加 QA 标记，`005_public_profiles` 增加唯一 `profile_key` 并兼容回填旧 77，`007_lead_messages` 增加欢迎页留言表，`008_feeding_and_task_closure` 增加喂食点、打卡与猫咪时间线表，并为任务补充完成/取消/凭证字段，`009_feeding_point_location` 给喂食点补可选经纬度。
+- Alembic 位于 `server/helpcat/migrations/`；`002_community_candidates` 添加候选字段，`003_scale_integrity` 增加猫咪版本/幂等键和完整性约束，`004_public_metrics` 增加 QA 标记，`005_public_profiles` 增加唯一 `profile_key` 并兼容回填旧 77，`007_lead_messages` 增加欢迎页留言表，`008_feeding_and_task_closure` 增加喂食点、打卡与猫咪时间线表，并为任务补充完成/取消/凭证字段，`009_feeding_point_location` 给喂食点补可选经纬度，`010_feeding_shifts` 增加排班认领表（同一喂食点同一天只允许一个有效认领，用部分唯一索引实现，取消后保留历史）。
 - 迁移环境读取 `HELPCAT_DATABASE_URL`；生产执行时必须提供绝对 SQLite URL。
 - `ensure_schema()` 为早期 SQLite 试运行提供小范围向前兼容补列，不应替代正式生产迁移。
 - 迁移 PostgreSQL 前必须先做数据备份、双向数量校验、业务抽样和回滚演练。

@@ -175,6 +175,21 @@
           </div>
         </section>
 
+        <section class="shift-panel" aria-labelledby="shift-title">
+          <div class="section-title">
+            <div><span class="section-kicker">WEEKLY ROTA</span><h2 id="shift-title">未来 7 天谁负责</h2></div>
+            <button class="text-button" id="refresh-shifts" type="button">刷新</button>
+          </div>
+          <p class="shift-summary" id="shift-summary" role="status"></p>
+          <div class="shift-scroll">
+            <table class="shift-grid" id="shift-grid">
+              <thead><tr id="shift-head-row"><th class="shift-corner">喂食点</th></tr></thead>
+              <tbody id="shift-grid-body"></tbody>
+            </table>
+          </div>
+          <p class="module-status" id="shift-status" hidden></p>
+        </section>
+
         <div class="feeding-stats" id="feeding-stats" aria-label="投喂统计"></div>
 
         <div class="feeding-toolbar">

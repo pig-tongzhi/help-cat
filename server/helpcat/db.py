@@ -137,3 +137,8 @@ def ensure_schema(engine):
             ON communities (city, district, normalized_name)
             WHERE status NOT IN ('MERGED','REJECTED','ARCHIVED','HIDDEN')
         """))
+        connection.execute(text("""
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_feeding_shifts_live_slot
+            ON feeding_shifts (point_id, shift_date)
+            WHERE status != 'CANCELLED'
+        """))

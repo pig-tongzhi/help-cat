@@ -917,6 +917,42 @@ button, a, label, select, .nav-item, .quick-action, .primary-action,
 /* 卡片上的两个动作：快速打卡 + 打卡并记录 */
 .feeding-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; flex: 0 0 auto; }
 
+/* ---------- 排班认领（未来 7 天谁负责） ---------- */
+
+.shift-panel { margin-bottom: 20px; padding: 20px; border: 1px solid var(--line); border-radius: 24px; background: var(--surface); }
+.shift-summary { margin: 0 0 14px; color: var(--ink-2); font-size: 13px; }
+.shift-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.shift-grid { border-collapse: separate; border-spacing: 6px; width: max-content; }
+.shift-grid thead th { min-width: 48px; color: var(--muted); font-size: 11px; font-weight: 700; text-align: center; white-space: nowrap; }
+.shift-grid .shift-corner { min-width: 104px; text-align: left; }
+.shift-grid td { padding: 0; vertical-align: middle; }
+.shift-point { display: block; max-width: 116px; overflow: hidden; color: var(--ink); font-size: 12px; font-weight: 700; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+.shift-cell {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  min-height: 44px;
+  padding: 0 4px;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.shift-cell.is-today { box-shadow: inset 0 0 0 2px rgba(217,104,58,.22); }
+.shift-cell.is-taken { border-style: solid; background: var(--surface-soft); color: var(--ink-2); font-weight: 700; cursor: default; }
+.shift-cell.is-mine { border-style: solid; border-color: transparent; background: var(--brand); color: #fff; font-weight: 800; }
+.shift-cell.is-done { border-style: solid; border-color: transparent; background: var(--success-soft); color: var(--success, #2F8F68); font-weight: 800; cursor: default; }
+.shift-cell:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.feeding-shift-line { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; }
+@media (max-width: 720px) {
+  .shift-panel { padding: 16px; border-radius: 20px; }
+  .shift-grid .shift-corner { min-width: 88px; }
+  .shift-point { max-width: 96px; }
+}
+
 /* 连续打卡卡的窄屏堆叠必须写在上面基础规则之后：
    同优先级下后写的生效，否则 390px 下仍是 150px+180px 两列，
    7 天格会溢出到视口外（实测超出 45px）。 */

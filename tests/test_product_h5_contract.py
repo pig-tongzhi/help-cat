@@ -188,6 +188,23 @@ class ProductH5ContractTests(unittest.TestCase):
         # 快速打卡这一条路径必须保留，不能因为多了详情弹层而变慢
         self.assertIn("data-feeding-checkin", script)
 
+    def test_weekly_rota_surface_is_wired(self):
+        html, script, styles = self.h5(), self.script(), self.styles()
+        for marker in (
+            'id="shift-grid"', 'id="shift-head-row"', 'id="shift-grid-body"',
+            'id="shift-summary"', 'id="refresh-shifts"',
+        ):
+            self.assertIn(marker, html)
+        for marker in (
+            "/api/v1/feeding-shifts", "loadShifts", "renderShiftGrid", "claimShift", "releaseShift",
+            "data-shift-claim", "data-shift-release", "shanghaiDateKey", "todayShiftLine",
+        ):
+            self.assertIn(marker, script)
+        for marker in (".shift-panel", ".shift-cell.is-mine", ".shift-cell.is-done", ".shift-scroll"):
+            self.assertIn(marker, styles)
+        # 排班格在手机上要能横向滚动，且触摸目标不小于 44px
+        self.assertIn("min-height: 44px", styles)
+
     def test_no_leftover_browser_probe_files(self):
         leftovers = sorted(p.name for p in (ROOT / "app" / "rescue").iterdir() if p.name.startswith("__"))
         self.assertEqual(leftovers, [], "请删除临时探针文件：%s" % leftovers)
