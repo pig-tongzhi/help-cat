@@ -224,6 +224,17 @@ class ProductH5ContractTests(unittest.TestCase):
         self.assertIn("background: var(--brand)", rules[-1])
         self.assertIn("border-radius: 999px", rules[-1])
 
+    def test_dialogs_move_focus_in_and_give_it_back(self):
+        html, script = self.h5(), self.script()
+        # 弹层必须是 </main> 之后的兄弟节点：给背景加 inert 才不会把弹层自己一起冻住
+        self.assertLess(html.index("</main>"), html.index('id="sheet-backdrop"'), "弹层不能放进 main 里面")
+        self.assertIn("sheetReturnFocus", script, "关闭弹层要把焦点还给触发元素")
+        self.assertIn("function setSheetBackgroundInert", script)
+        self.assertIn("el.inert = on", script)
+        self.assertIn('el.setAttribute("aria-hidden", "true")', script)
+        self.assertIn('sheet.querySelector("[data-close-sheet]")', script, "没有输入框的弹层也要把焦点收进来")
+        self.assertIn("document.contains(sheetReturnFocus)", script, "归还焦点前要确认元素还在文档里")
+
     def test_no_leftover_browser_probe_files(self):
         leftovers = sorted(p.name for p in (ROOT / "app" / "rescue").iterdir() if p.name.startswith("__"))
         self.assertEqual(leftovers, [], "请删除临时探针文件：%s" % leftovers)

@@ -3,6 +3,9 @@
 
   var api = window.HelpCatApi;
   var communityForm = window.HelpCatCommunityForm;
+  // 打开弹层前持有焦点的元素，关闭后归还焦点
+  var sheetReturnFocus = null;
+
   var state = {
     user: null,
     communities: [],
@@ -1188,19 +1191,48 @@
     });
   }
 
+  // 弹层打开时把背景从无障碍树和 Tab 顺序里摘掉：
+  // 否则读屏和键盘还能跑到被遮住的内容上（弹层在 </main> 之后，不受影响）。
+  function setSheetBackgroundInert(on) {
+    ["main-content", "bottom-nav", "floating-add-cat"].forEach(function (id) {
+      var el = byId(id);
+      if (!el) return;
+      el.inert = on;
+      if (on) el.setAttribute("aria-hidden", "true"); else el.removeAttribute("aria-hidden");
+    });
+    var header = document.querySelector(".app-header");
+    if (header) {
+      header.inert = on;
+      if (on) header.setAttribute("aria-hidden", "true"); else header.removeAttribute("aria-hidden");
+    }
+  }
+
   function openSheet(id) {
+    if (!document.body.classList.contains("sheet-open")) {
+      // 记住是谁打开的，关闭后把焦点还回去
+      sheetReturnFocus = document.activeElement && typeof document.activeElement.focus === "function"
+        ? document.activeElement : null;
+    }
     byId("sheet-backdrop").hidden = false;
     byId(id).hidden = false;
     document.body.classList.add("sheet-open");
+    setSheetBackgroundInert(true);
     window.setTimeout(function () {
-      var input = byId(id).querySelector("input:not([type=file])");
-      if (input) input.focus();
+      var sheet = byId(id);
+      if (!sheet.hasAttribute("tabindex")) sheet.setAttribute("tabindex", "-1");
+      // 没有输入框的弹层（例如猫咪详情）也要把焦点收进来，否则焦点会留在被遮住的背景上
+      var target = sheet.querySelector("input:not([type=file])") || sheet.querySelector("[data-close-sheet]") || sheet;
+      target.focus();
     }, 30);
   }
   function closeSheets() {
+    var wasOpen = document.body.classList.contains("sheet-open");
     byId("sheet-backdrop").hidden = true;
     document.querySelectorAll(".sheet").forEach(function (sheet) { sheet.hidden = true; });
     document.body.classList.remove("sheet-open");
+    setSheetBackgroundInert(false);
+    if (wasOpen && sheetReturnFocus && document.contains(sheetReturnFocus)) sheetReturnFocus.focus();
+    sheetReturnFocus = null;
   }
   function openAuth() {
     setAuthMode("login");
