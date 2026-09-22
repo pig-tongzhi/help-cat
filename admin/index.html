@@ -32,6 +32,7 @@
         <button class="side-nav active" type="button" data-section="overview"><span class="nav-dot overview-dot"></span>总览</button>
         <button class="side-nav" type="button" data-section="cats"><span class="nav-dot cat-dot"></span>猫咪档案</button>
         <button class="side-nav" type="button" data-section="communities"><span class="nav-dot community-dot"></span>小区管理</button>
+        <button class="side-nav" type="button" data-section="messages"><span class="nav-dot message-dot"></span>留言板<span class="nav-badge" id="message-nav-badge" hidden>0</span></button>
         <button class="side-nav" id="users-nav" type="button" data-section="users" hidden><span class="nav-dot user-dot"></span>用户与权限</button>
       </nav>
       <div class="sidebar-foot"><span class="live-dot"></span><span>服务运行中</span></div>
@@ -50,6 +51,7 @@
           <article><span class="metric-symbol cat-symbol"></span><div><strong id="cat-count">0</strong><small>猫咪档案</small></div></article>
           <article><span class="metric-symbol community-symbol"></span><div><strong id="community-count">0</strong><small>小区</small></div></article>
           <article class="pending-card"><span class="metric-symbol review-symbol"></span><div><strong id="pending-count">0</strong><small>待审核事项</small></div></article>
+          <article><span class="metric-symbol message-symbol"></span><div><strong id="message-count">0</strong><small>待联系留言</small></div></article>
           <article id="user-summary" hidden><span class="metric-symbol user-symbol"></span><div><strong id="user-count">0</strong><small>平台注册用户</small></div></article>
         </div>
         <div class="welcome-panel"><div><span class="eyebrow">TODAY'S GOVERNANCE</span><h2>让每一条社区信息<br>都真实、清晰、可追溯</h2><p>优先处理待审核档案；隐藏和归档不会物理删除数据。</p></div><button class="button primary" type="button" data-section-link="cats">处理待审核档案</button></div>
@@ -67,6 +69,19 @@
         <form class="inline-form" id="community-form"><label>小区名称<input id="community-name" required placeholder="例如：聚源福小区"></label><label>所属街道<input id="community-street" required value="银湖街道"></label><button class="button primary" type="submit">新增小区</button></form>
         <div id="communities" class="list"></div>
         <div class="load-more-row"><button class="button secondary" id="load-more-admin-communities" type="button" hidden>加载更多小区</button></div>
+      </section>
+
+      <section class="admin-section" data-admin-section="messages" hidden>
+        <div class="section-heading"><div><span class="eyebrow">VISITOR LEADS</span><h2>留言板</h2><p>首页访客留下的联系方式。联系上之后请标记状态，避免重复添加。</p></div><button class="button secondary" id="refresh-messages" type="button">刷新留言</button></div>
+        <div class="message-filters" role="group" aria-label="按状态筛选留言">
+          <button class="filter-chip active" type="button" data-message-filter="">全部</button>
+          <button class="filter-chip" type="button" data-message-filter="NEW">待联系</button>
+          <button class="filter-chip" type="button" data-message-filter="CONTACTED">已联系</button>
+          <button class="filter-chip" type="button" data-message-filter="CLOSED">已关闭</button>
+        </div>
+        <p class="panel-message" id="message-panel-message" role="status"></p>
+        <div id="messages" class="list"></div>
+        <div class="load-more-row"><button class="button secondary" id="load-more-admin-messages" type="button" hidden>加载更多留言</button></div>
       </section>
 
       <section class="admin-section users-panel" id="users-panel" data-admin-section="users" hidden>

@@ -157,3 +157,32 @@ class ImpactEvent(Base):
     reversed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     reversed_by: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
     is_qa: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sql_text("0"), nullable=False, index=True)
+
+
+class LeadMessage(Base):
+    """A contact left by a visitor on the public welcome page.
+
+    Anyone may create one without an account, so this table records the
+    originating IP for abuse control and never exposes the contact back to
+    unauthenticated callers.
+    """
+
+    __tablename__ = "lead_messages"
+    __table_args__ = (
+        CheckConstraint("contact_type IN ('WECHAT','PHONE','QQ','OTHER')", name="ck_lead_messages_contact_type"),
+        CheckConstraint("status IN ('NEW','CONTACTED','CLOSED')", name="ck_lead_messages_status"),
+    )
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    name: Mapped[str] = mapped_column(String(80), default="")
+    contact_type: Mapped[str] = mapped_column(String(20), default="WECHAT", index=True)
+    contact: Mapped[str] = mapped_column(String(120), index=True)
+    message: Mapped[str] = mapped_column(Text, default="")
+    source: Mapped[str] = mapped_column(String(80), default="")
+    status: Mapped[str] = mapped_column(String(20), default="NEW", index=True)
+    admin_note: Mapped[str] = mapped_column(Text, default="")
+    client_ip: Mapped[str] = mapped_column(String(64), default="")
+    handled_by: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    handled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_qa: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sql_text("0"), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)

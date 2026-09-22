@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import Literal, Optional
 
 
@@ -113,3 +113,34 @@ class ImpactEventCreate(BaseModel):
     amount: int = Field(default=1, ge=1, le=1000000)
     note: str = Field(default="", max_length=1000)
     occurred_at: Optional[datetime] = None
+
+
+class LeadMessageCreate(BaseModel):
+    """A contact left by a visitor on the public welcome page."""
+
+    name: str = Field(default="", max_length=80)
+    contact_type: Literal["WECHAT", "PHONE", "QQ", "OTHER"] = "WECHAT"
+    contact: str = Field(min_length=2, max_length=120)
+    message: str = Field(default="", max_length=1000)
+    source: str = Field(default="", max_length=80)
+
+    @field_validator("name", "contact", "message", "source")
+    @classmethod
+    def strip_text(cls, value: str) -> str:
+        return value.strip()
+
+    @model_validator(mode="after")
+    def require_real_contact(self):
+        if len(self.contact) < 2:
+            raise ValueError("contact_required")
+        return self
+
+
+class LeadMessageStatusUpdate(BaseModel):
+    status: Literal["NEW", "CONTACTED", "CLOSED"]
+    note: str = Field(default="", max_length=500)
+
+    @field_validator("note")
+    @classmethod
+    def strip_note(cls, value: str) -> str:
+        return value.strip()

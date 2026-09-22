@@ -7,7 +7,7 @@
   var communityReview = window.HelpCatCommunityReview;
   var token = sessionStorage.getItem(TOKEN_KEY) || "";
   var profile = null;
-  var state = { cats: [], communities: [], users: [], cursors: { cats: null, communities: null, users: null }, section: "overview", busy: false };
+  var state = { cats: [], communities: [], users: [], messages: [], newMessageCount: 0, messageFilter: "", cursors: { cats: null, communities: null, users: null, messages: null }, section: "overview", busy: false };
 
   function byId(id) { return document.getElementById(id); }
   function esc(value) {
@@ -49,6 +49,8 @@
       community_merge_target_invalid: "请选择另一个已开放小区作为合并目标",
       community_reassign_target_invalid: "只能把猫咪改挂到已开放小区",
       stale_cat_version: "猫咪档案刚刚已更新，已刷新最新内容",
+      lead_message_not_found: "这条留言已被删除或不存在",
+      too_many_messages: "该访客提交过于频繁，请稍后再试",
       network_error: "网络连接失败，请稍后重试"
     }[error && error.code] || (error && error.message) || "操作失败，请稍后重试";
   }
@@ -112,15 +114,22 @@
   }
   function loadAll() {
     showGlobal("正在同步管理数据…", false);
-    var requests = [request("/api/v1/cats?limit=24"), request("/api/v1/admin/communities?limit=24")];
+    var requests = [
+      request("/api/v1/cats?limit=24"),
+      request("/api/v1/admin/communities?limit=24"),
+      request("/api/v1/admin/messages?limit=24" + (state.messageFilter ? "&status=" + encodeURIComponent(state.messageFilter) : ""))
+    ];
     if (profile.role === "SUPER_ADMIN") requests.push(request("/api/v1/admin/users?limit=24"));
     return Promise.all(requests).then(function (results) {
       state.cats = results[0].items || [];
       state.communities = results[1].items || [];
       state.cursors.cats = results[0].next_cursor || null;
       state.cursors.communities = results[1].next_cursor || null;
-      state.users = results[2] ? results[2].items || [] : [];
-      state.cursors.users = results[2] ? results[2].next_cursor || null : null;
+      state.messages = results[2].items || [];
+      state.cursors.messages = results[2].next_cursor || null;
+      state.newMessageCount = Number(results[2].new_count || 0);
+      state.users = results[3] ? results[3].items || [] : [];
+      state.cursors.users = results[3] ? results[3].next_cursor || null : null;
       showGlobal("", false);
       render();
     }).catch(function (error) {
@@ -138,9 +147,10 @@
     state.busy = true;
     button.disabled = true;
     button.textContent = "正在加载…";
-    var route = type === "cats" ? "/api/v1/cats" : type === "users" ? "/api/v1/admin/users" : "/api/v1/admin/communities";
+    var route = type === "cats" ? "/api/v1/cats" : type === "users" ? "/api/v1/admin/users" : type === "messages" ? "/api/v1/admin/messages" : "/api/v1/admin/communities";
     var params = ["limit=24", "cursor=" + encodeURIComponent(cursor)];
     if (type === "cats" && byId("cat-search").value.trim()) params.push("q=" + encodeURIComponent(byId("cat-search").value.trim()));
+    if (type === "messages" && state.messageFilter) params.push("status=" + encodeURIComponent(state.messageFilter));
     request(route + "?" + params.join("&")).then(function (body) {
       state[type] = communityReview.appendUnique(state[type], body.items || []);
       state.cursors[type] = body.next_cursor || null;
@@ -150,7 +160,7 @@
     }).finally(function () {
       state.busy = false;
       button.disabled = false;
-      button.textContent = type === "cats" ? "加载更多猫咪" : type === "users" ? "加载更多用户" : "加载更多小区";
+      button.textContent = type === "cats" ? "加载更多猫咪" : type === "users" ? "加载更多用户" : type === "messages" ? "加载更多留言" : "加载更多小区";
     });
   }
   function loadUsers() {
@@ -244,11 +254,83 @@
     }).join("") : '<div class="empty-state"><strong>没有匹配用户</strong><p>请检查用户名或昵称。</p></div>';
     byId("load-more-admin-users").hidden = !state.cursors.users;
   }
+  function messageStatusLabel(value) {
+    return { NEW: "待联系", CONTACTED: "已联系", CLOSED: "已关闭" }[value] || value;
+  }
+  function messageStatusTone(value) {
+    return { NEW: "pending", CONTACTED: "approved", CLOSED: "muted" }[value] || "pending";
+  }
+  function contactTypeLabel(value) {
+    return { WECHAT: "微信", PHONE: "手机号", QQ: "QQ", OTHER: "其他" }[value] || value;
+  }
+  function formatMessageTime(value) {
+    if (!value) return "";
+    var date = new Date(value);
+    if (isNaN(date.getTime())) return String(value);
+    try {
+      return new Intl.DateTimeFormat("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(date);
+    } catch (error) {
+      return String(value);
+    }
+  }
+  function renderMessages() {
+    byId("messages").innerHTML = state.messages.length ? state.messages.map(function (item) {
+      var wanted = item.message ? '<p>' + esc(item.message) + '</p>' : '<p class="lead-empty">访客没有留下留言内容</p>';
+      var note = item.admin_note ? '<p class="lead-note">处理备注：' + esc(item.admin_note) + '</p>' : '';
+      var source = item.source ? '<p class="lead-source">来源：' + esc(item.source) + '</p>' : '';
+      var actions = item.status === "CLOSED"
+        ? '<button data-message-action="reopen" data-id="' + esc(item.id) + '">重新打开</button>'
+        : '<button data-message-action="contacted" data-id="' + esc(item.id) + '">标记已联系</button><button class="danger" data-message-action="closed" data-id="' + esc(item.id) + '">关闭</button>';
+      return '<article class="list-item lead-item"><div class="entity-icon lead-entity">言</div><div class="entity-copy"><strong>' + esc(item.name || "未留称呼") + '<small>' + esc(contactTypeLabel(item.contact_type)) + ' · ' + esc(formatMessageTime(item.created_at)) + '</small></strong><p class="lead-contact">' + esc(item.contact) + '</p>' + wanted + note + source + '<div class="badges"><span class="lead-status ' + esc(messageStatusTone(item.status)) + '">' + esc(messageStatusLabel(item.status)) + '</span></div></div><div class="actions">' + actions + '</div></article>';
+    }).join("") : '<div class="empty-state"><strong>暂无留言</strong><p>把欢迎页链接发出去后，访客留下的联系方式会出现在这里。</p></div>';
+    byId("load-more-admin-messages").hidden = !state.cursors.messages;
+  }
+  function syncMessageBadge() {
+    byId("message-count").textContent = String(state.newMessageCount);
+    var badge = byId("message-nav-badge");
+    badge.textContent = String(state.newMessageCount);
+    badge.hidden = !state.newMessageCount;
+  }
+  function loadMessages() {
+    var query = "limit=24" + (state.messageFilter ? "&status=" + encodeURIComponent(state.messageFilter) : "");
+    return request("/api/v1/admin/messages?" + query).then(function (body) {
+      state.messages = body.items || [];
+      state.cursors.messages = body.next_cursor || null;
+      state.newMessageCount = Number(body.new_count || 0);
+      byId("message-panel-message").textContent = "";
+      renderMessages();
+      syncMessageBadge();
+    }).catch(function (error) {
+      byId("message-panel-message").textContent = errorText(error);
+    });
+  }
+  function actOnMessage(button) {
+    if (state.busy) return;
+    state.busy = true;
+    button.disabled = true;
+    var next = { contacted: "CONTACTED", closed: "CLOSED", reopen: "NEW" }[button.dataset.messageAction];
+    request("/api/v1/admin/messages/" + encodeURIComponent(button.dataset.id) + "/status", { method: "POST", body: { status: next } })
+      .then(function () {
+        toast(next === "CONTACTED" ? "已标记为已联系" : next === "CLOSED" ? "已关闭这条留言" : "已重新打开");
+        return loadMessages();
+      })
+      .catch(function (error) { showGlobal(errorText(error), true); button.disabled = false; })
+      .finally(function () { state.busy = false; });
+  }
+  function setMessageFilter(filter) {
+    state.messageFilter = filter || "";
+    document.querySelectorAll("[data-message-filter]").forEach(function (button) {
+      button.classList.toggle("active", (button.dataset.messageFilter || "") === state.messageFilter);
+    });
+    return loadMessages();
+  }
   function render() {
     byId("cat-count").textContent = String(state.cats.length);
     byId("community-count").textContent = String(state.communities.length);
     byId("pending-count").textContent = String(state.cats.filter(function (cat) { return cat.review_status === "PENDING_REVIEW"; }).length + state.communities.filter(function (item) { return ["PENDING_REVIEW", "NEEDS_CHANGES"].indexOf(item.status) >= 0; }).length);
     byId("user-count").textContent = String(state.users.length);
+    syncMessageBadge();
+    renderMessages();
     renderCats();
     renderCommunities();
     renderUsers();
@@ -256,7 +338,7 @@
   function switchSection(section) {
     if (section === "users" && (!profile || profile.role !== "SUPER_ADMIN")) return;
     state.section = section;
-    var titles = { overview: "管理总览", cats: "猫咪档案", communities: "小区管理", users: "用户与权限" };
+    var titles = { overview: "管理总览", cats: "猫咪档案", communities: "小区管理", messages: "留言板", users: "用户与权限" };
     byId("page-title").textContent = titles[section] || "管理总览";
     document.querySelectorAll("[data-admin-section]").forEach(function (panel) {
       var active = panel.dataset.adminSection === section;
@@ -369,6 +451,8 @@
   byId("load-more-admin-cats").addEventListener("click", function (event) { loadMore("cats", event.currentTarget); });
   byId("load-more-admin-communities").addEventListener("click", function (event) { loadMore("communities", event.currentTarget); });
   byId("load-more-admin-users").addEventListener("click", function (event) { loadMore("users", event.currentTarget); });
+  byId("load-more-admin-messages").addEventListener("click", function (event) { loadMore("messages", event.currentTarget); });
+  byId("refresh-messages").addEventListener("click", loadMessages);
   byId("cat-search").addEventListener("input", scheduleAdminCatSearch);
   byId("user-search").addEventListener("input", renderUsers);
   byId("community-form").addEventListener("submit", function (event) {
@@ -389,6 +473,10 @@
     if (sectionButton) { switchSection(sectionButton.dataset.section || sectionButton.dataset.sectionLink); return; }
     var roleButton = event.target.closest("[data-user-id]");
     if (roleButton) { changeRole(roleButton); return; }
+    var filterChip = event.target.closest("[data-message-filter]");
+    if (filterChip) { setMessageFilter(filterChip.dataset.messageFilter); return; }
+    var messageButton = event.target.closest("[data-message-action]");
+    if (messageButton) { actOnMessage(messageButton); return; }
     var catButton = event.target.closest("[data-cat-action]");
     if (catButton) { actOnCat(catButton); return; }
     var communityButton = event.target.closest("[data-community-action]");
@@ -412,7 +500,7 @@
   });
 
   var initialSection = window.location.hash.replace("#", "");
-  if (["overview", "cats", "communities", "users"].indexOf(initialSection) >= 0) state.section = initialSection;
+  if (["overview", "cats", "communities", "messages", "users"].indexOf(initialSection) >= 0) state.section = initialSection;
   if (token) restoreSession().then(function () { switchSection(state.section); }).catch(function () {});
   else showLogin("");
 }());

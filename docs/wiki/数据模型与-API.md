@@ -52,6 +52,10 @@
 
 保存标题、说明、可选小区、状态、创建者、领取者和领取时间。
 
+### lead_messages
+
+欢迎页访客留下的联系方式。保存称呼、联系方式类型、联系方式、留言内容、来源渠道、处理状态（`NEW`/`CONTACTED`/`CLOSED`）、管理员备注、来源 IP、处理人和处理时间。`contact` 与 `status` 有索引；同一联系方式在去重窗口内重复提交会复用原记录。
+
 ### audit_logs
 
 保存操作者、动作、实体类型、实体 ID、操作前后 JSON 和时间。当前有写入能力，没有公开查询 API。
@@ -127,12 +131,25 @@
 | GET | `/admin/users` | SUPER_ADMIN | 用户游标分页 |
 | POST | `/admin/users/{id}/role` | SUPER_ADMIN | USER 与 ADMIN 之间切换 |
 
+## 欢迎页与留言
+
+| 方法 | 路径 | 权限 | 作用 |
+|---|---|---|---|
+| GET | `/public/contact` | 公开 | 欢迎页「查看管理员联系方式」要展示的微信号、手机号、二维码和说明 |
+| POST | `/public/messages` | 公开 | 访客无需账号提交联系方式；按 IP 限流并对相同联系方式去重 |
+| GET | `/admin/messages` | ADMIN+ | 留言游标分页，可用 `status` 筛选，同时返回待联系数量 `new_count` |
+| POST | `/admin/messages/{id}/status` | ADMIN+ | 标记 `NEW`/`CONTACTED`/`CLOSED` 并记录管理员备注，写入审计日志 |
+
+`/public/contact` 的内容由 `HELPCAT_ADMIN_WECHAT`、`HELPCAT_ADMIN_WECHAT_NOTE`、`HELPCAT_ADMIN_PHONE`、`HELPCAT_ADMIN_QR_IMAGE`、`HELPCAT_ADMIN_CONTACT_NOTE` 配置；欢迎页另外保留一份写死的微信号，作为 API 不可用时的兜底。留言是只写不读的：公开接口不会返回任何留言内容，读取必须带管理员令牌。
+
 ## 常见错误码
 
 | code | 含义 |
 |---|---|
 | `invalid_credentials` | 账号或密码错误 |
 | `username_exists` | 用户名已存在 |
+| `lead_message_not_found` | 留言不存在或已被删除 |
+| `too_many_messages` | 同一访客短时间提交过于频繁 |
 | `unauthorized` / `session_expired` | 未登录或会话过期 |
 | `user_disabled` | 账号停用 |
 | `forbidden` | 当前角色无权限 |
@@ -158,7 +175,7 @@
 ## 数据库迁移
 
 - SQLAlchemy 模型是运行时数据结构来源。
-- Alembic 位于 `server/helpcat/migrations/`；`002_community_candidates` 添加候选字段，`003_scale_integrity` 增加猫咪版本/幂等键和完整性约束，`004_public_metrics` 增加 QA 标记，`005_public_profiles` 增加唯一 `profile_key` 并兼容回填旧 77。
+- Alembic 位于 `server/helpcat/migrations/`；`002_community_candidates` 添加候选字段，`003_scale_integrity` 增加猫咪版本/幂等键和完整性约束，`004_public_metrics` 增加 QA 标记，`005_public_profiles` 增加唯一 `profile_key` 并兼容回填旧 77，`007_lead_messages` 增加欢迎页留言表。
 - 迁移环境读取 `HELPCAT_DATABASE_URL`；生产执行时必须提供绝对 SQLite URL。
 - `ensure_schema()` 为早期 SQLite 试运行提供小范围向前兼容补列，不应替代正式生产迁移。
 - 迁移 PostgreSQL 前必须先做数据备份、双向数量校验、业务抽样和回滚演练。

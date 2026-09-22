@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="zh-CN" data-app-version="20260922-welcome-r1">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#FDF7EE">
+  <meta name="description" content="帮帮小猫 Help Cat，流浪猫投喂与救助 · 社区互助。我在做一个帮流浪猫的网站，懂网站开发的、有喂猫经验的、单纯喜欢猫的都欢迎加入。">
+  <title>帮帮小猫 Help Cat · 流浪猫投喂与救助</title>
+  <link rel="icon" href="../rescue/assets/brand/favicon.svg?v=20260922-welcome-r1">
+  <link rel="apple-touch-icon" href="../rescue/assets/brand/apple-touch-icon.png?v=20260922-welcome-r1">
+  <link rel="stylesheet" href="styles.css?v=20260922-welcome-r1">
+</head>
+<body>
+  <a class="skip-link" href="#main-content">跳到主要内容</a>
+
+  <div class="page">
+    <header class="site-header">
+      <a class="brand" href="./" aria-label="帮帮小猫首页">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span class="brand-copy"><strong>帮帮小猫</strong><small>HELP CAT</small></span>
+      </a>
+      <p class="brand-sub">流浪猫投喂与救助 · 社区互助</p>
+    </header>
+
+    <main id="main-content">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <span class="badge">招同行人</span>
+          <h1 id="hero-title">我在做一个<br><em>帮流浪猫</em>的网站</h1>
+          <p class="lede">主要做投喂和救助。<br>懂网站开发的、有喂猫经验的、单纯喜欢猫的——都欢迎加入。</p>
+          <ul class="chips" aria-label="需要的帮助">
+            <li><span class="chip-dot feed-dot" aria-hidden="true"></span>定点投喂</li>
+            <li><span class="chip-dot care-dot" aria-hidden="true"></span>伤病救助</li>
+            <li><span class="chip-dot build-dot" aria-hidden="true"></span>网站共建</li>
+          </ul>
+          <div class="hero-actions">
+            <button class="button primary" id="reveal-contact" type="button" data-fallback-wechat="mantaooo1" data-fallback-note="帮帮小猫">查看管理员联系方式</button>
+            <button class="button ghost" id="jump-to-form" type="button">留个联系方式</button>
+          </div>
+        </div>
+        <div class="hero-visual">
+          <span class="hero-glow" aria-hidden="true"></span>
+          <img src="assets/help-cat-hero.webp" alt="一只白底黑斑的小猫坐在地上" width="720" height="720" decoding="async" fetchpriority="high">
+        </div>
+      </section>
+
+      <section class="divider" aria-label="一起把这件事做起来">
+        <span class="paw" aria-hidden="true"></span>
+        <p>一起把这件事做起来</p>
+        <span class="paw" aria-hidden="true"></span>
+      </section>
+
+      <section class="contact-card" id="contact-card" hidden aria-labelledby="contact-title">
+        <div class="contact-copy">
+          <h2 id="contact-title">感兴趣？加微信聊聊</h2>
+          <p class="wechat-line">
+            <span class="wechat-label">微信</span>
+            <strong id="contact-wechat">—</strong>
+            <button class="copy-button" id="copy-wechat" type="button" hidden>复制</button>
+          </p>
+          <p class="wechat-note">备注「<span id="contact-note">帮帮小猫</span>」</p>
+          <p class="wechat-phone" id="contact-phone-line" hidden>手机 <strong id="contact-phone"></strong></p>
+          <p class="contact-footnote" id="contact-footnote"></p>
+        </div>
+        <figure class="contact-qr" id="contact-qr-figure">
+          <img id="contact-qr" src="assets/site-qr.png" alt="扫码打开帮帮小猫网站" width="348" height="348" loading="lazy" decoding="async">
+          <figcaption>扫码看网站<br><small>www.helpcat.xyz</small></figcaption>
+        </figure>
+      </section>
+
+      <section class="lead-section" id="leave" aria-labelledby="lead-title">
+        <div class="section-head">
+          <h2 id="lead-title">留个联系方式，管理员来加你</h2>
+          <p>不方便现在加微信？留下联系方式，我们会主动联系你。信息只用于这件事，不会公开。</p>
+        </div>
+        <form class="lead-form" id="lead-form" novalidate>
+          <div class="field-row">
+            <label class="field">怎么称呼你
+              <input id="lead-name" name="name" maxlength="80" autocomplete="name" placeholder="例如：小张">
+            </label>
+            <label class="field">联系方式类型
+              <select id="lead-contact-type" name="contact_type">
+                <option value="WECHAT">微信</option>
+                <option value="PHONE">手机号</option>
+                <option value="QQ">QQ</option>
+                <option value="OTHER">其他</option>
+              </select>
+            </label>
+          </div>
+          <label class="field">联系方式
+            <input id="lead-contact" name="contact" maxlength="120" required autocomplete="off" placeholder="微信号 / 手机号，方便我们找到你">
+          </label>
+          <label class="field">想说的话（可选）
+            <textarea id="lead-message" name="message" maxlength="1000" rows="3" placeholder="例如：我会写前端，想帮忙做网站；或者我在富阳，可以帮忙投喂"></textarea>
+          </label>
+          <p class="form-message" id="lead-status" role="alert"></p>
+          <button class="button primary full" id="lead-submit" type="submit">提交，等管理员联系我</button>
+        </form>
+      </section>
+
+      <section class="explore" aria-label="继续了解">
+        <a class="explore-link" href="../rescue/index.html">
+          <span>看看已有的猫咪档案与救助任务</span>
+          <span class="explore-arrow" aria-hidden="true">→</span>
+        </a>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <small>个人业余发起 · 有空时回复，不承诺随时响应</small>
+      <small class="footer-site">www.helpcat.xyz</small>
+    </footer>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+  <script src="lead-form.js?v=20260922-welcome-r1"></script>
+  <script src="welcome.js?v=20260922-welcome-r1"></script>
+</body>
+</html>

@@ -3,12 +3,12 @@ import mimetypes
 import secrets
 import base64
 import io
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 from zoneinfo import ZoneInfo
 
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import and_, func, or_, select
@@ -21,8 +21,8 @@ from .auth import DUMMY_PASSWORD_HASH, WechatProvider, current_user_factory, has
 from .config import Settings
 from .community_rules import normalize_community_name
 from .db import Base, ensure_schema, make_session_factory
-from .models import AuditLog, Cat, Community, DailyCatQuota, ImpactEvent, MediaAsset, Session as AuthSession, Task, User, new_id
-from .schemas import CatCommunityReassign, CatCreate, CommunityArchive, CommunityCreate, CommunityEdit, CommunityMerge, CommunityReview, ImpactEventCreate, PasswordLoginRequest, RegisterRequest, ReviewRequest, RoleUpdate, TaskCreate, VisibilityRequest, WechatLoginRequest
+from .models import AuditLog, Cat, Community, DailyCatQuota, ImpactEvent, LeadMessage, MediaAsset, Session as AuthSession, Task, User, new_id
+from .schemas import CatCommunityReassign, CatCreate, CommunityArchive, CommunityCreate, CommunityEdit, CommunityMerge, CommunityReview, ImpactEventCreate, LeadMessageCreate, LeadMessageStatusUpdate, PasswordLoginRequest, RegisterRequest, ReviewRequest, RoleUpdate, TaskCreate, VisibilityRequest, WechatLoginRequest
 
 
 def error(status, code, message=None):
@@ -204,6 +204,21 @@ def paginated_items(db, stmt, model, cursor, limit):
     return rows, encode_cursor(rows[-1]) if has_more and rows else None
 
 
+def lead_message_payload(item):
+    return {
+        "id": item.id,
+        "name": item.name,
+        "contact_type": item.contact_type,
+        "contact": item.contact,
+        "message": item.message,
+        "source": item.source,
+        "status": item.status,
+        "admin_note": item.admin_note,
+        "created_at": iso_utc(item.created_at),
+        "handled_at": iso_utc(item.handled_at),
+    }
+
+
 def create_app(database_url=None, storage_root=None, fake_admin_openids=None):
     settings = Settings(database_url=database_url, storage_root=storage_root, fake_admin_openids=fake_admin_openids)
     if settings.database_url.startswith("sqlite:///") and settings.database_url not in {"sqlite:///", "sqlite:///:memory:"}:
@@ -293,6 +308,98 @@ def create_app(database_url=None, storage_root=None, fake_admin_openids=None):
         if not cat:
             error(404, "public_profile_not_found")
         return cat_payload(cat)
+
+    @app.get("/api/v1/public/contact")
+    def public_contact():
+        """How a visitor reaches the operator.
+
+        Public by design: the welcome page only renders it after the visitor
+        taps "查看管理员联系方式", which is a UI affordance rather than a secret.
+        """
+        return {
+            "wechat": settings.admin_wechat,
+            "wechat_note": settings.admin_wechat_note,
+            "phone": settings.admin_phone,
+            "qr_image": settings.admin_qr_image,
+            "note": settings.admin_contact_note,
+        }
+
+    @app.post("/api/v1/public/messages", status_code=201)
+    def create_lead_message(payload: LeadMessageCreate, request: Request, db: DbSession = Depends(db_session)):
+        """Accept a contact left by a visitor with no account."""
+        client_ip = request.client.host if request.client else ""
+        now = datetime.now(timezone.utc)
+        if client_ip:
+            recent = db.scalar(select(func.count()).select_from(LeadMessage).where(
+                LeadMessage.client_ip == client_ip,
+                LeadMessage.created_at >= now - timedelta(hours=1),
+            )) or 0
+            if recent >= settings.lead_rate_limit_per_hour:
+                error(429, "too_many_messages")
+        duplicate = db.scalar(select(LeadMessage).where(
+            LeadMessage.contact == payload.contact,
+            LeadMessage.created_at >= now - timedelta(minutes=settings.lead_dedupe_minutes),
+        ).order_by(LeadMessage.created_at.desc()))
+        if duplicate:
+            # The same contact again is the same lead, not a new one.
+            return lead_message_payload(duplicate)
+        item = LeadMessage(
+            name=payload.name,
+            contact_type=payload.contact_type,
+            contact=payload.contact,
+            message=payload.message,
+            source=payload.source,
+            client_ip=client_ip,
+            is_qa=False,
+        )
+        db.add(item)
+        db.commit()
+        return lead_message_payload(item)
+
+    @app.get("/api/v1/admin/messages")
+    def list_lead_messages(
+        status: Optional[str] = None,
+        cursor: Optional[str] = None,
+        limit: int = Query(default=24, ge=1, le=100),
+        actor=Depends(current_user),
+        db: DbSession = Depends(db_session),
+    ):
+        require_admin(actor)
+        stmt = select(LeadMessage).where(LeadMessage.is_qa.is_(False))
+        if status:
+            stmt = stmt.where(LeadMessage.status == status)
+        items, next_cursor = paginated_items(db, stmt, LeadMessage, cursor, limit)
+        new_count = db.scalar(select(func.count()).select_from(LeadMessage).where(
+            LeadMessage.is_qa.is_(False), LeadMessage.status == "NEW",
+        )) or 0
+        return {
+            "items": [lead_message_payload(item) for item in items],
+            "next_cursor": next_cursor,
+            "new_count": new_count,
+        }
+
+    @app.post("/api/v1/admin/messages/{message_id}/status")
+    def update_lead_message_status(
+        message_id: str,
+        payload: LeadMessageStatusUpdate,
+        actor=Depends(current_user),
+        db: DbSession = Depends(db_session),
+    ):
+        require_admin(actor)
+        item = db.get(LeadMessage, message_id)
+        if not item:
+            error(404, "lead_message_not_found")
+        before = {"status": item.status, "admin_note": item.admin_note}
+        item.status = payload.status
+        if payload.note:
+            item.admin_note = payload.note
+        item.handled_by = actor[0]
+        item.handled_at = datetime.now(timezone.utc)
+        audit(db, actor[0], "LEAD_MESSAGE_STATUS", "lead_message", item.id, before=before, after={
+            "status": item.status, "admin_note": item.admin_note,
+        })
+        db.commit()
+        return lead_message_payload(item)
 
     @app.post("/api/v1/auth/wechat-login")
     def wechat_login(payload: WechatLoginRequest, db: DbSession = Depends(db_session)):

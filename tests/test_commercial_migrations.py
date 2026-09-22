@@ -116,6 +116,31 @@ class CommercialMigrationTests(unittest.TestCase):
                 "reversed_at", "reversed_by", "is_qa",
             }.issubset(columns))
 
+    def test_lead_message_migration_declares_public_contact_capture(self):
+        path = Path("server/helpcat/migrations/versions/007_lead_messages.py")
+        self.assertTrue(path.is_file())
+        migration = path.read_text(encoding="utf-8")
+        self.assertIn('revision = "007_lead_messages"', migration)
+        self.assertIn('down_revision = "006_impact_events"', migration)
+        for marker in (
+            "lead_messages", "contact_type", "contact", "message", "source", "status",
+            "admin_note", "client_ip", "handled_by", "handled_at", "is_qa",
+            "ck_lead_messages_contact_type", "ck_lead_messages_status",
+            "ix_lead_messages_status", "ix_lead_messages_contact",
+        ):
+            self.assertIn(marker, migration)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            engine, _ = make_session_factory("sqlite:///" + str(Path(tmp) / "lead.db"))
+            ensure_schema(engine)
+            self.assertIn("lead_messages", inspect(engine).get_table_names())
+            columns = {item["name"] for item in inspect(engine).get_columns("lead_messages")}
+            self.assertTrue({
+                "name", "contact_type", "contact", "message", "source", "status",
+                "admin_note", "client_ip", "handled_by", "handled_at", "is_qa",
+                "created_at", "updated_at",
+            }.issubset(columns))
+
     def test_bootstrap_backfills_one_legacy_story_profile_and_rejects_duplicate_markers(self):
         with tempfile.TemporaryDirectory() as tmp:
             engine, session_factory = make_session_factory("sqlite:///" + str(Path(tmp) / "one.db"))

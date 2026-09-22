@@ -123,3 +123,22 @@ body { background: radial-gradient(circle at 88% 6%,rgba(226,220,255,.34),transp
 @media (prefers-reduced-motion: reduce) {
   *, *:before, *:after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+/* ---------- 留言板（首页访客留下的联系方式） ---------- */
+.nav-dot.message-dot { border-radius: 4px; }
+.side-nav { position: relative; }
+.nav-badge { position: absolute; top: 5px; right: 12px; min-width: 18px; padding: 0 5px; border-radius: 999px; background: var(--orange); color: #fff; font-size: 10px; font-weight: 800; line-height: 17px; text-align: center; }
+.message-symbol { background: #eaf1ff; }
+.message-filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.filter-chip { padding: 8px 14px; border: 1px solid var(--line); border-radius: 999px; background: #fff; color: var(--muted); font-family: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.filter-chip.active { border-color: transparent; background: var(--green); color: #fff; }
+.lead-item .entity-copy { min-width: 0; }
+.lead-item .entity-copy p { overflow: visible; white-space: normal; text-overflow: clip; }
+.lead-item .lead-contact { margin: 6px 0 3px; color: var(--ink); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 15px; font-weight: 750; letter-spacing: .02em; }
+.lead-item .lead-note { color: #8f6114; }
+.lead-item .lead-empty { color: var(--muted); font-style: italic; }
+.lead-item .lead-source { color: var(--muted); font-size: 10px; }
+.lead-entity { background: #eaf1ff; color: #3655b8; }
+.lead-status.pending { background: var(--orange-soft); color: #a94b2e; }
+.lead-status.approved { background: var(--green-soft); color: var(--green); }
+.lead-status.muted { background: var(--surface-soft); color: var(--muted); }
