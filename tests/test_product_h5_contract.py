@@ -224,6 +224,14 @@ class ProductH5ContractTests(unittest.TestCase):
         self.assertIn('id="home-view-cats"', pillars)
         self.assertIn('id="home-view-tasks"', pillars)
 
+    def test_the_77_story_has_only_two_entries_on_the_home_page(self):
+        html = self.h5()
+        # 首屏大按钮 + 顶部导航各一个就够了；此前还有一张重复的小卡片，同一屏出现三次
+        self.assertEqual(html.count('data-nav="story-77"'), 2, "首页只保留「首屏按钮 + 顶部导航」两个 77 入口")
+        self.assertNotIn('id="home-story-entry"', html)
+        quick = html[html.index('class="quick-action-grid"'):html.index("</section>", html.index('class="quick-action-grid"'))]
+        self.assertNotIn("77 的故事", quick, "小卡片行不该再有 77 的入口")
+
     def test_hero_primary_action_is_a_filled_button(self):
         import re
 
