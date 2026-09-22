@@ -31,6 +31,35 @@ class MiniProgramContractTests(unittest.TestCase):
             self.assertIn("error", js + wxml, page)
             self.assertIn("empty", js + wxml, page)
 
+    def test_home_enables_pull_down_refresh(self):
+        config = json.loads((MINI / "pages/home/index.json").read_text())
+        self.assertTrue(config.get("enablePullDownRefresh"), "首页声明了 onPullDownRefresh，必须开启下拉刷新")
+
+    def test_cat_list_honours_the_profile_deep_link(self):
+        source = (MINI / "pages/cats/index.js").read_text()
+        self.assertIn("onLoad(options)", source)
+        self.assertIn("options.profile", source)
+        self.assertIn("/public/profiles/", source)
+
+    def test_enums_are_never_shown_raw_to_users(self):
+        cats_js = (MINI / "pages/cats/index.js").read_text()
+        cats_wxml = (MINI / "pages/cats/index.wxml").read_text()
+        profile_js = (MINI / "pages/profile/index.js").read_text()
+        profile_wxml = (MINI / "pages/profile/index.wxml").read_text()
+        self.assertIn("HEALTH_LABELS", cats_js)
+        self.assertIn("health_label", cats_wxml)
+        self.assertNotIn("{{item.health_status}}", cats_wxml)
+        self.assertIn("ROLE_LABELS", profile_js)
+        self.assertIn("role_label", profile_wxml)
+        self.assertNotIn("{{user.role}}", profile_wxml)
+
+    def test_claiming_a_task_requires_a_session_first(self):
+        source = (MINI / "pages/tasks/index.js").read_text()
+        gate = source[source.index("claim(event)"):]
+        self.assertIn("globalData.token", gate)
+        self.assertLess(gate.index("globalData.token"), gate.index("api.request("), "登录检查必须在请求之前")
+        self.assertIn("task_already_claimed", gate)
+
     def test_app_secret_never_enters_client_bundle(self):
         source = "\n".join(
             path.read_text()
