@@ -629,7 +629,10 @@
       '<small class="feeding-today">今天已有 ' + point.fed_today + ' 人打卡</small></div>' +
       (point.fed_by_me
         ? '<span class="feeding-done">今天已打卡 ✓</span>'
-        : '<button class="button primary compact" type="button" data-feeding-checkin="' + escapeHtml(point.id) + '">打卡投喂</button>') +
+        : '<span class="feeding-actions">' +
+          '<button class="button primary compact" type="button" data-feeding-checkin="' + escapeHtml(point.id) + '">打卡投喂</button>' +
+          '<button class="text-button" type="button" data-feeding-detail="' + escapeHtml(point.id) + '">打卡并记录</button>' +
+          '</span>') +
       '</article>';
   }
 
@@ -768,22 +771,67 @@
     }, { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
   }
 
-  function checkIn(pointId, button) {
-    if (!requireLogin() || state.submitting) return;
+  function checkIn(pointId, button, details) {
+    if (!requireLogin() || state.submitting) return Promise.resolve(false);
     state.submitting = true;
-    button.disabled = true;
-    button.textContent = "打卡中…";
-    api.request("/api/v1/feeding-points/" + encodeURIComponent(pointId) + "/logs", { method: "POST", body: {} })
-      .then(function () {
-        toast("打卡成功，谢谢你的投喂");
-        return Promise.all([loadFeedingPoints(false), loadFeedingStats(), loadMyFeedingLogs(), loadHomeFeeding(), loadFeedingSummary()]);
-      })
-      .catch(function (error) {
-        toast(errorText(error));
+    if (button) {
+      button.disabled = true;
+      button.textContent = "打卡中…";
+    }
+    return api.request("/api/v1/feeding-points/" + encodeURIComponent(pointId) + "/logs", {
+      method: "POST", body: details || {}
+    }).then(function () {
+      toast("打卡成功，谢谢你的投喂");
+      return Promise.all([
+        loadFeedingPoints(false), loadFeedingStats(), loadMyFeedingLogs(), loadHomeFeeding(), loadFeedingSummary()
+      ]);
+    }).then(function () { return true; }).catch(function (error) {
+      toast(errorText(error));
+      if (button) {
         button.disabled = false;
         button.textContent = "打卡投喂";
-      })
-      .finally(function () { state.submitting = false; });
+      }
+      return false;
+    }).finally(function () { state.submitting = false; });
+  }
+
+  // 快速打卡只发空 body；想记录「喂了什么 / 现场照片」就走这个弹层。
+  // 注意：后端对同一人同一点同一天只保留首次记录，所以详情必须在首次打卡时提交。
+  function openFeedSheet(pointId) {
+    if (!requireLogin()) return;
+    var point = (state.feedingPoints || []).find(function (item) { return item.id === pointId; }) ||
+                (state.homeFeeding || []).find(function (item) { return item.id === pointId; });
+    if (!point) return;
+    state.activePoint = point;
+    byId("feed-sheet-intro").textContent = point.name;
+    byId("feed-form").reset();
+    byId("feed-status").textContent = "";
+    openSheet("feed-sheet");
+  }
+
+  function submitFeed(event) {
+    event.preventDefault();
+    var point = state.activePoint;
+    if (!point || state.submitting) return;
+    var button = byId("feed-submit");
+    button.disabled = true;
+    byId("feed-status").textContent = "正在提交…";
+    var file = byId("feed-photo").files && byId("feed-photo").files[0];
+    var upload = file ? api.uploadImage(file) : Promise.resolve(null);
+    upload.then(function (asset) {
+      return checkIn(point.id, null, {
+        food_note: byId("feed-food").value.trim(),
+        note: byId("feed-note").value.trim(),
+        photo_asset_id: asset ? asset.id : null
+      });
+    }).then(function (ok) {
+      if (ok) {
+        closeSheets();
+        toast("已记录这次投喂，谢谢");
+      } else {
+        byId("feed-status").textContent = "提交失败，请稍后重试";
+      }
+    }).finally(function () { button.disabled = false; });
   }
 
   function loadMyFeedingLogs() {
@@ -1369,6 +1417,8 @@
     if (contactOpen) { openContactSheet(); return; }
     var checkInButton = event.target.closest("[data-feeding-checkin]");
     if (checkInButton) { checkIn(checkInButton.dataset.feedingCheckin, checkInButton); return; }
+    var feedDetailButton = event.target.closest("[data-feeding-detail]");
+    if (feedDetailButton) { openFeedSheet(feedDetailButton.dataset.feedingDetail); return; }
     var reportButton = event.target.closest("[data-task-report]");
     if (reportButton) { openTaskSheet(reportButton.dataset.taskReport); return; }
     var claim = event.target.closest(".claim-task");
@@ -1396,6 +1446,7 @@
   byId("task-release").addEventListener("click", releaseTask);
   byId("load-more-feeding").addEventListener("click", function () { loadFeedingPoints(true); });
   byId("sort-nearby").addEventListener("click", function (event) { sortNearby(event.currentTarget); });
+  byId("feed-form").addEventListener("submit", submitFeed);
   byId("refresh-my-feeding").addEventListener("click", function () { loadFeedingStats(); loadMyFeedingLogs(); });
   byId("auth-form").addEventListener("submit", handleAuth);
   byId("community-form").addEventListener("submit", handleCommunity);

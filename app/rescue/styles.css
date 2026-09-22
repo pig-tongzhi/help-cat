@@ -914,6 +914,8 @@ button, a, label, select, .nav-item, .quick-action, .primary-action,
 .feeding-badge { padding: 2px 9px; border-radius: 999px; background: var(--warning-soft); color: #8f6114; font-size: 11px; font-weight: 700; }
 .feeding-distance { padding: 2px 9px; border-radius: 999px; background: var(--brand-soft); color: var(--brand-dark); font-size: 11px; font-weight: 700; }
 .feeding-card.needs-feed { border-color: rgba(217,139,39,.4); box-shadow: 0 10px 26px rgba(217,139,39,.09); }
+/* 卡片上的两个动作：快速打卡 + 打卡并记录 */
+.feeding-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; flex: 0 0 auto; }
 
 /* 连续打卡卡的窄屏堆叠必须写在上面基础规则之后：
    同优先级下后写的生效，否则 390px 下仍是 150px+180px 两列，

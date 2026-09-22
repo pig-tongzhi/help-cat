@@ -330,6 +330,21 @@
     <div id="cat-detail-body"></div>
   </section>
 
+  <section class="sheet" id="feed-sheet" role="dialog" aria-modal="true" aria-labelledby="feed-sheet-title" hidden>
+    <div class="sheet-handle" aria-hidden="true"></div>
+    <button class="sheet-close" type="button" data-close-sheet aria-label="关闭">×</button>
+    <span class="section-kicker">FEEDING LOG</span>
+    <h2 id="feed-sheet-title">打卡并记录</h2>
+    <p class="sheet-intro" id="feed-sheet-intro"></p>
+    <form id="feed-form">
+      <label>喂了什么<input id="feed-food" maxlength="120" placeholder="例如：猫粮 200g + 换清水"></label>
+      <label>现场备注<textarea id="feed-note" maxlength="500" placeholder="例如：三花和小奶牛都来了，状态不错"></textarea></label>
+      <label class="upload-card">现场照片（可选）<input id="feed-photo" type="file" accept="image/*"><span><strong>选择照片</strong><small>支持 JPEG、PNG、WebP，最大 5 MiB</small></span></label>
+      <p class="inline-message" id="feed-status" role="alert"></p>
+      <button class="button primary full" id="feed-submit" type="submit">确认打卡</button>
+    </form>
+  </section>
+
   <section class="sheet" id="task-sheet" role="dialog" aria-modal="true" aria-labelledby="task-sheet-title" hidden>
     <div class="sheet-handle" aria-hidden="true"></div>
     <button class="sheet-close" type="button" data-close-sheet aria-label="关闭">×</button>

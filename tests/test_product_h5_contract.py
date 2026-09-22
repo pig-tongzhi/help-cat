@@ -175,6 +175,19 @@ class ProductH5ContractTests(unittest.TestCase):
         ):
             self.assertIn(marker, styles)
 
+    def test_feeding_log_can_capture_food_and_a_photo(self):
+        html, script, styles = self.h5(), self.script(), self.styles()
+        for marker in (
+            'id="feed-sheet"', 'id="feed-food"', 'id="feed-note"', 'id="feed-photo"',
+            'id="feed-submit"', 'id="feed-sheet-intro"',
+        ):
+            self.assertIn(marker, html)
+        for marker in ("openFeedSheet", "submitFeed", "data-feeding-detail", "food_note", "photo_asset_id"):
+            self.assertIn(marker, script)
+        self.assertIn(".feeding-actions", styles)
+        # 快速打卡这一条路径必须保留，不能因为多了详情弹层而变慢
+        self.assertIn("data-feeding-checkin", script)
+
     def test_no_leftover_browser_probe_files(self):
         leftovers = sorted(p.name for p in (ROOT / "app" / "rescue").iterdir() if p.name.startswith("__"))
         self.assertEqual(leftovers, [], "请删除临时探针文件：%s" % leftovers)
