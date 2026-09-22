@@ -1100,7 +1100,8 @@
       view.classList.toggle("active", active);
       view.hidden = !active;
     });
-    document.querySelectorAll(".nav-item").forEach(function (button) {
+    // 底部导航与顶部导航共用同一份选中态
+    document.querySelectorAll(".nav-item, .desktop-nav button").forEach(function (button) {
       button.classList.toggle("active", button.dataset.nav === state.view);
     });
     var storyActive = state.view === "story-77";

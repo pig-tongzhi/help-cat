@@ -205,6 +205,25 @@ class ProductH5ContractTests(unittest.TestCase):
         # 排班格在手机上要能横向滚动，且触摸目标不小于 44px
         self.assertIn("min-height: 44px", styles)
 
+    def test_top_navigation_shows_the_current_section(self):
+        html, script, styles = self.h5(), self.script(), self.styles()
+        self.assertIn('class="desktop-nav"', html)
+        self.assertIn(".desktop-nav button:hover", styles)
+        self.assertIn(".desktop-nav button.active", styles)
+        # 顶部导航与底部导航共用同一份选中态
+        self.assertIn(".nav-item, .desktop-nav button", script)
+        self.assertIn("button.dataset.nav === state.view", script)
+
+    def test_hero_primary_action_is_a_filled_button(self):
+        import re
+
+        styles = self.styles()
+        rules = re.findall(r"\.editorial-story-link\s*\{(?P<body>[^}]*)\}", styles)
+        self.assertTrue(rules, "缺少 .editorial-story-link 规则")
+        # 取最后一条：级联里后写的生效
+        self.assertIn("background: var(--brand)", rules[-1])
+        self.assertIn("border-radius: 999px", rules[-1])
+
     def test_no_leftover_browser_probe_files(self):
         leftovers = sorted(p.name for p in (ROOT / "app" / "rescue").iterdir() if p.name.startswith("__"))
         self.assertEqual(leftovers, [], "请删除临时探针文件：%s" % leftovers)

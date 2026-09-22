@@ -160,6 +160,25 @@ class RescueH5ContractTests(unittest.TestCase):
         self.assertIn("height: 100%", image_rule.group("body"))
         self.assertRegex(image_rule.group("body"), r"object-position:\s*right\s+bottom")
 
+    def test_desktop_hero_is_square_composed_with_headroom(self):
+        """桌面 hero 素材必须是近方形构图：猫头占画面 45%~75%、头顶留白、
+        身体淡出而不是被硬切在底边。这三条是踩过坑之后的取景基线。"""
+        from PIL import ImageChops
+
+        image = Image.open(ROOT / "app" / "rescue" / "assets" / "77" / "hero-desktop.webp").convert("RGB")
+        ratio = image.width / image.height
+        self.assertGreater(ratio, 0.9, "桌面 hero 应为近方形构图，否则 contain 会留下大片空档")
+        self.assertLess(ratio, 1.1)
+        diff = ImageChops.difference(image, Image.new("RGB", image.size, (245, 241, 235))).convert("L")
+        bbox = diff.point(lambda value: 255 if value > 18 else 0).getbbox()
+        self.assertIsNotNone(bbox)
+        left, top, right, bottom = bbox
+        share = (right - left) / image.width
+        self.assertGreater(share, 0.45, "猫头不应占满画面（会被 contain 放大到糊）")
+        self.assertLess(share, 0.8, "猫头占比过大，构图会顶到边缘")
+        self.assertGreater(top, 20, "头顶要留出呼吸空间")
+        self.assertGreater(image.height - bottom, 20, "身体应淡出到背景，不能被硬切在底边")
+
     def test_hero_assets_have_warm_edges_without_black_strip_or_hard_seam(self):
         target = (245, 241, 235)
         for name in ("hero-desktop.webp", "hero-mobile.webp"):
