@@ -214,6 +214,16 @@ class ProductH5ContractTests(unittest.TestCase):
         self.assertIn(".nav-item, .desktop-nav button", script)
         self.assertIn("button.dataset.nav === state.view", script)
 
+    def test_archive_and_tasks_lead_above_the_cat_creation_form(self):
+        html = self.h5()
+        # 猫咪档案与救助任务要是最显眼的两个入口，且必须排在「为猫咪建档」（表单入口）之前
+        form = html.index('id="home-create-cat"')
+        self.assertLess(html.index('id="home-view-cats"'), form, "查看猫咪档案要排在建档表单之前")
+        self.assertLess(html.index('id="home-view-tasks"'), form, "查看救助任务要排在建档表单之前")
+        pillars = html[html.index('class="primary-action-grid"'):html.index('class="quick-action-grid"')]
+        self.assertIn('id="home-view-cats"', pillars)
+        self.assertIn('id="home-view-tasks"', pillars)
+
     def test_hero_primary_action_is_a_filled_button(self):
         import re
 
