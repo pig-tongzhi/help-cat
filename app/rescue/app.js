@@ -825,7 +825,8 @@
 
   // 首页的喂食点速览：单独一份数据，避免与投喂页的分页列表互相覆盖
   function loadHomeFeeding() {
-    return api.request("/api/v1/feeding-points?limit=3").then(function (payload) {
+    // 与投喂页保持一致：今天还没人喂的排前面
+    return api.request("/api/v1/feeding-points?limit=3&sort=today").then(function (payload) {
       state.homeFeeding = payload.items || [];
       renderHomeFeeding();
       renderHomeModuleState("feeding", state.homeFeeding.length ? "ready" : "empty");

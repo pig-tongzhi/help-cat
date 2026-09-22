@@ -339,10 +339,19 @@
       var location = point.location_note ? '<p>位置：' + esc(point.location_note) + '</p>' : '';
       var caretaker = point.caretaker_note ? '<p>照看说明：' + esc(point.caretaker_note) + '</p>' : '';
       var archived = point.status === "ARCHIVED";
+      var hasCoords = point.latitude !== null && point.latitude !== undefined && point.longitude !== null && point.longitude !== undefined;
+      var coordsBadge = '<span>' + (hasCoords ? "已设坐标" : "未设坐标") + '</span>';
       var toggle = point.status === "ACTIVE"
         ? '<button data-feeding-action="pause" data-id="' + esc(point.id) + '">暂停投喂</button>'
         : '<button data-feeding-action="activate" data-id="' + esc(point.id) + '">恢复投喂</button>';
-      return '<article class="list-item feeding-item"><div class="entity-icon feeding-entity">喂</div><div class="entity-copy"><strong>' + esc(point.name) + '<small>' + community + schedule + '</small></strong>' + location + caretaker + '<div class="badges"><span class="feeding-status ' + esc(feedingStatusTone(point.status)) + '">' + esc(feedingStatusLabel(point.status)) + '</span><span>今日已喂 ' + esc(point.fed_today || 0) + ' 次</span>' + (point.fed_by_me ? '<span>我今天喂过</span>' : '') + '</div></div><div class="actions">' + toggle + '<button class="danger" data-feeding-action="archive" data-id="' + esc(point.id) + '" ' + (archived ? "disabled" : "") + '>归档</button></div></article>';
+      // 没有坐标的点在居民端无法参与「按距离排序」，这里给一个就地补录入口
+      var coordsButton = hasCoords ? "" : '<button data-feeding-action="coords" data-id="' + esc(point.id) + '">补坐标</button>';
+      var coordsForm = hasCoords ? "" :
+        '<form class="feeding-coords-form" data-feeding-coords-form="' + esc(point.id) + '" hidden>' +
+        '<label>纬度<input data-feeding-lat="' + esc(point.id) + '" type="number" step="0.000001" min="-90" max="90" required placeholder="30.052000"></label>' +
+        '<label>经度<input data-feeding-lng="' + esc(point.id) + '" type="number" step="0.000001" min="-180" max="180" required placeholder="119.962000"></label>' +
+        '<button class="button secondary" type="submit">保存坐标</button></form>';
+      return '<article class="list-item feeding-item"><div class="entity-icon feeding-entity">喂</div><div class="entity-copy"><strong>' + esc(point.name) + '<small>' + community + schedule + '</small></strong>' + location + caretaker + '<div class="badges"><span class="feeding-status ' + esc(feedingStatusTone(point.status)) + '">' + esc(feedingStatusLabel(point.status)) + '</span>' + coordsBadge + '<span>今日已喂 ' + esc(point.fed_today || 0) + ' 次</span>' + (point.fed_by_me ? '<span>我今天喂过</span>' : '') + '</div></div><div class="actions">' + coordsButton + toggle + '<button class="danger" data-feeding-action="archive" data-id="' + esc(point.id) + '" ' + (archived ? "disabled" : "") + '>归档</button></div>' + coordsForm + '</article>';
     }).join("") : '<div class="empty-state"><strong>暂无投喂点</strong><p>可以使用上方表单新增第一个投喂点。</p></div>';
     byId("load-more-admin-feeding").hidden = !state.cursors.feeding;
   }
@@ -357,6 +366,13 @@
     });
   }
   function actOnFeeding(button) {
+    if (button.dataset.feedingAction === "coords") {
+      var form = document.querySelector('[data-feeding-coords-form="' + button.dataset.id + '"]');
+      if (!form) return;
+      form.hidden = !form.hidden;
+      button.textContent = form.hidden ? "补坐标" : "收起坐标";
+      return;
+    }
     if (state.busy) return;
     state.busy = true;
     button.disabled = true;
@@ -504,6 +520,30 @@
     form.hidden = !form.hidden;
     button.textContent = form.hidden ? "记录时间线" : "收起时间线";
   }
+  function submitFeedingCoords(form) {
+    if (state.busy) return;
+    var pointId = form.getAttribute("data-feeding-coords-form");
+    var latInput = form.querySelector("[data-feeding-lat]");
+    var lngInput = form.querySelector("[data-feeding-lng]");
+    var latitude = latInput ? Number(latInput.value) : NaN;
+    var longitude = lngInput ? Number(lngInput.value) : NaN;
+    if (!isFinite(latitude) || latitude < -90 || latitude > 90 || !isFinite(longitude) || longitude < -180 || longitude > 180) {
+      byId("feeding-panel-message").textContent = "坐标不合法：纬度需在 -90~90，经度需在 -180~180";
+      return;
+    }
+    state.busy = true;
+    byId("feeding-panel-message").textContent = "正在保存坐标…";
+    request("/api/v1/admin/feeding-points/" + encodeURIComponent(pointId), {
+      method: "PATCH", body: { latitude: latitude, longitude: longitude }
+    }).then(function () {
+      byId("feeding-panel-message").textContent = "";
+      toast("坐标已保存，居民端可按距离排序");
+      return loadFeedingPoints();
+    }).catch(function (error) {
+      byId("feeding-panel-message").textContent = errorText(error);
+    }).finally(function () { state.busy = false; });
+  }
+
   function submitCatEvent(form) {
     if (state.busy) return;
     var catId = form.getAttribute("data-cat-event-form");
@@ -771,16 +811,20 @@
     var button = event.target.querySelector("button[type=submit]");
     button.disabled = true;
     var communityId = byId("feeding-community").value;
+    var latitude = byId("feeding-latitude").value.trim();
+    var longitude = byId("feeding-longitude").value.trim();
     byId("feeding-panel-message").textContent = "";
     request("/api/v1/admin/feeding-points", { method: "POST", body: {
       name: byId("feeding-name").value.trim(),
       community_id: communityId || null,
       location_note: byId("feeding-location").value.trim(),
       feeding_time: byId("feeding-time").value.trim(),
-      caretaker_note: byId("feeding-note").value.trim()
+      caretaker_note: byId("feeding-note").value.trim(),
+      latitude: latitude ? Number(latitude) : null,
+      longitude: longitude ? Number(longitude) : null
     } }).then(function () {
       event.target.reset();
-      toast("投喂点已创建");
+      toast(latitude && longitude ? "投喂点已创建，居民端可按距离排序" : "投喂点已创建");
       return loadFeedingPoints();
     }).catch(function (error) { byId("feeding-panel-message").textContent = errorText(error); }).finally(function () { state.busy = false; button.disabled = false; });
   });
@@ -851,9 +895,16 @@
   });
   document.addEventListener("submit", function (event) {
     var catEventForm = event.target.closest("[data-cat-event-form]");
-    if (!catEventForm) return;
-    event.preventDefault();
-    submitCatEvent(catEventForm);
+    if (catEventForm) {
+      event.preventDefault();
+      submitCatEvent(catEventForm);
+      return;
+    }
+    var coordsForm = event.target.closest("[data-feeding-coords-form]");
+    if (coordsForm) {
+      event.preventDefault();
+      submitFeedingCoords(coordsForm);
+    }
   });
   document.addEventListener("input", function (event) {
     var input = event.target.closest("[data-target-search]");

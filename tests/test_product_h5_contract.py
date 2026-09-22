@@ -211,10 +211,38 @@ class AdminProductPanelContractTests(unittest.TestCase):
         ):
             self.assertIn(marker, script)
 
+    def test_admin_can_set_feeding_point_coordinates(self):
+        html = (ROOT / "admin" / "index.html").read_text(encoding="utf-8")
+        script = (ROOT / "admin" / "app.js").read_text(encoding="utf-8")
+        for marker in ('id="feeding-latitude"', 'id="feeding-longitude"'):
+            self.assertIn(marker, html)
+        for marker in (
+            "data-feeding-coords-form", "data-feeding-lat", "data-feeding-lng",
+            "submitFeedingCoords", "已设坐标", "未设坐标",
+            "latitude: latitude ? Number(latitude) : null",
+        ):
+            self.assertIn(marker, script)
+
     def test_console_keeps_the_visitor_message_board(self):
         script = self.script()
         for marker in ("/api/v1/admin/messages", "data-message-action", "data-message-filter"):
             self.assertIn(marker, script)
+
+
+class DevPreviewToolContractTests(unittest.TestCase):
+    """本地预览服务器必须原样转发 HTTP 方法。
+
+    曾经写成 `do_PATCH = do_POST`，而 do_POST 固定用 proxy("POST")，
+    于是所有 PATCH 请求被降级成 POST，后端返回 405，
+    让社区纠错、投喂点暂停/归档、补坐标等在本地「假失败」。
+    """
+
+    def test_dev_preview_forwards_the_real_http_methods(self):
+        source = (ROOT / "scripts" / "dev_preview.py").read_text(encoding="utf-8")
+        for method in ("PATCH", "PUT", "DELETE", "OPTIONS"):
+            self.assertIn('return self.proxy("%s")' % method, source)
+        # 只匹配代码行，避免注释里提到这个写法时误报
+        self.assertNotRegex(source, r"(?m)^\s*do_PATCH\s*=\s*do_POST")
 
 
 class ServerRouteContractTests(unittest.TestCase):

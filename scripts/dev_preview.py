@@ -130,10 +130,28 @@ class PreviewHandler(http.server.SimpleHTTPRequestHandler):
             return self.proxy("POST")
         self.send_error(405, "Method Not Allowed")
 
-    do_PATCH = do_POST
-    do_PUT = do_POST
-    do_DELETE = do_POST
-    do_OPTIONS = do_POST
+    # 注意：每个方法都必须各自转发真实的方法。曾经把 do_PATCH 直接指向 do_POST，
+    # 而 do_POST 固定用 proxy("POST")，结果所有 PATCH 请求都被降级成 POST，
+    # 后端返回 405，导致社区纠错、投喂点暂停/归档、补坐标等在本地「假失败」。
+    def do_PATCH(self):
+        if self.path.startswith(API_PREFIX):
+            return self.proxy("PATCH")
+        self.send_error(405, "Method Not Allowed")
+
+    def do_PUT(self):
+        if self.path.startswith(API_PREFIX):
+            return self.proxy("PUT")
+        self.send_error(405, "Method Not Allowed")
+
+    def do_DELETE(self):
+        if self.path.startswith(API_PREFIX):
+            return self.proxy("DELETE")
+        self.send_error(405, "Method Not Allowed")
+
+    def do_OPTIONS(self):
+        if self.path.startswith(API_PREFIX):
+            return self.proxy("OPTIONS")
+        self.send_error(405, "Method Not Allowed")
 
 
 def main():

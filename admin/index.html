@@ -78,11 +78,13 @@
       </section>
 
       <section class="admin-section" data-admin-section="feeding" hidden>
-        <div class="section-heading"><div><span class="eyebrow">FEEDING POINTS</span><h2>投喂点管理</h2><p>维护定点投喂位置与照看说明。暂停后居民端不再展示，归档表示该点已停用。</p></div><button class="button secondary" id="refresh-feeding" type="button">刷新投喂点</button></div>
+        <div class="section-heading"><div><span class="eyebrow">FEEDING POINTS</span><h2>投喂点管理</h2><p>维护定点投喂位置与照看说明。暂停后居民端不再展示，归档表示该点已停用。<strong>填了经纬度的点，居民端才能「按距离排序」。</strong></p></div><button class="button secondary" id="refresh-feeding" type="button">刷新投喂点</button></div>
         <form class="inline-form" id="feeding-form">
           <label>投喂点名称<input id="feeding-name" required maxlength="120" placeholder="例如：银湖公园北门投喂点"></label>
           <label>位置说明<input id="feeding-location" maxlength="240" placeholder="例如：北门石凳旁，靠近地下车库出口"></label>
           <label>投喂时间<input id="feeding-time" maxlength="80" placeholder="每天 18:00"></label>
+          <label>纬度<input id="feeding-latitude" type="number" step="0.000001" min="-90" max="90" placeholder="例如 30.052000，可留空"></label>
+          <label>经度<input id="feeding-longitude" type="number" step="0.000001" min="-180" max="180" placeholder="例如 119.962000，可留空"></label>
           <label>所属小区<select id="feeding-community"><option value="">不指定小区</option></select></label>
           <label>照看说明<textarea id="feeding-note" maxlength="1000" placeholder="例如：猫粮放在树洞里，记得收走空罐"></textarea></label>
           <button class="button primary" type="submit">新增投喂点</button>

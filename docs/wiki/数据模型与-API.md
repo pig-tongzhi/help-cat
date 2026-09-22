@@ -58,7 +58,7 @@
 
 ### feeding_points
 
-固定喂食点。保存名称、可选小区、位置说明、投喂时间、照看说明和状态（`ACTIVE`/`PAUSED`/`ARCHIVED`）。
+固定喂食点。保存名称、可选小区、位置说明、投喂时间、照看说明、可选经纬度（`latitude`/`longitude`，用于居民端「按距离排序」）和状态（`ACTIVE`/`PAUSED`/`ARCHIVED`）。
 
 ### feeding_logs
 
@@ -159,9 +159,10 @@
 | 方法 | 路径 | 权限 | 作用 |
 |---|---|---|---|
 | GET | `/public/feeding-stats` | 公开 | 喂食点数、今日/近 7 天打卡数、参与志愿者数 |
-| GET | `/feeding-points` | 公开 | ACTIVE 喂食点分页；带令牌时额外返回 `fed_by_me` |
+| GET | `/feeding-points` | 公开 | ACTIVE 喂食点分页；带令牌时额外返回 `fed_by_me`；`sort=today` 让今天没人喂的排最前；同时传 `lat`+`lng` 时按 Haversine 距离排序并返回 `distance_m`（此模式不分页）|
 | POST | `/feeding-points/{id}/logs` | 登录 | 打卡投喂；同一人同一天重复提交返回原记录 |
 | GET | `/feeding-logs/mine` | 登录 | 我的打卡记录 |
+| GET | `/feeding-logs/mine/summary` | 登录 | 打卡进度：连续天数、本周/累计天数、今日是否打卡、下一里程碑（3/7/14/30/60 天）|
 | POST | `/admin/feeding-points` | ADMIN+ | 新建喂食点 |
 | PATCH | `/admin/feeding-points/{id}` | ADMIN+ | 修改喂食点或状态 |
 | GET | `/admin/feeding-points` | ADMIN+ | 全部状态的喂食点分页 |
@@ -213,7 +214,7 @@
 ## 数据库迁移
 
 - SQLAlchemy 模型是运行时数据结构来源。
-- Alembic 位于 `server/helpcat/migrations/`；`002_community_candidates` 添加候选字段，`003_scale_integrity` 增加猫咪版本/幂等键和完整性约束，`004_public_metrics` 增加 QA 标记，`005_public_profiles` 增加唯一 `profile_key` 并兼容回填旧 77，`007_lead_messages` 增加欢迎页留言表，`008_feeding_and_task_closure` 增加喂食点、打卡与猫咪时间线表，并为任务补充完成/取消/凭证字段。
+- Alembic 位于 `server/helpcat/migrations/`；`002_community_candidates` 添加候选字段，`003_scale_integrity` 增加猫咪版本/幂等键和完整性约束，`004_public_metrics` 增加 QA 标记，`005_public_profiles` 增加唯一 `profile_key` 并兼容回填旧 77，`007_lead_messages` 增加欢迎页留言表，`008_feeding_and_task_closure` 增加喂食点、打卡与猫咪时间线表，并为任务补充完成/取消/凭证字段，`009_feeding_point_location` 给喂食点补可选经纬度。
 - 迁移环境读取 `HELPCAT_DATABASE_URL`；生产执行时必须提供绝对 SQLite URL。
 - `ensure_schema()` 为早期 SQLite 试运行提供小范围向前兼容补列，不应替代正式生产迁移。
 - 迁移 PostgreSQL 前必须先做数据备份、双向数量校验、业务抽样和回滚演练。
