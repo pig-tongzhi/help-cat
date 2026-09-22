@@ -38,17 +38,16 @@ copy_tracked() {
   done < <(git -C "$ROOT" ls-files -z "$prefix")
 }
 
-# 静态资源。注意 welcome/ 是站点文档根（`/` 直接指向它），目录名不能改，
-# 否则页内 styles.css / welcome.js 的相对路径会 404。
-copy_tracked app/rescue rescue
-copy_tracked app/welcome welcome
-copy_tracked admin admin
-
-# 后端：server 包 + 迁移配置 + 依赖清单
-copy_tracked server backend/server
-copy_tracked alembic.ini backend/alembic.ini
-for extra in requirements-commercial.txt requirements.txt; do
-  [ -f "$ROOT/$extra" ] && copy_tracked "$extra" "backend/$extra"
+# 产物保持**仓库相对路径**：线上 nginx 服务的是 /opt/help-cat/current/app/rescue，
+# systemd 用 PYTHONPATH=/opt/help-cat/current 导入 server 包，alembic 的
+# script_location 也是相对路径 server/helpcat/migrations。
+# 所以发布目录必须长得像仓库，不能重排成 rescue/ + backend/ 那种自定义结构。
+# 注意 app/welcome/ 是站点文档根（`/` 直接指向它），目录名同样不能改。
+for entry in app admin server scripts tests miniprogram; do
+  copy_tracked "$entry" "$entry"
+done
+for entry in alembic.ini requirements-commercial.txt Dockerfile; do
+  [ -f "$ROOT/$entry" ] && copy_tracked "$entry" "$entry"
 done
 
 # 双保险：任何缓存/数据库/密钥文件都不进包
