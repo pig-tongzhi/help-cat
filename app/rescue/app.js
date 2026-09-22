@@ -11,6 +11,7 @@
     metrics: { status: "loading", values: null },
     publicDataStatus: { cats: "loading", tasks: "loading", communities: "loading", metrics: "loading" },
     feedingPoints: [],
+    homeFeeding: [],
     feedingStats: null,
     myFeedingLogs: [],
     contact: null,
@@ -169,9 +170,12 @@
         var amount = state.metrics.values[definition.key];
         total += amount;
         value.textContent = amount === 0 ? "正在积累" : formatMetric(amount);
+        // 占位文案用小字样式，避免和真实数字一样抢眼
+        value.classList.toggle("is-placeholder", amount === 0);
         value.setAttribute("aria-label", definition.label + " " + formatMetric(amount));
       } else {
         value.textContent = "—";
+        value.classList.toggle("is-placeholder", true);
         if (state.metrics.status === "error") value.setAttribute("aria-label", definition.label + "暂时无法获取");
         else value.setAttribute("aria-label", definition.label + "正在加载");
       }
@@ -222,6 +226,7 @@
 
   function loadPublicData() {
     ["cats", "tasks", "communities"].forEach(function (module) { renderHomeModuleState(module, "loading"); });
+    loadHomeFeeding();
     return Promise.all([
       api.request("/api/v1/communities?limit=24"),
       api.request("/api/v1/cats?limit=24"),
@@ -654,7 +659,7 @@
     api.request("/api/v1/feeding-points/" + encodeURIComponent(pointId) + "/logs", { method: "POST", body: {} })
       .then(function () {
         toast("打卡成功，谢谢你的投喂");
-        return Promise.all([loadFeedingPoints(false), loadFeedingStats(), loadMyFeedingLogs()]);
+        return Promise.all([loadFeedingPoints(false), loadFeedingStats(), loadMyFeedingLogs(), loadHomeFeeding()]);
       })
       .catch(function (error) {
         toast(errorText(error));
@@ -696,6 +701,27 @@
     loadMyFeedingLogs();
     if (!state.feedingPoints.length) return loadFeedingPoints(false);
     return Promise.resolve();
+  }
+
+  // 首页的喂食点速览：单独一份数据，避免与投喂页的分页列表互相覆盖
+  function loadHomeFeeding() {
+    return api.request("/api/v1/feeding-points?limit=3").then(function (payload) {
+      state.homeFeeding = payload.items || [];
+      renderHomeFeeding();
+      renderHomeModuleState("feeding", state.homeFeeding.length ? "ready" : "empty");
+    }).catch(function () {
+      state.homeFeeding = [];
+      renderHomeFeeding();
+      renderHomeModuleState("feeding", "error");
+    });
+  }
+
+  function renderHomeFeeding() {
+    var target = byId("home-feeding");
+    if (!target) return;
+    target.innerHTML = state.homeFeeding.length
+      ? state.homeFeeding.slice(0, 3).map(feedingPointCard).join("")
+      : emptyCard("还没有喂食点", "管理员发布喂食点后，这里就能打卡记录投喂。");
   }
 
   // ---- 任务闭环 -------------------------------------------------------

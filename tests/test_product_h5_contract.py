@@ -129,6 +129,20 @@ class ProductH5ContractTests(unittest.TestCase):
         self.assertIn("已显示 ", script)
         self.assertIn("还有更多", script)
 
+    def test_home_visual_system_and_mobile_stacking(self):
+        html, styles = self.h5(), self.styles()
+        for marker in (
+            "pillar-section", "pillar-card", "quick-action-grid", "impact-band",
+            "feeding-teaser", "product-region", "trust-icon",
+        ):
+            self.assertIn(marker, html + styles)
+        # 三支柱在窄屏必须堆叠为单列。这条断言专门守护一个真实踩过的坑：
+        # 新加的基础规则写在文件末尾时，会把前面媒体查询里的 1fr 覆盖掉，
+        # 导致 390px 下三支柱仍挤成 3 列、文字被压成竖排。
+        base = styles.rindex(".primary-action-grid { grid-template-columns: repeat(3")
+        narrow = styles.rindex(".primary-action-grid { grid-template-columns: 1fr; }")
+        self.assertGreater(narrow, base, "窄屏单列规则必须写在三支柱基础规则之后")
+
     def test_no_leftover_browser_probe_files(self):
         leftovers = sorted(p.name for p in (ROOT / "app" / "rescue").iterdir() if p.name.startswith("__"))
         self.assertEqual(leftovers, [], "请删除临时探针文件：%s" % leftovers)

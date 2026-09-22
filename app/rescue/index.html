@@ -46,6 +46,7 @@
             <span class="product-badge">招同行人</span>
             <h1 id="home-title">让每一只小猫，<br>都被认真看见</h1>
             <p class="product-lede">杭州富阳的社区流浪猫投喂与伤病救助。懂网站开发的、有喂猫经验的、单纯喜欢猫的，都欢迎加入。</p>
+            <div class="product-region"><span class="region-dot" aria-hidden="true"></span>杭州市 · 富阳区 · 银湖街道</div>
             <div class="editorial-hero-actions">
               <button class="editorial-story-link" type="button" data-nav="story-77">77 的故事</button>
             </div>
@@ -56,37 +57,50 @@
           </picture>
         </section>
 
-        <section class="primary-action-grid" data-product-section="primary-actions" aria-label="主要入口">
-          <button class="primary-action" id="home-create-cat" type="button">
-            <span class="primary-action-icon feed-icon" aria-hidden="true">＋</span>
-            <span class="primary-action-copy"><strong>为猫咪建档</strong><small>记录你遇见的小猫</small></span>
-          </button>
-          <button class="primary-action" id="home-view-feeding" type="button" data-nav="feeding">
-            <span class="primary-action-icon bowl-icon" aria-hidden="true">🍚</span>
-            <span class="primary-action-copy"><strong>定点投喂</strong><small>看今天的喂食点</small></span>
-          </button>
-          <button class="primary-action" id="home-view-tasks" type="button" data-nav="tasks">
-            <span class="primary-action-icon care-icon" aria-hidden="true">🩹</span>
-            <span class="primary-action-copy"><strong>查看救助任务</strong><small>领取一次救助行动</small></span>
-          </button>
-          <button class="primary-action" id="home-view-cats" type="button" data-nav="cats">
-            <span class="primary-action-icon cat-icon" aria-hidden="true">🐾</span>
-            <span class="primary-action-copy"><strong>浏览猫咪档案</strong><small>了解社区里的猫</small></span>
-          </button>
-          <button class="primary-action" id="home-contact" type="button">
-            <span class="primary-action-icon join-icon" aria-hidden="true">🤝</span>
-            <span class="primary-action-copy"><strong>加入我们</strong><small>留下联系方式</small></span>
-          </button>
+        <section class="pillar-section" data-product-section="primary-actions" aria-labelledby="pillar-title">
+          <div class="pillar-heading">
+            <span class="section-kicker">HOW TO JOIN</span>
+            <h2 id="pillar-title">三件事，挑一件开始</h2>
+            <p>不用先注册，也不用承诺时间。看看哪一件你现在就能做。</p>
+          </div>
+          <div class="primary-action-grid">
+            <button class="primary-action pillar-card feed-pillar" id="home-view-feeding" type="button" data-nav="feeding">
+              <span class="primary-action-icon bowl-icon" aria-hidden="true">🍚</span>
+              <span class="primary-action-copy"><strong>定点投喂</strong><small>看看附近的喂食点，打卡记录今天的投喂</small></span>
+              <span class="pillar-go" aria-hidden="true">→</span>
+            </button>
+            <button class="primary-action pillar-card care-pillar" id="home-view-tasks" type="button" data-nav="tasks">
+              <span class="primary-action-icon care-icon" aria-hidden="true">🩹</span>
+              <span class="primary-action-copy"><strong>查看救助任务</strong><small>领取一次救助行动，或先留下联系方式</small></span>
+              <span class="pillar-go" aria-hidden="true">→</span>
+            </button>
+            <button class="primary-action pillar-card join-pillar" id="home-contact" type="button">
+              <span class="primary-action-icon join-icon" aria-hidden="true">🤝</span>
+              <span class="primary-action-copy"><strong>加入我们</strong><small>懂技术、有喂猫经验，或只是喜欢猫</small></span>
+              <span class="pillar-go" aria-hidden="true">→</span>
+            </button>
+          </div>
+          <div class="quick-action-grid">
+            <button class="quick-action" id="home-create-cat" type="button"><strong>为猫咪建档</strong><small>记录你遇见的小猫</small></button>
+            <button class="quick-action" id="home-view-cats" type="button" data-nav="cats"><strong>浏览猫咪档案</strong><small>了解社区里的猫</small></button>
+            <button class="quick-action" id="home-my-submissions" type="button" data-nav="profile"><strong>我的提交</strong><small>查看审核进度</small></button>
+            <button class="quick-action" id="home-story-entry" type="button" data-nav="story-77"><strong>77 的故事</strong><small>一切从这里开始</small></button>
+          </div>
         </section>
 
-        <div class="impact-strip metric-grid" id="home-metrics-status" aria-label="社区救助成果">
-          <article class="metric-card" data-metric-state="loading"><span class="editorial-metric-icon heart-icon" aria-hidden="true">♡</span><div><strong id="metric-rescued">0</strong><small id="metric-rescued-label">已救助</small></div></article>
-          <article class="metric-card" data-metric-state="loading"><span class="editorial-metric-icon home-metric-icon" aria-hidden="true">⌂</span><div><strong id="metric-adopted">0</strong><small id="metric-adopted-label">找到新家</small></div></article>
-          <article class="metric-card" data-metric-state="loading"><span class="editorial-metric-icon rescue-icon" aria-hidden="true">♧</span><div><strong id="metric-medical">0</strong><small id="metric-medical-label">医疗救助</small></div></article>
-          <article class="metric-card" data-metric-state="loading"><span class="editorial-metric-icon support-icon" aria-hidden="true">◎</span><div><strong id="metric-supporters">0</strong><small id="metric-supporters-label">爱心支持</small></div></article>
-        </div>
-
-        <p class="module-status" id="home-metrics-note" hidden></p>
+        <section class="impact-band" aria-labelledby="metrics-title">
+          <div class="impact-band-head">
+            <div><span class="section-kicker">OUR PROGRESS</span><h2 id="metrics-title">社区救助成果</h2></div>
+            <p class="impact-band-note">数字来自管理员逐条录入的真实记录，可追溯到审计日志。</p>
+          </div>
+          <div class="impact-strip metric-grid" id="home-metrics-status" aria-label="社区救助成果">
+            <article class="metric-card" data-metric-state="loading"><span class="editorial-metric-icon heart-icon" aria-hidden="true">♡</span><div><strong id="metric-rescued">0</strong><small id="metric-rescued-label">已救助</small></div></article>
+            <article class="metric-card" data-metric-state="loading"><span class="editorial-metric-icon home-metric-icon" aria-hidden="true">⌂</span><div><strong id="metric-adopted">0</strong><small id="metric-adopted-label">找到新家</small></div></article>
+            <article class="metric-card" data-metric-state="loading"><span class="editorial-metric-icon rescue-icon" aria-hidden="true">♧</span><div><strong id="metric-medical">0</strong><small id="metric-medical-label">医疗救助</small></div></article>
+            <article class="metric-card" data-metric-state="loading"><span class="editorial-metric-icon support-icon" aria-hidden="true">◎</span><div><strong id="metric-supporters">0</strong><small id="metric-supporters-label">爱心支持</small></div></article>
+          </div>
+          <p class="module-status" id="home-metrics-note" hidden></p>
+        </section>
 
         <div class="reference-content-grid home-editorial-grid">
           <section class="content-section" data-product-section="cat-preview">
@@ -102,12 +116,22 @@
           </section>
         </div>
 
+        <section class="feeding-teaser" aria-labelledby="home-feeding-title">
+          <div class="section-title">
+            <div><span class="section-kicker">DAILY FEEDING</span><h2 id="home-feeding-title">附近的喂食点</h2></div>
+            <button class="text-button" type="button" data-nav="feeding">全部喂食点 <span>→</span></button>
+          </div>
+          <p class="module-status" id="home-feeding-status" hidden></p>
+          <div class="feeding-list" id="home-feeding"><div class="skeleton row-skeleton"></div></div>
+        </section>
+
         <section class="trust-panel" data-product-section="trust" aria-labelledby="trust-title">
+          <span class="section-kicker">WHY TRUST US</span>
           <h2 id="trust-title">我们怎么保证真实</h2>
           <div class="trust-grid">
-            <article><h3>隐私保护</h3><p>精确坐标、联系方式和未经确认的医疗信息不会公开。</p></article>
-            <article><h3>社区审核</h3><p>居民提交的档案和小区建议，都由管理员人工审核后才公开。</p></article>
-            <article><h3>来源可追溯</h3><p>每一次审核、公开、归档和赋权都写入审计日志。</p></article>
+            <article><span class="trust-icon" aria-hidden="true">隐</span><h3>隐私保护</h3><p>精确坐标、联系方式和未经确认的医疗信息不会公开。</p></article>
+            <article><span class="trust-icon" aria-hidden="true">审</span><h3>社区审核</h3><p>居民提交的档案和小区建议，都由管理员人工审核后才公开。</p></article>
+            <article><span class="trust-icon" aria-hidden="true">溯</span><h3>来源可追溯</h3><p>每一次审核、公开、归档和赋权都写入审计日志。</p></article>
           </div>
         </section>
 

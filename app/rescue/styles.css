@@ -641,3 +641,200 @@ body { background: #f5f5f3; }
 /* 定位提示默认隐藏，只在 app.js 加上 .visible 后显示（原来一直可见） */
 .location-fallback { display: none; }
 .location-fallback.visible { display: block; }
+
+/* ==========================================================================
+   主页面视觉升级
+   目标：收紧留白、建立清晰的三层节奏（招募 → 三支柱 → 真实内容），
+   并把"空"的地方交给真实数据填充。
+   ========================================================================== */
+
+/* 位置徽标（注意：刻意不使用被设计契约禁止的 region-chip / hero-mark 命名） */
+.product-region {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 14px;
+  padding: 5px 13px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255,255,255,.72);
+  color: var(--muted);
+  font-size: 12px;
+}
+.region-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--brand); box-shadow: 0 0 0 4px rgba(217,104,58,.14); }
+
+/* 收紧首屏：让折叠线内能看到入口卡片 */
+.product-hero-copy { padding-block: clamp(22px, 3vw, 40px); }
+
+/* ---------- 三支柱入口 ---------- */
+
+.pillar-section { margin: clamp(6px, 1.5vw, 16px) 0 clamp(30px, 4vw, 50px); }
+
+.pillar-heading { display: grid; gap: 6px; margin-bottom: 18px; }
+.pillar-heading h2 { margin: 0; font-size: clamp(21px, 2.8vw, 30px); letter-spacing: -.025em; }
+.pillar-heading p { margin: 0; color: var(--muted); font-size: 13px; }
+.section-kicker { display: block; color: var(--brand-dark); font-size: 10px; font-weight: 800; letter-spacing: .18em; }
+
+.primary-action-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+
+.pillar-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  min-height: 118px;
+  padding: 20px;
+  border: 1px solid transparent;
+  border-radius: 22px;
+  overflow: hidden;
+  box-shadow: none;
+}
+.pillar-card::after {
+  content: "";
+  position: absolute;
+  right: -56px;
+  bottom: -70px;
+  width: 190px;
+  height: 190px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.5);
+  pointer-events: none;
+}
+.feed-pillar { background: linear-gradient(135deg, #FFF6EC, #FFE6CF); }
+.care-pillar { background: linear-gradient(135deg, #FEF2F0, #F9DDD6); }
+.join-pillar { background: linear-gradient(135deg, #EEF7F2, #DAEDE3); }
+.pillar-card .primary-action-icon {
+  width: 44px;
+  height: 44px;
+  font-size: 22px;
+  border-radius: 14px;
+  background: rgba(255,255,255,.85);
+  box-shadow: 0 6px 18px rgba(29,29,31,.07);
+}
+.pillar-card .primary-action-copy strong { font-size: 16px; }
+.pillar-card .primary-action-copy small { font-size: 12px; line-height: 1.5; }
+.pillar-card:hover { transform: translateY(-3px); box-shadow: 0 18px 44px rgba(29,29,31,.1); }
+.pillar-go { position: relative; color: var(--brand-dark); font-size: 18px; font-weight: 700; transition: transform .18s ease; }
+.pillar-card:hover .pillar-go { transform: translateX(4px); }
+
+.quick-action-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
+.quick-action {
+  display: grid;
+  gap: 3px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--ink);
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color .16s ease, background-color .16s ease, transform .16s ease;
+}
+.quick-action strong { font-size: 13px; }
+.quick-action small { color: var(--muted); font-size: 11px; }
+.quick-action:hover { border-color: rgba(217,104,58,.45); background: var(--brand-soft); transform: translateY(-2px); }
+.quick-action:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+/* ---------- 救助成果（从"表格"改成一张面板） ---------- */
+
+.impact-band {
+  margin: 0 0 clamp(28px, 4vw, 46px);
+  padding: clamp(20px, 3vw, 30px);
+  border: 1px solid var(--line);
+  border-radius: 26px;
+  background: linear-gradient(160deg, #FFFFFF 0%, #FAFAFC 58%, #FFF5EA 100%);
+  box-shadow: 0 18px 50px rgba(29,29,31,.05);
+}
+.impact-band-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 8px 20px; margin-bottom: 18px; }
+.impact-band-head h2 { margin: 5px 0 0; font-size: clamp(19px, 2.4vw, 26px); letter-spacing: -.025em; }
+.impact-band-note { margin: 0; max-width: 32ch; color: var(--muted); font-size: 12px; line-height: 1.65; }
+
+.impact-strip.metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 0; padding: 0; border: 0; }
+.metric-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: 0;
+  padding: 18px;
+  border: 1px solid rgba(29,29,31,.06);
+  border-radius: 18px;
+  background: rgba(255,255,255,.88);
+}
+.metric-card .editorial-metric-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  background: var(--brand-soft);
+  color: var(--brand-dark);
+  font-size: 16px;
+}
+.metric-card strong { display: block; font-size: clamp(24px, 3.4vw, 34px); line-height: 1.1; letter-spacing: -.035em; }
+.metric-card small { display: block; margin-top: 2px; color: var(--muted); font-size: 12px; }
+/* 没有数据时的「正在积累」不要跟真实数字一样抢眼 */
+.metric-card strong.is-placeholder { font-size: 15px; font-weight: 700; color: var(--muted); letter-spacing: 0; }
+
+/* ---------- 喂食点速览（用真实内容填充留白） ---------- */
+
+.feeding-teaser {
+  margin: 0 0 clamp(28px, 4vw, 46px);
+  padding: clamp(20px, 3vw, 28px);
+  border: 1px solid var(--line);
+  border-radius: 26px;
+  background: var(--surface);
+}
+.feeding-teaser .feeding-list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.feeding-teaser .feeding-card { flex-direction: column; align-items: flex-start; height: 100%; }
+.feeding-teaser .feeding-card .button { align-self: flex-start; margin-top: 10px; }
+
+/* ---------- 信任区 ---------- */
+
+.trust-panel { background: linear-gradient(160deg, #FFFFFF, #FAFAFC); }
+.trust-panel h2 { margin: 6px 0 18px; }
+.trust-grid article { padding: 18px; border: 1px solid var(--line); border-radius: 18px; background: #fff; }
+.trust-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  margin-bottom: 10px;
+  border-radius: 12px;
+  background: var(--brand-soft);
+  color: var(--brand-dark);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+/* ---------- 响应式 ---------- */
+
+@media (max-width: 1024px) {
+  .quick-action-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .impact-strip.metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .feeding-teaser .feeding-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* 这两条必须写在新基础规则之后：同优先级下后写的才生效，
+   否则窄屏下三支柱会挤成 3 列、文字被压成竖排。
+   注意：刻意不使用 820px 断点——既有契约要求平板的档案栅格规则
+   必须排在同名 820px 兜底之后，这里再插一个 820px 会破坏那条顺序断言。 */
+@media (max-width: 900px) {
+  .primary-action-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 720px) {
+  .primary-action-grid { grid-template-columns: 1fr; }
+  .product-hero-copy { padding-block: 20px 26px; }
+  .pillar-card { min-height: 0; padding: 16px; }
+  .quick-action-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .impact-strip.metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .feeding-teaser .feeding-list { grid-template-columns: 1fr; }
+  .impact-band, .feeding-teaser, .trust-panel { padding: 18px; border-radius: 22px; }
+}
+
+@media (max-width: 360px) {
+  .quick-action-grid, .impact-strip.metric-grid { grid-template-columns: 1fr; }
+}
