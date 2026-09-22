@@ -28,6 +28,7 @@ class WelcomePageContractTests(unittest.TestCase):
     def test_welcome_page_wires_the_reveal_and_the_lead_form(self):
         html = self.welcome_html()
         for marker in (
+            'id="enter-help-cat"',
             'id="reveal-contact"',
             'id="jump-to-form"',
             'id="contact-card"',
