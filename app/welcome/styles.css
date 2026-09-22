@@ -236,9 +236,11 @@ body {
 
 .hero-visual img {
   position: relative;
-  width: min(340px, 78%);
+  width: auto;
   height: auto;
-  filter: drop-shadow(0 22px 34px rgba(120, 82, 45, .2));
+  max-width: min(300px, 76%);
+  max-height: 380px;
+  filter: drop-shadow(0 20px 28px rgba(120, 82, 45, .18));
 }
 
 /* ---------- 分隔 ---------- */
@@ -494,7 +496,7 @@ body {
   }
 
   .hero-visual { order: 2; }
-  .hero-visual img { width: min(420px, 92%); }
+  .hero-visual img { max-width: min(380px, 92%); max-height: 520px; }
 
   .contact-card {
     grid-template-columns: minmax(0, 1fr) auto;
