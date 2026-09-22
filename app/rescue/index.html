@@ -1,17 +1,17 @@
 <!doctype html>
-<html lang="zh-CN" data-app-version="20260816-image-cache-r2">
+<html lang="zh-CN" data-app-version="20260923-product-r1">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#F7F5F1">
   <meta name="description" content="帮帮小猫 Help Cat，记录社区猫咪档案，协作完成救助任务。">
   <title>帮帮小猫 Help Cat</title>
-  <link rel="icon" href="assets/brand/favicon.svg?v=20260816-image-cache-r2">
-  <link rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png?v=20260816-image-cache-r2">
-  <link rel="manifest" href="manifest.webmanifest?v=20260816-image-cache-r2">
-  <link rel="stylesheet" href="styles.css?v=20260816-image-cache-r2">
+  <link rel="icon" href="assets/brand/favicon.svg?v=20260923-product-r1">
+  <link rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png?v=20260923-product-r1">
+  <link rel="manifest" href="manifest.webmanifest?v=20260923-product-r1">
+  <link rel="stylesheet" href="styles.css?v=20260923-product-r1">
   <style>
-    .brand-logo.brand-logo-77 { background: transparent url("assets/brand/helpcat-77-mark.svg?v=20260816-image-cache-r2") center / contain no-repeat; border-radius: 0; box-shadow: none; }
+    .brand-logo.brand-logo-77 { background: transparent url("assets/brand/helpcat-77-mark.svg?v=20260923-product-r1") center / contain no-repeat; border-radius: 0; box-shadow: none; }
     .brand-logo.brand-logo-77::before, .brand-logo.brand-logo-77::after { content: none; }
   </style>
 </head>
@@ -24,10 +24,11 @@
         <span><strong>帮帮小猫</strong><small>HELP CAT · HANGZHOU</small></span>
       </a>
       <nav class="desktop-nav" aria-label="桌面导航">
-        <button type="button" data-nav="story-77">77 的故事</button>
-        <button type="button" data-nav="tasks">需要帮助</button>
-        <button type="button" data-nav="cats">猫咪档案</button>
+        <button type="button" data-nav="feeding">定点投喂</button>
         <button type="button" data-nav="tasks">救助任务</button>
+        <button type="button" data-nav="cats">猫咪档案</button>
+        <button type="button" data-nav="story-77">77 的故事</button>
+        <button type="button" data-nav="profile">我的</button>
       </nav>
       <button class="profile-button" id="profile-button" type="button" data-nav="profile" aria-label="打开我的页面">
         <span class="profile-avatar" id="profile-avatar">志</span>
@@ -39,38 +40,76 @@
     <div class="app-status" id="app-status" role="status" aria-live="polite" hidden></div>
 
     <main id="main-content">
-      <section class="view active" data-view="home" aria-labelledby="home-title">
-        <section class="reference-hero editorial-hero">
-          <div class="editorial-hero-copy">
+      <section class="view product-shell active" data-view="home" aria-labelledby="home-title">
+        <section class="reference-hero editorial-hero" data-product-section="home-hero">
+          <div class="product-hero-copy editorial-hero-copy">
+            <span class="product-badge">招同行人</span>
             <h1 id="home-title">让每一只小猫，<br>都被认真看见</h1>
+            <p class="product-lede">杭州富阳的社区流浪猫投喂与伤病救助。懂网站开发的、有喂猫经验的、单纯喜欢猫的，都欢迎加入。</p>
             <div class="editorial-hero-actions">
               <button class="editorial-story-link" type="button" data-nav="story-77">77 的故事</button>
             </div>
           </div>
           <picture class="editorial-hero-visual">
-            <source media="(max-width: 720px)" srcset="assets/77/hero-mobile.webp?v=20260816-image-cache-r2">
-            <img src="assets/77/hero-desktop.webp?v=20260816-image-cache-r2" alt="77，一只白底黑斑的猫咪" width="960" height="720" decoding="async">
+            <source media="(max-width: 720px)" srcset="assets/77/hero-mobile.webp?v=20260923-product-r1">
+            <img src="assets/77/hero-desktop.webp?v=20260923-product-r1" alt="77，一只白底黑斑的猫咪" width="960" height="720" decoding="async">
           </picture>
         </section>
 
-        <div class="impact-strip metric-grid" aria-label="社区救助成果">
+        <section class="primary-action-grid" data-product-section="primary-actions" aria-label="主要入口">
+          <button class="primary-action" id="home-create-cat" type="button">
+            <span class="primary-action-icon feed-icon" aria-hidden="true">＋</span>
+            <span class="primary-action-copy"><strong>为猫咪建档</strong><small>记录你遇见的小猫</small></span>
+          </button>
+          <button class="primary-action" id="home-view-feeding" type="button" data-nav="feeding">
+            <span class="primary-action-icon bowl-icon" aria-hidden="true">🍚</span>
+            <span class="primary-action-copy"><strong>定点投喂</strong><small>看今天的喂食点</small></span>
+          </button>
+          <button class="primary-action" id="home-view-tasks" type="button" data-nav="tasks">
+            <span class="primary-action-icon care-icon" aria-hidden="true">🩹</span>
+            <span class="primary-action-copy"><strong>查看救助任务</strong><small>领取一次救助行动</small></span>
+          </button>
+          <button class="primary-action" id="home-view-cats" type="button" data-nav="cats">
+            <span class="primary-action-icon cat-icon" aria-hidden="true">🐾</span>
+            <span class="primary-action-copy"><strong>浏览猫咪档案</strong><small>了解社区里的猫</small></span>
+          </button>
+          <button class="primary-action" id="home-contact" type="button">
+            <span class="primary-action-icon join-icon" aria-hidden="true">🤝</span>
+            <span class="primary-action-copy"><strong>加入我们</strong><small>留下联系方式</small></span>
+          </button>
+        </section>
+
+        <div class="impact-strip metric-grid" id="home-metrics-status" aria-label="社区救助成果">
           <article class="metric-card" data-metric-state="loading"><span class="editorial-metric-icon heart-icon" aria-hidden="true">♡</span><div><strong id="metric-rescued">0</strong><small id="metric-rescued-label">已救助</small></div></article>
           <article class="metric-card" data-metric-state="loading"><span class="editorial-metric-icon home-metric-icon" aria-hidden="true">⌂</span><div><strong id="metric-adopted">0</strong><small id="metric-adopted-label">找到新家</small></div></article>
           <article class="metric-card" data-metric-state="loading"><span class="editorial-metric-icon rescue-icon" aria-hidden="true">♧</span><div><strong id="metric-medical">0</strong><small id="metric-medical-label">医疗救助</small></div></article>
           <article class="metric-card" data-metric-state="loading"><span class="editorial-metric-icon support-icon" aria-hidden="true">◎</span><div><strong id="metric-supporters">0</strong><small id="metric-supporters-label">爱心支持</small></div></article>
         </div>
 
+        <p class="module-status" id="home-metrics-note" hidden></p>
+
         <div class="reference-content-grid home-editorial-grid">
-          <section class="content-section">
+          <section class="content-section" data-product-section="cat-preview">
             <div class="section-title"><div><h2>猫咪档案</h2></div><button class="text-button" type="button" data-nav="cats">查看全部 <span>→</span></button></div>
+            <p class="module-status" id="home-cats-status" hidden></p>
             <div class="cat-grid compact-grid" id="home-cats"><div class="skeleton card-skeleton"></div><div class="skeleton card-skeleton"></div></div>
           </section>
 
-          <section class="content-section task-feature">
+          <section class="content-section task-feature" data-product-section="task-preview">
             <div class="section-title"><div><h2>救助任务</h2></div><button class="text-button" type="button" data-nav="tasks">全部任务 <span>→</span></button></div>
+            <p class="module-status" id="home-tasks-status" hidden></p>
             <div class="task-list" id="home-tasks"><div class="skeleton row-skeleton"></div></div>
           </section>
         </div>
+
+        <section class="trust-panel" data-product-section="trust" aria-labelledby="trust-title">
+          <h2 id="trust-title">我们怎么保证真实</h2>
+          <div class="trust-grid">
+            <article><h3>隐私保护</h3><p>精确坐标、联系方式和未经确认的医疗信息不会公开。</p></article>
+            <article><h3>社区审核</h3><p>居民提交的档案和小区建议，都由管理员人工审核后才公开。</p></article>
+            <article><h3>来源可追溯</h3><p>每一次审核、公开、归档和赋权都写入审计日志。</p></article>
+          </div>
+        </section>
 
       </section>
 
@@ -92,8 +131,24 @@
       <section class="view" data-view="tasks" aria-labelledby="tasks-title" hidden>
         <div class="page-heading"><span class="section-kicker">VOLUNTEER ACTION</span><h1 id="tasks-title">救助任务</h1><p>每一次认领都让社区救助更及时、更有秩序。</p></div>
         <div class="task-summary-card"><div><span>开放任务</span><strong id="open-task-count">—</strong></div><p>领取前请确认时间和地点；领取后请按实际情况与管理员保持沟通。</p></div>
+        <section class="my-tasks" id="my-tasks-section" hidden>
+          <div class="section-title"><div><span class="section-kicker">MY TASKS</span><h2>我领取的任务</h2></div></div>
+          <div class="task-list" id="my-task-list"></div>
+        </section>
         <div class="task-list page-task-list" id="task-list"></div>
         <div class="load-more-row"><button class="button secondary" id="load-more-tasks" type="button" hidden>加载更多任务</button></div>
+      </section>
+
+      <section class="view" data-view="feeding" aria-labelledby="feeding-title" hidden>
+        <div class="page-heading"><span class="section-kicker">DAILY FEEDING</span><h1 id="feeding-title">定点投喂</h1><p>选一个喂食点打卡，让社区知道今天有谁喂过。</p></div>
+        <div class="feeding-stats" id="feeding-stats" aria-label="投喂统计"></div>
+        <p class="module-status" id="feeding-status" hidden></p>
+        <div class="feeding-list" id="feeding-list"><div class="skeleton row-skeleton"></div></div>
+        <div class="load-more-row"><button class="button secondary" id="load-more-feeding" type="button" hidden>加载更多喂食点</button></div>
+        <section class="feeding-history">
+          <div class="section-title"><div><span class="section-kicker">MY CHECK-INS</span><h2>我的打卡</h2></div><button class="text-button" id="refresh-my-feeding" type="button">刷新</button></div>
+          <div class="feeding-list" id="my-feeding-logs"></div>
+        </section>
       </section>
 
       <section class="view" data-view="profile" aria-labelledby="profile-title" hidden>
@@ -129,10 +184,11 @@
     <button class="floating-action" id="floating-add-cat" type="button"><span aria-hidden="true">＋</span>猫咪建档</button>
 
     <nav class="bottom-nav" id="bottom-nav" aria-label="主要导航">
-      <button class="nav-item active" type="button" data-nav="story-77"><span class="nav-icon story-nav-icon" aria-hidden="true"></span><span>77 的故事</span></button>
-      <button class="nav-item" type="button" data-nav="tasks"><span class="nav-icon heart-nav-icon" aria-hidden="true"></span><span>需要帮助</span></button>
-      <button class="nav-item" type="button" data-nav="cats"><span class="nav-icon cat-nav-icon" aria-hidden="true"></span><span>猫咪档案</span></button>
-      <button class="nav-item" type="button" data-nav="tasks"><span class="nav-icon task-nav-icon" aria-hidden="true"></span><span>救助任务</span></button>
+      <button class="nav-item active" type="button" data-nav="home"><span class="nav-icon home-nav-icon" aria-hidden="true"></span><span>首页</span></button>
+      <button class="nav-item" type="button" data-nav="feeding"><span class="nav-icon feed-nav-icon" aria-hidden="true"></span><span>投喂</span></button>
+      <button class="nav-item" type="button" data-nav="tasks"><span class="nav-icon heart-nav-icon" aria-hidden="true"></span><span>救助</span></button>
+      <button class="nav-item" type="button" data-nav="cats"><span class="nav-icon cat-nav-icon" aria-hidden="true"></span><span>猫咪</span></button>
+      <button class="nav-item" type="button" data-nav="profile"><span class="nav-icon user-nav-icon" aria-hidden="true"></span><span>我的</span></button>
     </nav>
   </div>
 
@@ -208,15 +264,57 @@
     </form>
   </section>
 
+  <section class="sheet" id="contact-sheet" role="dialog" aria-modal="true" aria-labelledby="contact-sheet-title" hidden>
+    <div class="sheet-handle" aria-hidden="true"></div>
+    <button class="sheet-close" type="button" data-close-sheet aria-label="关闭">×</button>
+    <span class="section-kicker">JOIN US</span>
+    <h2 id="contact-sheet-title">加入我们</h2>
+    <p class="sheet-intro">留个联系方式，管理员会主动加你；也可以直接加下面的微信。</p>
+    <div class="contact-inline">
+      <p class="wechat-line"><span class="wechat-label">微信</span><strong id="contact-wechat">正在获取…</strong></p>
+      <p class="wechat-note">备注「<span id="contact-note">帮帮小猫</span>」</p>
+      <p class="contact-footnote" id="contact-footnote"></p>
+    </div>
+    <form id="contact-form">
+      <label>怎么称呼你<input id="contact-name" maxlength="80" placeholder="例如：小张"></label>
+      <label>联系方式类型<select id="contact-type"><option value="WECHAT">微信</option><option value="PHONE">手机号</option><option value="QQ">QQ</option><option value="OTHER">其他</option></select></label>
+      <label>联系方式<input id="contact-value" maxlength="120" required placeholder="微信号 / 手机号"></label>
+      <label>想说的话（可选）<textarea id="contact-message" maxlength="1000" placeholder="例如：我会写前端，想帮忙做网站"></textarea></label>
+      <p class="inline-message" id="contact-status" role="alert"></p>
+      <button class="button primary full" id="contact-submit" type="submit">提交，等管理员联系我</button>
+    </form>
+  </section>
+
+  <section class="sheet cat-detail-sheet" id="cat-detail-sheet" role="dialog" aria-modal="true" aria-labelledby="cat-detail-title" hidden>
+    <div class="sheet-handle" aria-hidden="true"></div>
+    <button class="sheet-close" type="button" data-close-sheet aria-label="关闭">×</button>
+    <div id="cat-detail-body"></div>
+  </section>
+
+  <section class="sheet" id="task-sheet" role="dialog" aria-modal="true" aria-labelledby="task-sheet-title" hidden>
+    <div class="sheet-handle" aria-hidden="true"></div>
+    <button class="sheet-close" type="button" data-close-sheet aria-label="关闭">×</button>
+    <span class="section-kicker">TASK REPORT</span>
+    <h2 id="task-sheet-title">上报任务完成</h2>
+    <p class="sheet-intro" id="task-sheet-intro"></p>
+    <form id="task-form">
+      <label>完成情况<textarea id="task-note" maxlength="1000" placeholder="例如：已到场投喂并换水"></textarea></label>
+      <label class="upload-card">现场照片（可选）<input id="task-evidence" type="file" accept="image/*"><span><strong>选择照片</strong><small>支持 JPEG、PNG、WebP，最大 5 MiB</small></span></label>
+      <p class="inline-message" id="task-status" role="alert"></p>
+      <button class="button primary full" id="task-submit" type="submit">提交完成</button>
+    </form>
+    <button class="button secondary full" id="task-release" type="button">放弃领取，退回任务池</button>
+  </section>
+
   <aside class="version-update" id="version-update" role="status" hidden>
     <span>发现新版本，刷新后可使用最新功能。</span>
     <button id="reload-version" type="button">立即刷新</button>
   </aside>
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
-  <script src="api.js?v=20260816-image-cache-r2"></script>
-  <script src="community-form.js?v=20260816-image-cache-r2"></script>
-  <script src="version.js?v=20260816-image-cache-r2"></script>
-  <script src="story-77.js?v=20260816-image-cache-r2"></script>
-  <script src="app.js?v=20260816-image-cache-r2"></script>
+  <script src="api.js?v=20260923-product-r1"></script>
+  <script src="community-form.js?v=20260923-product-r1"></script>
+  <script src="version.js?v=20260923-product-r1"></script>
+  <script src="story-77.js?v=20260923-product-r1"></script>
+  <script src="app.js?v=20260923-product-r1"></script>
 </body>
 </html>

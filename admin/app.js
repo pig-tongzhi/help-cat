@@ -7,7 +7,7 @@
   var communityReview = window.HelpCatCommunityReview;
   var token = sessionStorage.getItem(TOKEN_KEY) || "";
   var profile = null;
-  var state = { cats: [], communities: [], users: [], messages: [], newMessageCount: 0, messageFilter: "", cursors: { cats: null, communities: null, users: null, messages: null }, section: "overview", busy: false };
+  var state = { cats: [], communities: [], users: [], messages: [], feeding: [], tasks: [], impact: [], newMessageCount: 0, messageFilter: "", taskFilter: "", counts: { tasks: 0 }, cursors: { cats: null, communities: null, users: null, messages: null, feeding: null, tasks: null, impact: null }, section: "overview", busy: false };
 
   function byId(id) { return document.getElementById(id); }
   function esc(value) {
@@ -51,6 +51,13 @@
       stale_cat_version: "猫咪档案刚刚已更新，已刷新最新内容",
       lead_message_not_found: "这条留言已被删除或不存在",
       too_many_messages: "该访客提交过于频繁，请稍后再试",
+      feeding_point_not_found: "投喂点不存在或已被删除",
+      task_already_closed: "任务已完成或已取消，不能再操作",
+      task_not_claimed: "任务还没有被领取",
+      task_not_yours: "只能操作自己领取的任务",
+      target_user_not_found: "指定的志愿者不存在或已停用",
+      evidence_asset_forbidden: "不能使用这张凭证图片",
+      cat_not_found: "猫咪档案不存在或已归档",
       network_error: "网络连接失败，请稍后重试"
     }[error && error.code] || (error && error.message) || "操作失败，请稍后重试";
   }
@@ -112,12 +119,41 @@
       throw error;
     });
   }
+  function capturePage(path) {
+    return request(path).then(function (body) {
+      return body;
+    }).catch(function (error) {
+      return { items: [], next_cursor: null, pageError: error };
+    });
+  }
+  function applyPage(type, body) {
+    state[type] = (body && body.items) || [];
+    state.cursors[type] = (body && body.next_cursor) || null;
+  }
+  function showPageError(messageId, page) {
+    var target = byId(messageId);
+    if (target) target.textContent = page && page.pageError ? errorText(page.pageError) : "";
+  }
+  function adminTasksPath(cursor) {
+    var params = ["limit=24"];
+    if (state.taskFilter) params.push("status=" + encodeURIComponent(state.taskFilter));
+    if (cursor) params.push("cursor=" + encodeURIComponent(cursor));
+    return "/api/v1/admin/tasks?" + params.join("&");
+  }
+  function activeTaskCount(items) {
+    return (items || []).filter(function (task) {
+      return task.status === "OPEN" || task.status === "CLAIMED";
+    }).length;
+  }
   function loadAll() {
     showGlobal("正在同步管理数据…", false);
     var requests = [
       request("/api/v1/cats?limit=24"),
       request("/api/v1/admin/communities?limit=24"),
-      request("/api/v1/admin/messages?limit=24" + (state.messageFilter ? "&status=" + encodeURIComponent(state.messageFilter) : ""))
+      request("/api/v1/admin/messages?limit=24" + (state.messageFilter ? "&status=" + encodeURIComponent(state.messageFilter) : "")),
+      capturePage("/api/v1/admin/feeding-points?limit=24"),
+      capturePage(adminTasksPath()),
+      capturePage("/api/v1/admin/impact-events?limit=24")
     ];
     if (profile.role === "SUPER_ADMIN") requests.push(request("/api/v1/admin/users?limit=24"));
     return Promise.all(requests).then(function (results) {
@@ -128,8 +164,14 @@
       state.messages = results[2].items || [];
       state.cursors.messages = results[2].next_cursor || null;
       state.newMessageCount = Number(results[2].new_count || 0);
-      state.users = results[3] ? results[3].items || [] : [];
-      state.cursors.users = results[3] ? results[3].next_cursor || null : null;
+      state.users = results[6] ? results[6].items || [] : [];
+      state.cursors.users = results[6] ? results[6].next_cursor || null : null;
+      applyPage("feeding", results[3]);
+      applyPage("tasks", results[4]);
+      applyPage("impact", results[5]);
+      showPageError("feeding-panel-message", results[3]);
+      showPageError("task-panel-message", results[4]);
+      showPageError("impact-panel-message", results[5]);
       showGlobal("", false);
       render();
     }).catch(function (error) {
@@ -147,10 +189,11 @@
     state.busy = true;
     button.disabled = true;
     button.textContent = "正在加载…";
-    var route = type === "cats" ? "/api/v1/cats" : type === "users" ? "/api/v1/admin/users" : type === "messages" ? "/api/v1/admin/messages" : "/api/v1/admin/communities";
+    var route = type === "cats" ? "/api/v1/cats" : type === "users" ? "/api/v1/admin/users" : type === "messages" ? "/api/v1/admin/messages" : type === "feeding" ? "/api/v1/admin/feeding-points" : type === "tasks" ? "/api/v1/admin/tasks" : type === "impact" ? "/api/v1/admin/impact-events" : "/api/v1/admin/communities";
     var params = ["limit=24", "cursor=" + encodeURIComponent(cursor)];
     if (type === "cats" && byId("cat-search").value.trim()) params.push("q=" + encodeURIComponent(byId("cat-search").value.trim()));
     if (type === "messages" && state.messageFilter) params.push("status=" + encodeURIComponent(state.messageFilter));
+    if (type === "tasks" && state.taskFilter) params.push("status=" + encodeURIComponent(state.taskFilter));
     request(route + "?" + params.join("&")).then(function (body) {
       state[type] = communityReview.appendUnique(state[type], body.items || []);
       state.cursors[type] = body.next_cursor || null;
@@ -160,7 +203,7 @@
     }).finally(function () {
       state.busy = false;
       button.disabled = false;
-      button.textContent = type === "cats" ? "加载更多猫咪" : type === "users" ? "加载更多用户" : type === "messages" ? "加载更多留言" : "加载更多小区";
+      button.textContent = type === "cats" ? "加载更多猫咪" : type === "users" ? "加载更多用户" : type === "messages" ? "加载更多留言" : type === "feeding" ? "加载更多投喂点" : type === "tasks" ? "加载更多任务" : type === "impact" ? "加载更多记录" : "加载更多小区";
     });
   }
   function loadUsers() {
@@ -182,6 +225,11 @@
       return '<option value="' + esc(item.id) + '">' + esc(item.name) + ' · ' + esc(item.street) + '</option>';
     }).join("");
   }
+  function catEventKindOptions() {
+    return [["RESCUE", "相遇"], ["FEED", "投喂"], ["MEDICAL", "就医"], ["CHECKUP", "检查"], ["ADOPTED", "领养"], ["NOTE", "备注"]].map(function (pair) {
+      return '<option value="' + pair[0] + '">' + pair[1] + '</option>';
+    }).join("");
+  }
   function renderCats() {
     var query = byId("cat-search").value.trim().toLowerCase();
     var cats = state.cats.filter(function (cat) {
@@ -191,10 +239,16 @@
       var blocker = cat.community_review_blocker;
       var targetId = "cat-target-" + cat.id;
       var recovery = blocker ? '<div class="reassign-workbench"><label>改挂到已开放小区<input type="search" data-target-search data-target-select="' + esc(targetId) + '" placeholder="输入小区名称搜索全部结果"><select id="' + esc(targetId) + '" data-cat-reassign-target="' + esc(cat.id) + '"><option value="">请选择目标小区</option>' + activeTargetOptions(cat.community_id) + '</select></label><button data-cat-action="reassign" data-id="' + esc(cat.id) + '" data-version="' + esc(cat.version) + '">确认改挂</button></div>' : '';
+      var timeline = '<form class="cat-event-workbench" data-cat-event-form="' + esc(cat.id) + '" hidden>' +
+        '<label>时间线类型<select data-cat-event-kind="' + esc(cat.id) + '">' + catEventKindOptions() + '</select></label>' +
+        '<label>标题<input data-cat-event-title="' + esc(cat.id) + '" maxlength="120" required placeholder="例如：送到银湖宠物医院"></label>' +
+        '<label>详情<textarea data-cat-event-detail="' + esc(cat.id) + '" maxlength="2000" placeholder="补充经过、结果或后续安排"></textarea></label>' +
+        '<button class="button secondary" type="submit">保存时间线</button></form>';
       return '<article class="list-item"><div class="entity-icon cat-entity">猫</div><div class="entity-copy"><strong>' + esc(cat.nickname) + '<small>' + esc(cat.code) + '</small></strong><p>' + esc(cat.community_name) + ' · ' + esc(cat.location_note) + '</p><div class="badges"><span>' + esc(statusLabel(cat.review_status)) + '</span><span>' + esc(statusLabel(cat.visibility_status)) + '</span>' + (blocker ? '<span class="blocker-badge">小区待处理</span>' : '') + '</div></div><div class="actions">' +
         (cat.review_status === "PENDING_REVIEW" ? (blocker ? '<button data-section-link="communities">查看小区状态</button>' : '<button data-cat-action="review" data-id="' + esc(cat.id) + '">审核通过</button>') : '') +
         (cat.visibility_status !== "ARCHIVED" ? '<button data-cat-action="visibility" data-id="' + esc(cat.id) + '" data-visible="' + String(cat.visibility_status === "HIDDEN") + '">' + (cat.visibility_status === "HIDDEN" ? "公开" : "隐藏") + '</button>' : '') +
-        '<button class="danger" data-cat-action="archive" data-id="' + esc(cat.id) + '" ' + (cat.visibility_status === "ARCHIVED" ? "disabled" : "") + '>归档</button></div>' + recovery + '</article>';
+        '<button data-cat-action="event" data-id="' + esc(cat.id) + '">记录时间线</button>' +
+        '<button class="danger" data-cat-action="archive" data-id="' + esc(cat.id) + '" ' + (cat.visibility_status === "ARCHIVED" ? "disabled" : "") + '>归档</button></div>' + recovery + timeline + '</article>';
     }).join("") : '<div class="empty-state"><strong>没有匹配的猫咪档案</strong><p>调整搜索条件或等待新的居民提交。</p></div>';
     byId("load-more-admin-cats").hidden = !state.cursors.cats;
   }
@@ -254,6 +308,230 @@
     }).join("") : '<div class="empty-state"><strong>没有匹配用户</strong><p>请检查用户名或昵称。</p></div>';
     byId("load-more-admin-users").hidden = !state.cursors.users;
   }
+  function syncCommunitySelect(selectId, placeholder) {
+    var select = byId(selectId);
+    if (!select) return;
+    var current = select.value;
+    var options = ['<option value="">' + esc(placeholder) + '</option>'];
+    state.communities.forEach(function (community) {
+      if (community.status !== "ACTIVE") return;
+      options.push('<option value="' + esc(community.id) + '">' + esc(community.name) + ' · ' + esc(community.street) + '</option>');
+    });
+    var html = options.join("");
+    if (select.getAttribute("data-options") !== html) {
+      select.setAttribute("data-options", html);
+      select.innerHTML = html;
+    }
+    if (Array.prototype.some.call(select.options, function (option) { return option.value === current; })) select.value = current;
+  }
+
+  /* ---------- 投喂点管理 ---------- */
+  function feedingStatusLabel(value) {
+    return { ACTIVE: "投喂中", PAUSED: "已暂停", ARCHIVED: "已归档" }[value] || value;
+  }
+  function feedingStatusTone(value) {
+    return { ACTIVE: "active", PAUSED: "paused", ARCHIVED: "archived" }[value] || "paused";
+  }
+  function renderFeedingPoints() {
+    byId("feeding-points").innerHTML = state.feeding.length ? state.feeding.map(function (point) {
+      var community = point.community_name ? esc(point.community_name) : "未指定小区";
+      var schedule = point.feeding_time ? ' · ' + esc(point.feeding_time) : '';
+      var location = point.location_note ? '<p>位置：' + esc(point.location_note) + '</p>' : '';
+      var caretaker = point.caretaker_note ? '<p>照看说明：' + esc(point.caretaker_note) + '</p>' : '';
+      var archived = point.status === "ARCHIVED";
+      var toggle = point.status === "ACTIVE"
+        ? '<button data-feeding-action="pause" data-id="' + esc(point.id) + '">暂停投喂</button>'
+        : '<button data-feeding-action="activate" data-id="' + esc(point.id) + '">恢复投喂</button>';
+      return '<article class="list-item feeding-item"><div class="entity-icon feeding-entity">喂</div><div class="entity-copy"><strong>' + esc(point.name) + '<small>' + community + schedule + '</small></strong>' + location + caretaker + '<div class="badges"><span class="feeding-status ' + esc(feedingStatusTone(point.status)) + '">' + esc(feedingStatusLabel(point.status)) + '</span><span>今日已喂 ' + esc(point.fed_today || 0) + ' 次</span>' + (point.fed_by_me ? '<span>我今天喂过</span>' : '') + '</div></div><div class="actions">' + toggle + '<button class="danger" data-feeding-action="archive" data-id="' + esc(point.id) + '" ' + (archived ? "disabled" : "") + '>归档</button></div></article>';
+    }).join("") : '<div class="empty-state"><strong>暂无投喂点</strong><p>可以使用上方表单新增第一个投喂点。</p></div>';
+    byId("load-more-admin-feeding").hidden = !state.cursors.feeding;
+  }
+  function loadFeedingPoints() {
+    return request("/api/v1/admin/feeding-points?limit=24").then(function (body) {
+      applyPage("feeding", body);
+      byId("feeding-panel-message").textContent = "";
+      renderSummary();
+      renderFeedingPoints();
+    }).catch(function (error) {
+      byId("feeding-panel-message").textContent = errorText(error);
+    });
+  }
+  function actOnFeeding(button) {
+    if (state.busy) return;
+    state.busy = true;
+    button.disabled = true;
+    var next = { pause: "PAUSED", activate: "ACTIVE", archive: "ARCHIVED" }[button.dataset.feedingAction];
+    byId("feeding-panel-message").textContent = "正在更新投喂点…";
+    request("/api/v1/admin/feeding-points/" + encodeURIComponent(button.dataset.id), { method: "PATCH", body: { status: next } }).then(function () {
+      byId("feeding-panel-message").textContent = "";
+      toast(next === "PAUSED" ? "投喂点已暂停" : next === "ARCHIVED" ? "投喂点已归档" : "投喂点已恢复投喂");
+      return loadFeedingPoints();
+    }).catch(function (error) {
+      byId("feeding-panel-message").textContent = errorText(error);
+      button.disabled = false;
+    }).finally(function () { state.busy = false; });
+  }
+
+  /* ---------- 救助任务 ---------- */
+  function taskStatusLabel(value) {
+    return { OPEN: "待领取", CLAIMED: "进行中", COMPLETED: "已完成", CANCELLED: "已取消" }[value] || value;
+  }
+  function taskStatusTone(value) {
+    return { OPEN: "open", CLAIMED: "claimed", COMPLETED: "completed", CANCELLED: "cancelled" }[value] || "open";
+  }
+  function renderTasks() {
+    byId("admin-tasks").innerHTML = state.tasks.length ? state.tasks.map(function (task) {
+      var community = task.community_name ? task.community_name : "未指定小区";
+      var description = task.description ? '<p>' + esc(task.description) + '</p>' : '';
+      var claim = task.claimed_by_username ? '<span>领取人：' + esc(task.claimed_by_username) + '</span>' : "";
+      var completion = task.completion_note ? '<p class="lead-note">完成说明：' + esc(task.completion_note) + '</p>' : '';
+      var reason = task.cancel_reason ? '<p class="lead-note">取消原因：' + esc(task.cancel_reason) + '</p>' : '';
+      var cancellable = task.status === "OPEN" || task.status === "CLAIMED";
+      var actions = (cancellable ? '<button data-task-action="cancel" data-id="' + esc(task.id) + '">取消任务</button>' : '') +
+        (task.status === "CLAIMED" ? '<button data-task-action="reassign" data-id="' + esc(task.id) + '">释放回待领取</button>' : '');
+      var reasonInput = cancellable ? '<label class="task-note">取消原因（选填）<input data-task-reason="' + esc(task.id) + '" maxlength="500" placeholder="会展示给领取人"></label>' : '';
+      return '<article class="list-item task-item"><div class="entity-icon task-entity">任</div><div class="entity-copy"><strong>' + esc(task.title) + '<small>' + esc(community) + '</small></strong>' + description + completion + reason + '<div class="badges"><span class="task-status ' + esc(taskStatusTone(task.status)) + '">' + esc(taskStatusLabel(task.status)) + '</span>' + claim + '</div></div><div class="actions">' + actions + '</div>' + reasonInput + '</article>';
+    }).join("") : '<div class="empty-state"><strong>暂无救助任务</strong><p>调整状态筛选，或用上方表单发布第一条任务。</p></div>';
+    byId("load-more-admin-tasks").hidden = !state.cursors.tasks;
+  }
+  function loadTasks() {
+    return request(adminTasksPath()).then(function (body) {
+      applyPage("tasks", body);
+      byId("task-panel-message").textContent = "";
+      renderSummary();
+      renderTasks();
+    }).catch(function (error) {
+      byId("task-panel-message").textContent = errorText(error);
+    });
+  }
+  function setTaskFilter(filter) {
+    state.taskFilter = filter || "";
+    document.querySelectorAll("[data-task-filter]").forEach(function (button) {
+      button.classList.toggle("active", (button.dataset.taskFilter || "") === state.taskFilter);
+    });
+    return loadTasks();
+  }
+  function refreshTaskCount() {
+    return request("/api/v1/admin/tasks?limit=24").then(function (body) {
+      state.counts.tasks = activeTaskCount(body.items || []);
+      byId("admin-task-count").textContent = String(state.counts.tasks);
+    }).catch(function () {});
+  }
+  function actOnTask(button) {
+    if (state.busy) return;
+    state.busy = true;
+    button.disabled = true;
+    var id = button.dataset.id;
+    var action = button.dataset.taskAction;
+    var route;
+    var options;
+    if (action === "cancel") {
+      var reason = document.querySelector('[data-task-reason="' + id + '"]');
+      route = "/api/v1/tasks/" + encodeURIComponent(id) + "/cancel";
+      options = { method: "POST", body: { reason: reason ? reason.value.trim() : "" } };
+    } else {
+      route = "/api/v1/tasks/" + encodeURIComponent(id) + "/reassign";
+      options = { method: "POST", body: { target_user_id: null } };
+    }
+    byId("task-panel-message").textContent = "正在更新任务…";
+    request(route, options).then(function () {
+      byId("task-panel-message").textContent = "";
+      toast(action === "cancel" ? "任务已取消" : "任务已释放回待领取");
+      return loadTasks();
+    }).catch(function (error) {
+      byId("task-panel-message").textContent = errorText(error);
+      button.disabled = false;
+      if (error.status === 409) return loadTasks();
+    }).finally(function () {
+      state.busy = false;
+      if (state.taskFilter) refreshTaskCount();
+    });
+  }
+
+  /* ---------- 救助记录 ---------- */
+  function impactKindLabel(value) {
+    return { RESCUED: "已救助", ADOPTED: "找到新家", MEDICAL: "医疗救助", SUPPORTER: "爱心支持" }[value] || value;
+  }
+  function formatRecordTime(value) {
+    if (!value) return "";
+    var date = new Date(value);
+    if (isNaN(date.getTime())) return String(value);
+    try {
+      return new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
+    } catch (error) {
+      return String(value);
+    }
+  }
+  function renderImpactEvents() {
+    byId("impact-events").innerHTML = state.impact.length ? state.impact.map(function (item) {
+      var reversed = Boolean(item.reversed_at);
+      var note = item.note ? '<p>' + esc(item.note) + '</p>' : "";
+      var occurred = '<span>' + esc(formatRecordTime(item.occurred_at)) + '</span>';
+      var action = reversed ? '<span class="reversed-badge">已撤销</span>' : '<button class="danger" data-impact-action="reverse" data-id="' + esc(item.id) + '">撤销这一笔</button>';
+      return '<article class="list-item impact-item' + (reversed ? " reversed" : "") + '"><div class="entity-icon impact-entity">记</div><div class="entity-copy"><strong>' + esc(impactKindLabel(item.kind)) + '<small class="impact-amount">× ' + esc(item.amount) + '</small></strong>' + note + '<div class="badges">' + occurred + (item.is_qa ? '<span>测试数据</span>' : '') + (reversed ? '<span>已撤销</span>' : '') + '</div></div><div class="actions">' + action + '</div></article>';
+    }).join("") : '<div class="empty-state"><strong>暂无救助记录</strong><p>记录一笔之后，首页的公开计数会同步更新。</p></div>';
+    byId("load-more-admin-impact").hidden = !state.cursors.impact;
+  }
+  function loadImpactEvents() {
+    return request("/api/v1/admin/impact-events?limit=24").then(function (body) {
+      applyPage("impact", body);
+      byId("impact-panel-message").textContent = "";
+      renderSummary();
+      renderImpactEvents();
+    }).catch(function (error) {
+      byId("impact-panel-message").textContent = errorText(error);
+    });
+  }
+  function actOnImpact(button) {
+    if (state.busy) return;
+    state.busy = true;
+    button.disabled = true;
+    byId("impact-panel-message").textContent = "正在撤销这一笔…";
+    request("/api/v1/admin/impact-events/" + encodeURIComponent(button.dataset.id) + "/reverse", { method: "POST" }).then(function () {
+      byId("impact-panel-message").textContent = "";
+      toast("已撤销，首页计数会同步更新");
+      return loadImpactEvents();
+    }).catch(function (error) {
+      byId("impact-panel-message").textContent = errorText(error);
+      button.disabled = false;
+    }).finally(function () { state.busy = false; });
+  }
+
+  /* ---------- 猫咪时间线 ---------- */
+  function toggleCatEventForm(button) {
+    var form = document.querySelector('[data-cat-event-form="' + button.dataset.id + '"]');
+    if (!form) return;
+    form.hidden = !form.hidden;
+    button.textContent = form.hidden ? "记录时间线" : "收起时间线";
+  }
+  function submitCatEvent(form) {
+    if (state.busy) return;
+    var catId = form.getAttribute("data-cat-event-form");
+    var kind = form.querySelector("[data-cat-event-kind]");
+    var title = form.querySelector("[data-cat-event-title]");
+    var detail = form.querySelector("[data-cat-event-detail]");
+    var value = title ? title.value.trim() : "";
+    var button = form.querySelector('button[type="submit"]');
+    if (!value) {
+      showGlobal("请填写时间线标题", true);
+      if (title) title.focus();
+      return;
+    }
+    state.busy = true;
+    if (button) button.disabled = true;
+    request("/api/v1/admin/cats/" + encodeURIComponent(catId) + "/events", { method: "POST", body: {
+      kind: kind ? kind.value : "NOTE", title: value, detail: detail ? detail.value.trim() : ""
+    } }).then(function () {
+      toast("时间线已记录");
+      return loadAll();
+    }).catch(function (error) {
+      showGlobal(errorText(error), true);
+    }).finally(function () {
+      state.busy = false;
+      if (button) button.disabled = false;
+    });
+  }
+
   function messageStatusLabel(value) {
     return { NEW: "待联系", CONTACTED: "已联系", CLOSED: "已关闭" }[value] || value;
   }
@@ -324,21 +602,33 @@
     });
     return loadMessages();
   }
-  function render() {
+  function renderSummary() {
     byId("cat-count").textContent = String(state.cats.length);
     byId("community-count").textContent = String(state.communities.length);
     byId("pending-count").textContent = String(state.cats.filter(function (cat) { return cat.review_status === "PENDING_REVIEW"; }).length + state.communities.filter(function (item) { return ["PENDING_REVIEW", "NEEDS_CHANGES"].indexOf(item.status) >= 0; }).length);
     byId("user-count").textContent = String(state.users.length);
+    byId("feeding-count").textContent = String(state.feeding.length);
+    if (!state.taskFilter) state.counts.tasks = activeTaskCount(state.tasks);
+    byId("admin-task-count").textContent = String(state.counts.tasks);
+    byId("impact-count").textContent = String(state.impact.filter(function (item) { return !item.reversed_at; }).length);
     syncMessageBadge();
+  }
+  function render() {
+    renderSummary();
     renderMessages();
     renderCats();
     renderCommunities();
     renderUsers();
+    syncCommunitySelect("feeding-community", "不指定小区");
+    syncCommunitySelect("task-community", "不指定小区");
+    renderFeedingPoints();
+    renderTasks();
+    renderImpactEvents();
   }
   function switchSection(section) {
     if (section === "users" && (!profile || profile.role !== "SUPER_ADMIN")) return;
     state.section = section;
-    var titles = { overview: "管理总览", cats: "猫咪档案", communities: "小区管理", messages: "留言板", users: "用户与权限" };
+    var titles = { overview: "管理总览", cats: "猫咪档案", communities: "小区管理", feeding: "投喂点管理", tasks: "救助任务", messages: "留言板", impact: "救助记录", users: "用户与权限" };
     byId("page-title").textContent = titles[section] || "管理总览";
     document.querySelectorAll("[data-admin-section]").forEach(function (panel) {
       var active = panel.dataset.adminSection === section;
@@ -452,7 +742,13 @@
   byId("load-more-admin-communities").addEventListener("click", function (event) { loadMore("communities", event.currentTarget); });
   byId("load-more-admin-users").addEventListener("click", function (event) { loadMore("users", event.currentTarget); });
   byId("load-more-admin-messages").addEventListener("click", function (event) { loadMore("messages", event.currentTarget); });
+  byId("load-more-admin-feeding").addEventListener("click", function (event) { loadMore("feeding", event.currentTarget); });
+  byId("load-more-admin-tasks").addEventListener("click", function (event) { loadMore("tasks", event.currentTarget); });
+  byId("load-more-admin-impact").addEventListener("click", function (event) { loadMore("impact", event.currentTarget); });
   byId("refresh-messages").addEventListener("click", loadMessages);
+  byId("refresh-feeding").addEventListener("click", loadFeedingPoints);
+  byId("refresh-tasks").addEventListener("click", loadTasks);
+  byId("refresh-impact").addEventListener("click", loadImpactEvents);
   byId("cat-search").addEventListener("input", scheduleAdminCatSearch);
   byId("user-search").addEventListener("input", renderUsers);
   byId("community-form").addEventListener("submit", function (event) {
@@ -468,6 +764,67 @@
       return loadAll();
     }).catch(function (error) { showGlobal(errorText(error), true); }).finally(function () { state.busy = false; button.disabled = false; });
   });
+  byId("feeding-form").addEventListener("submit", function (event) {
+    event.preventDefault();
+    if (state.busy) return;
+    state.busy = true;
+    var button = event.target.querySelector("button[type=submit]");
+    button.disabled = true;
+    var communityId = byId("feeding-community").value;
+    byId("feeding-panel-message").textContent = "";
+    request("/api/v1/admin/feeding-points", { method: "POST", body: {
+      name: byId("feeding-name").value.trim(),
+      community_id: communityId || null,
+      location_note: byId("feeding-location").value.trim(),
+      feeding_time: byId("feeding-time").value.trim(),
+      caretaker_note: byId("feeding-note").value.trim()
+    } }).then(function () {
+      event.target.reset();
+      toast("投喂点已创建");
+      return loadFeedingPoints();
+    }).catch(function (error) { byId("feeding-panel-message").textContent = errorText(error); }).finally(function () { state.busy = false; button.disabled = false; });
+  });
+  byId("task-form").addEventListener("submit", function (event) {
+    event.preventDefault();
+    if (state.busy) return;
+    state.busy = true;
+    var button = event.target.querySelector("button[type=submit]");
+    button.disabled = true;
+    var communityId = byId("task-community").value;
+    byId("task-panel-message").textContent = "";
+    request("/api/v1/tasks", { method: "POST", body: {
+      title: byId("task-title").value.trim(),
+      description: byId("task-description").value.trim(),
+      community_id: communityId || null
+    } }).then(function () {
+      event.target.reset();
+      toast("任务已发布");
+      return setTaskFilter("");
+    }).catch(function (error) { byId("task-panel-message").textContent = errorText(error); }).finally(function () { state.busy = false; button.disabled = false; });
+  });
+  byId("impact-form").addEventListener("submit", function (event) {
+    event.preventDefault();
+    if (state.busy) return;
+    var amount = parseInt(byId("impact-amount").value, 10);
+    if (!amount || amount < 1) {
+      byId("impact-panel-message").textContent = "数量必须是不小于 1 的整数";
+      return;
+    }
+    state.busy = true;
+    var button = event.target.querySelector("button[type=submit]");
+    button.disabled = true;
+    byId("impact-panel-message").textContent = "";
+    request("/api/v1/admin/impact-events", { method: "POST", body: {
+      kind: byId("impact-kind").value,
+      amount: amount,
+      note: byId("impact-note").value.trim()
+    } }).then(function () {
+      event.target.reset();
+      byId("impact-amount").value = "1";
+      toast("已记录一笔，首页计数会同步更新");
+      return loadImpactEvents();
+    }).catch(function (error) { byId("impact-panel-message").textContent = errorText(error); }).finally(function () { state.busy = false; button.disabled = false; });
+  });
   document.addEventListener("click", function (event) {
     var sectionButton = event.target.closest("[data-section], [data-section-link]");
     if (sectionButton) { switchSection(sectionButton.dataset.section || sectionButton.dataset.sectionLink); return; }
@@ -475,12 +832,28 @@
     if (roleButton) { changeRole(roleButton); return; }
     var filterChip = event.target.closest("[data-message-filter]");
     if (filterChip) { setMessageFilter(filterChip.dataset.messageFilter); return; }
+    var taskFilterChip = event.target.closest("[data-task-filter]");
+    if (taskFilterChip) { setTaskFilter(taskFilterChip.dataset.taskFilter); return; }
     var messageButton = event.target.closest("[data-message-action]");
     if (messageButton) { actOnMessage(messageButton); return; }
+    var feedingButton = event.target.closest("[data-feeding-action]");
+    if (feedingButton) { actOnFeeding(feedingButton); return; }
+    var taskButton = event.target.closest("[data-task-action]");
+    if (taskButton) { actOnTask(taskButton); return; }
+    var impactButton = event.target.closest("[data-impact-action]");
+    if (impactButton) { actOnImpact(impactButton); return; }
+    var catEventButton = event.target.closest('[data-cat-action="event"]');
+    if (catEventButton) { toggleCatEventForm(catEventButton); return; }
     var catButton = event.target.closest("[data-cat-action]");
     if (catButton) { actOnCat(catButton); return; }
     var communityButton = event.target.closest("[data-community-action]");
     if (communityButton) actOnCommunity(communityButton);
+  });
+  document.addEventListener("submit", function (event) {
+    var catEventForm = event.target.closest("[data-cat-event-form]");
+    if (!catEventForm) return;
+    event.preventDefault();
+    submitCatEvent(catEventForm);
   });
   document.addEventListener("input", function (event) {
     var input = event.target.closest("[data-target-search]");
@@ -500,7 +873,7 @@
   });
 
   var initialSection = window.location.hash.replace("#", "");
-  if (["overview", "cats", "communities", "messages", "users"].indexOf(initialSection) >= 0) state.section = initialSection;
+  if (["overview", "cats", "communities", "feeding", "tasks", "messages", "impact", "users"].indexOf(initialSection) >= 0) state.section = initialSection;
   if (token) restoreSession().then(function () { switchSection(state.section); }).catch(function () {});
   else showLogin("");
 }());

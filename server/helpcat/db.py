@@ -64,6 +64,16 @@ def ensure_schema(engine):
         statements.append("ALTER TABLE communities ADD COLUMN is_qa BOOLEAN NOT NULL DEFAULT 0")
     if "is_qa" not in task_columns:
         statements.append("ALTER TABLE tasks ADD COLUMN is_qa BOOLEAN NOT NULL DEFAULT 0")
+    if "completed_at" not in task_columns:
+        statements.append("ALTER TABLE tasks ADD COLUMN completed_at DATETIME")
+    if "completion_note" not in task_columns:
+        statements.append("ALTER TABLE tasks ADD COLUMN completion_note TEXT NOT NULL DEFAULT ''")
+    if "evidence_asset_id" not in task_columns:
+        statements.append("ALTER TABLE tasks ADD COLUMN evidence_asset_id VARCHAR(32)")
+    if "cancelled_at" not in task_columns:
+        statements.append("ALTER TABLE tasks ADD COLUMN cancelled_at DATETIME")
+    if "cancel_reason" not in task_columns:
+        statements.append("ALTER TABLE tasks ADD COLUMN cancel_reason TEXT NOT NULL DEFAULT ''")
     if statements:
         with engine.begin() as connection:
             for statement in statements:

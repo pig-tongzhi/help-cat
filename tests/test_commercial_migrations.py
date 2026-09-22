@@ -141,6 +141,33 @@ class CommercialMigrationTests(unittest.TestCase):
                 "created_at", "updated_at",
             }.issubset(columns))
 
+    def test_feeding_and_task_closure_migration_declares_new_tables_and_columns(self):
+        path = Path("server/helpcat/migrations/versions/008_feeding_and_task_closure.py")
+        self.assertTrue(path.is_file())
+        migration = path.read_text(encoding="utf-8")
+        self.assertIn('revision = "008_feeding_and_task_closure"', migration)
+        self.assertIn('down_revision = "007_lead_messages"', migration)
+        for marker in (
+            "feeding_points", "feeding_logs", "cat_events",
+            "uq_feeding_logs_point_user_day", "ck_feeding_points_status", "ck_cat_events_kind",
+            "ix_feeding_points_status", "ix_feeding_logs_fed_on", "ix_cat_events_cat_id",
+            "completed_at", "completion_note", "evidence_asset_id", "cancelled_at", "cancel_reason",
+        ):
+            self.assertIn(marker, migration)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            engine, _ = make_session_factory("sqlite:///" + str(Path(tmp) / "feeding.db"))
+            ensure_schema(engine)
+            tables = set(inspect(engine).get_table_names())
+            for table in ("feeding_points", "feeding_logs", "cat_events"):
+                self.assertIn(table, tables)
+            task_columns = {item["name"] for item in inspect(engine).get_columns("tasks")}
+            self.assertTrue({
+                "completed_at", "completion_note", "evidence_asset_id", "cancelled_at", "cancel_reason",
+            }.issubset(task_columns))
+            log_indexes = {row["name"] for row in inspect(engine).get_indexes("feeding_logs")}
+            self.assertIn("ix_feeding_logs_fed_on", log_indexes)
+
     def test_bootstrap_backfills_one_legacy_story_profile_and_rejects_duplicate_markers(self):
         with tempfile.TemporaryDirectory() as tmp:
             engine, session_factory = make_session_factory("sqlite:///" + str(Path(tmp) / "one.db"))

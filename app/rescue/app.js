@@ -9,13 +9,20 @@
     cats: [],
     tasks: [],
     metrics: { status: "loading", values: null },
+    publicDataStatus: { cats: "loading", tasks: "loading", communities: "loading", metrics: "loading" },
+    feedingPoints: [],
+    feedingStats: null,
+    myFeedingLogs: [],
+    contact: null,
+    activeTask: null,
+    myTasks: [],
     submissions: { cats: [], communities: [] },
     view: "home",
     homeScrollY: 0,
     authMode: "login",
     catStep: 1,
     catCommunityMode: "existing",
-    cursors: { communities: null, cats: null, tasks: null, submissionCats: null, submissionCommunities: null },
+    cursors: { communities: null, cats: null, tasks: null, feedingPoints: null, feedingLogs: null, submissionCats: null, submissionCommunities: null },
     location: null,
     catIdempotencyKey: null,
     submitting: false
@@ -27,13 +34,35 @@
     user_disabled: "账号已停用，请联系管理员。",
     daily_cat_limit_reached: "今天已达到 3 条建档上限，请明天再提交。",
     task_already_claimed: "这个任务刚刚已被其他志愿者领取。",
+    task_already_closed: "这个任务已经结束，不能再操作。",
+    task_not_claimed: "这个任务还没有被领取，无法上报完成。",
+    task_not_yours: "只有领取任务的志愿者或管理员可以上报完成。",
+    task_not_found: "这个任务不存在或已被删除。",
+    target_user_not_found: "要转派的账号不存在或已停用。",
+    evidence_asset_forbidden: "只能使用自己刚上传的照片作为凭证。",
     community_exists: "这个小区已经存在或正在审核。",
     community_not_found: "所选小区不存在或尚未审核通过。",
     stale_community_version: "小区信息刚刚已更新，已为你刷新最新内容，请重新确认。",
     community_not_editable: "当前小区状态不能再修改。",
+    community_edit_forbidden: "只能修改自己提交的小区建议。",
+    community_review_state_invalid: "当前小区状态不能执行这个审核动作。",
+    invalid_community_name: "小区名称无效，请重新填写。",
+    cat_not_found: "这只猫咪的档案不存在或尚未公开。",
+    feeding_point_not_found: "这个喂食点不存在或已暂停。",
+    photo_asset_forbidden: "只能关联自己刚上传的照片。",
     unsupported_image_type: "仅支持 JPEG、PNG 或 WebP 图片。",
     image_too_large: "图片过大，请压缩后重新选择。",
+    image_too_many_pixels: "图片像素过大，请压缩后重新选择。",
     image_content_mismatch: "图片内容无法识别，请重新选择。",
+    thumbnail_generation_failed: "缩略图生成失败，请重试。",
+    media_not_found: "图片不存在或已删除。",
+    too_many_messages: "提交太频繁了，请稍后再试，或直接加微信。",
+    invalid_idempotency_key: "提交标识无效，请刷新页面后重试。",
+    invalid_cursor: "翻页参数已失效，已为你重新加载。",
+    unauthorized: "登录已失效，请重新登录。",
+    session_expired: "登录已过期，请重新登录。",
+    forbidden: "当前账号没有这个权限。",
+    super_admin_required: "只有唯一超级管理员可以管理用户权限。",
     network_error: "网络连接失败，请检查后重试。"
   };
 
@@ -104,6 +133,25 @@
     }
   }
 
+  function moduleMessage(status) {
+    return { loading: "正在加载…", error: "加载失败，稍后会自动重试。", empty: "暂时还没有内容。" }[status] || "";
+  }
+
+  function renderHomeModuleState(module, status, message) {
+    state.publicDataStatus[module] = status;
+    if (module === "metrics") {
+      var strip = byId("home-metrics-status");
+      if (strip) strip.dataset.moduleState = status;
+      return;
+    }
+    var target = byId("home-" + module + "-status");
+    if (!target) return;
+    var text = message || moduleMessage(status);
+    target.textContent = status === "ready" ? "" : text;
+    target.hidden = status === "ready" || !text;
+    target.classList.toggle("error", status === "error");
+  }
+
   function renderMetrics() {
     var definitions = [
       { key: "rescued", label: "已救助" },
@@ -111,19 +159,39 @@
       { key: "medical", label: "医疗救助" },
       { key: "supporters", label: "爱心支持" }
     ];
+    var total = 0;
     definitions.forEach(function (definition) {
       var value = byId("metric-" + definition.key);
       var label = byId("metric-" + definition.key + "-label");
       value.closest(".metric-card").dataset.metricState = state.metrics.status;
+      label.textContent = definition.label;
       if (state.metrics.status === "ready") {
-        value.textContent = formatMetric(state.metrics.values[definition.key]);
-        label.textContent = definition.label;
+        var amount = state.metrics.values[definition.key];
+        total += amount;
+        value.textContent = amount === 0 ? "正在积累" : formatMetric(amount);
+        value.setAttribute("aria-label", definition.label + " " + formatMetric(amount));
       } else {
-        value.textContent = "0";
-        label.textContent = definition.label;
+        value.textContent = "—";
         if (state.metrics.status === "error") value.setAttribute("aria-label", definition.label + "暂时无法获取");
+        else value.setAttribute("aria-label", definition.label + "正在加载");
       }
     });
+    renderHomeModuleState("metrics", state.metrics.status);
+    var note = byId("home-metrics-note");
+    if (!note) return;
+    if (state.metrics.status === "error") {
+      note.textContent = "救助数据暂时无法获取，稍后会自动重试。";
+      note.hidden = false;
+      note.classList.add("error");
+    } else if (state.metrics.status === "ready" && total === 0) {
+      note.textContent = "这些数字来自管理员录入的真实救助记录，目前还没有录入，所以先显示「正在积累」。";
+      note.hidden = false;
+      note.classList.remove("error");
+    } else {
+      note.textContent = "";
+      note.hidden = true;
+      note.classList.remove("error");
+    }
   }
 
   function loadPublicMetrics() {
@@ -153,7 +221,7 @@
   }
 
   function loadPublicData() {
-    showStatus("", false);
+    ["cats", "tasks", "communities"].forEach(function (module) { renderHomeModuleState(module, "loading"); });
     return Promise.all([
       api.request("/api/v1/communities?limit=24"),
       api.request("/api/v1/cats?limit=24"),
@@ -165,10 +233,12 @@
       state.cursors.cats = results[1].next_cursor || null;
       state.tasks = results[2].items || [];
       state.cursors.tasks = results[2].next_cursor || null;
-      showStatus("", false);
+      renderHomeModuleState("cats", state.cats.length ? "ready" : "empty");
+      renderHomeModuleState("tasks", state.tasks.length ? "ready" : "empty");
+      renderHomeModuleState("communities", "ready");
       renderApp();
     }).catch(function (error) {
-      showStatus("", false);
+      ["cats", "tasks", "communities"].forEach(function (module) { renderHomeModuleState(module, "error"); });
       toast(errorText(error));
       renderApp();
     });
@@ -228,20 +298,26 @@
   function catCard(cat) {
     var image = photoUrl(cat, "thumb");
     var originalImage = photoUrl(cat);
-    return '<article class="cat-card">' +
+    return '<article class="cat-card" data-cat-open="' + escapeHtml(cat.id) + '" tabindex="0" role="button" aria-label="查看 ' + escapeHtml(cat.nickname) + ' 的档案">' +
       '<div class="cat-photo ' + (image ? "has-photo" : "") + '">' +
       '<span class="cat-placeholder" aria-hidden="true"><i></i><small>暂无照片</small></span>' +
       (image ? '<img data-cat-photo data-original-src="' + escapeHtml(originalImage) + '" src="' + escapeHtml(image) + '" alt="' + escapeHtml(cat.nickname) + '的照片" width="640" height="480" loading="lazy" decoding="async">' : '') +
       '<span class="health-badge ' + healthTone(cat.health_status) + '">' + escapeHtml(healthLabel(cat.health_status)) + '</span></div>' +
       '<div class="cat-card-body"><div class="cat-title"><h3>' + escapeHtml(cat.nickname) + '</h3><span>' + escapeHtml(cat.code) + '</span></div>' +
       '<p class="cat-community">' + escapeHtml(communityName(cat.community_id, cat.community_name)) + '</p>' +
-      '<p class="cat-meta">' + escapeHtml(cat.living_status || "居住情况待观察") + ' · ' + escapeHtml(cat.location_note || "位置已保护") + '</p></div></article>';
+      '<p class="cat-meta">' + escapeHtml(cat.living_status || "居住情况待观察") + ' · ' + escapeHtml(cat.location_note || "位置已保护") + '</p>' +
+      '<span class="cat-card-more">查看档案与时间线 →</span></div></article>';
   }
 
   function taskCard(task) {
     return '<article class="task-card"><span class="task-priority">待领取</span><div class="task-copy"><h3>' + escapeHtml(task.title) + '</h3>' +
-      '<p>' + escapeHtml(task.description || "管理员发布的社区救助任务") + '</p><span>' + escapeHtml(communityName(task.community_id)) + '</span></div>' +
+      '<p>' + escapeHtml(task.description || "管理员发布的社区救助任务") + '</p><span>' + escapeHtml(communityName(task.community_id, task.community_name)) + '</span></div>' +
       '<button class="button secondary compact claim-task" type="button" data-task-id="' + escapeHtml(task.id) + '">领取任务</button></article>';
+  }
+
+  function taskEmptyCard() {
+    return '<div class="empty-state"><strong>暂时没有开放任务</strong><p>有新的救助行动时会在这里及时发布。你现在也可以先留下联系方式，需要人手时管理员会来找你。</p>' +
+      '<button class="button secondary compact" type="button" data-contact-open="1">我想帮忙，留下联系方式</button></div>';
   }
 
   function emptyCard(title, description) {
@@ -293,10 +369,20 @@
 
   function renderTasks() {
     byId("open-task-count").textContent = formatMetric(uniqueCollectionCount(state.tasks));
-    var content = state.tasks.length ? state.tasks.map(taskCard).join("") : emptyCard("暂时没有开放任务", "有新的救助行动时会在这里及时发布。");
+    var content = state.tasks.length ? state.tasks.map(taskCard).join("") : taskEmptyCard();
     byId("task-list").innerHTML = content;
-    byId("home-tasks").innerHTML = state.tasks.length ? state.tasks.slice(0, 1).map(taskCard).join("") : content;
+    byId("home-tasks").innerHTML = state.tasks.length ? state.tasks.slice(0, 1).map(taskCard).join("") : taskEmptyCard();
     byId("load-more-tasks").hidden = !state.cursors.tasks;
+    renderMyTasks();
+  }
+
+  function renderMyTasks() {
+    var section = byId("my-tasks-section");
+    var list = byId("my-task-list");
+    if (!section || !list) return;
+    var mine = state.myTasks || [];
+    section.hidden = !state.user || !mine.length;
+    list.innerHTML = mine.map(myTaskCard).join("");
   }
 
   function renderCommunityOptions() {
@@ -390,6 +476,305 @@
     byId("load-more-submissions").hidden = !(state.cursors.submissionCats || state.cursors.submissionCommunities);
   }
 
+  // ---- 加入我们：联系方式与留言 ---------------------------------------
+
+  function sourceFromLocation() {
+    var match = /(?:^|&)(?:from|utm_source)=([^&]+)/.exec(window.location.search.replace(/^\?/, ""));
+    if (match) {
+      try { return decodeURIComponent(match[1]).slice(0, 80); } catch (error) { return ""; }
+    }
+    return String(document.referrer || "").replace(/^https?:\/\//, "").split("/")[0].slice(0, 80);
+  }
+
+  function loadContact() {
+    if (state.contact) return Promise.resolve(state.contact);
+    return api.request("/api/v1/public/contact").then(function (payload) {
+      state.contact = payload;
+      return payload;
+    }).catch(function () {
+      state.contact = { wechat: "", wechat_note: "帮帮小猫", qr_image: "", phone: "", note: "" };
+      return state.contact;
+    });
+  }
+
+  function openContactSheet() {
+    openSheet("contact-sheet");
+    byId("contact-wechat").textContent = "正在获取…";
+    loadContact().then(function (payload) {
+      byId("contact-wechat").textContent = payload.wechat || "请先留言，管理员会来加你";
+      byId("contact-note").textContent = payload.wechat_note || "帮帮小猫";
+      byId("contact-footnote").textContent = payload.note || "";
+    });
+  }
+
+  function submitContact(event) {
+    event.preventDefault();
+    if (state.submitting) return;
+    var field = byId("contact-value");
+    var value = field.value.trim();
+    if (value.length < 2) {
+      byId("contact-status").textContent = "请填写微信号或手机号，方便我们联系你。";
+      field.focus();
+      return;
+    }
+    state.submitting = true;
+    var button = byId("contact-submit");
+    button.disabled = true;
+    byId("contact-status").textContent = "正在提交…";
+    api.request("/api/v1/public/messages", {
+      method: "POST",
+      body: {
+        name: byId("contact-name").value.trim(),
+        contact_type: byId("contact-type").value,
+        contact: value,
+        message: byId("contact-message").value.trim(),
+        source: sourceFromLocation()
+      }
+    }).then(function () {
+      byId("contact-form").reset();
+      byId("contact-status").textContent = "已收到，管理员会尽快加你。也可以直接加上面的微信。";
+      toast("提交成功，谢谢你的加入");
+    }).catch(function (error) {
+      byId("contact-status").textContent = errorText(error);
+    }).finally(function () {
+      state.submitting = false;
+      button.disabled = false;
+    });
+  }
+
+  // ---- 猫咪详情与时间线 -----------------------------------------------
+
+  var CAT_EVENT_LABELS = { RESCUE: "相遇", FEED: "投喂", MEDICAL: "就医", CHECKUP: "检查", ADOPTED: "领养", NOTE: "记录" };
+
+  function openCatDetail(catId) {
+    var cat = state.cats.find(function (item) { return item.id === catId; });
+    if (!cat) return;
+    openSheet("cat-detail-sheet");
+    var image = photoUrl(cat);
+    byId("cat-detail-body").innerHTML =
+      '<span class="section-kicker">CAT PROFILE</span>' +
+      '<h2 id="cat-detail-title">' + escapeHtml(cat.nickname) + '</h2>' +
+      '<p class="sheet-intro">' + escapeHtml(cat.code) + ' · ' + escapeHtml(communityName(cat.community_id, cat.community_name)) + '</p>' +
+      (image ? '<div class="cat-detail-photo"><img src="' + escapeHtml(image) + '" alt="' + escapeHtml(cat.nickname) + '的照片" loading="lazy" decoding="async"></div>' : '') +
+      '<dl class="cat-detail-facts">' +
+      '<div><dt>健康</dt><dd>' + escapeHtml(healthLabel(cat.health_status)) + '</dd></div>' +
+      '<div><dt>居住</dt><dd>' + escapeHtml(cat.living_status || "待观察") + '</dd></div>' +
+      '<div><dt>活动范围</dt><dd>' + escapeHtml(cat.location_note || "位置已保护") + '</dd></div>' +
+      '</dl>' +
+      '<p class="privacy-label">精确坐标、联系方式和未经确认的医疗信息不会公开。</p>' +
+      '<div class="cat-timeline" id="cat-timeline"><p class="module-status">正在加载时间线…</p></div>' +
+      '<button class="button secondary full" type="button" data-contact-open="1">我见过它，想帮忙</button>';
+    api.request("/api/v1/cats/" + encodeURIComponent(catId) + "/events").then(function (payload) {
+      var items = payload.items || [];
+      byId("cat-timeline").innerHTML = items.length
+        ? '<div class="section-title"><div><h3>时间线</h3></div></div>' + items.map(function (item) {
+            return '<article class="timeline-item"><span class="timeline-kind">' + escapeHtml(CAT_EVENT_LABELS[item.kind] || item.kind) + '</span>' +
+              '<div><strong>' + escapeHtml(item.title) + '</strong>' +
+              (item.detail ? '<p>' + escapeHtml(item.detail) + '</p>' : '') +
+              '<small>' + escapeHtml(String(item.occurred_at || "").slice(0, 10)) + '</small></div></article>';
+          }).join("")
+        : '<p class="module-status">还没有公开的时间线记录。</p>';
+    }).catch(function () {
+      byId("cat-timeline").innerHTML = '<p class="module-status error">时间线加载失败，稍后会自动重试。</p>';
+    });
+  }
+
+  // ---- 定点投喂 -------------------------------------------------------
+
+  function loadFeedingStats() {
+    return api.request("/api/v1/public/feeding-stats").then(function (payload) {
+      state.feedingStats = payload;
+      renderFeedingStats();
+    }).catch(function () {
+      state.feedingStats = null;
+      renderFeedingStats();
+    });
+  }
+
+  function renderFeedingStats() {
+    var target = byId("feeding-stats");
+    if (!target) return;
+    var stats = state.feedingStats;
+    if (!stats) { target.innerHTML = ""; return; }
+    var cards = [
+      { label: "喂食点", value: stats.points_active },
+      { label: "今日打卡", value: stats.feeds_today },
+      { label: "近 7 天打卡", value: stats.feeds_week },
+      { label: "参与志愿者", value: stats.volunteers_week }
+    ];
+    target.innerHTML = cards.map(function (card) {
+      return '<article class="feeding-stat"><strong>' + (card.value ? formatMetric(card.value) : "正在积累") + '</strong><small>' + card.label + '</small></article>';
+    }).join("");
+  }
+
+  function feedingPointCard(point) {
+    var meta = [point.feeding_time, point.location_note].filter(Boolean).join(" · ");
+    return '<article class="feeding-card"><div class="feeding-copy"><strong>' + escapeHtml(point.name) + '</strong>' +
+      '<p>' + escapeHtml(meta || "投喂时间待补充") + '</p>' +
+      (point.community_name ? '<span class="feeding-community">' + escapeHtml(point.community_name) + '</span>' : '') +
+      (point.caretaker_note ? '<p class="feeding-note">' + escapeHtml(point.caretaker_note) + '</p>' : '') +
+      '<small class="feeding-today">今天已有 ' + point.fed_today + ' 人打卡</small></div>' +
+      (point.fed_by_me
+        ? '<span class="feeding-done">今天已打卡 ✓</span>'
+        : '<button class="button primary compact" type="button" data-feeding-checkin="' + escapeHtml(point.id) + '">打卡投喂</button>') +
+      '</article>';
+  }
+
+  function loadFeedingPoints(append) {
+    if (append && !state.cursors.feedingPoints) return Promise.resolve();
+    var params = ["limit=24"];
+    if (append) params.push("cursor=" + encodeURIComponent(state.cursors.feedingPoints));
+    return api.request("/api/v1/feeding-points?" + params.join("&")).then(function (payload) {
+      state.feedingPoints = append
+        ? communityForm.appendUnique(state.feedingPoints, payload.items || [])
+        : (payload.items || []);
+      state.cursors.feedingPoints = payload.next_cursor || null;
+      renderFeeding();
+    }).catch(function (error) {
+      renderHomeModuleState("feeding", "error");
+      toast(errorText(error));
+    });
+  }
+
+  function renderFeeding() {
+    var target = byId("feeding-list");
+    if (!target) return;
+    target.innerHTML = state.feedingPoints.length
+      ? state.feedingPoints.map(feedingPointCard).join("")
+      : emptyCard("还没有喂食点", "管理员发布喂食点后，这里就能打卡记录投喂。");
+    byId("load-more-feeding").hidden = !state.cursors.feedingPoints;
+  }
+
+  function checkIn(pointId, button) {
+    if (!requireLogin() || state.submitting) return;
+    state.submitting = true;
+    button.disabled = true;
+    button.textContent = "打卡中…";
+    api.request("/api/v1/feeding-points/" + encodeURIComponent(pointId) + "/logs", { method: "POST", body: {} })
+      .then(function () {
+        toast("打卡成功，谢谢你的投喂");
+        return Promise.all([loadFeedingPoints(false), loadFeedingStats(), loadMyFeedingLogs()]);
+      })
+      .catch(function (error) {
+        toast(errorText(error));
+        button.disabled = false;
+        button.textContent = "打卡投喂";
+      })
+      .finally(function () { state.submitting = false; });
+  }
+
+  function loadMyFeedingLogs() {
+    if (!state.user) { state.myFeedingLogs = []; renderMyFeedingLogs(); return Promise.resolve(); }
+    return api.request("/api/v1/feeding-logs/mine?limit=24").then(function (payload) {
+      state.myFeedingLogs = payload.items || [];
+      renderMyFeedingLogs();
+    }).catch(function () {
+      state.myFeedingLogs = [];
+      renderMyFeedingLogs();
+    });
+  }
+
+  function renderMyFeedingLogs() {
+    var target = byId("my-feeding-logs");
+    if (!target) return;
+    if (!state.user) {
+      target.innerHTML = '<p class="module-status">登录后可以记录并查看自己的投喂打卡。</p>';
+      return;
+    }
+    target.innerHTML = state.myFeedingLogs.length
+      ? state.myFeedingLogs.map(function (log) {
+          return '<article class="feeding-log"><strong>' + escapeHtml(log.point_name || "喂食点") + '</strong>' +
+            '<span>' + escapeHtml(log.fed_on) + '</span>' +
+            (log.food_note ? '<small>' + escapeHtml(log.food_note) + '</small>' : '') + '</article>';
+        }).join("")
+      : '<p class="module-status">还没有打卡记录，选一个喂食点开始吧。</p>';
+  }
+
+  function ensureFeeding() {
+    loadFeedingStats();
+    loadMyFeedingLogs();
+    if (!state.feedingPoints.length) return loadFeedingPoints(false);
+    return Promise.resolve();
+  }
+
+  // ---- 任务闭环 -------------------------------------------------------
+
+  function loadMyTasks() {
+    if (!state.user) { state.myTasks = []; renderMyTasks(); return Promise.resolve(); }
+    return api.request("/api/v1/tasks/mine?limit=24").then(function (payload) {
+      state.myTasks = payload.items || [];
+      renderMyTasks();
+    }).catch(function () {
+      state.myTasks = [];
+      renderMyTasks();
+    });
+  }
+
+  function myTaskCard(task) {
+    var label = { OPEN: "待领取", CLAIMED: "进行中", COMPLETED: "已完成", CANCELLED: "已取消" }[task.status] || task.status;
+    var action = task.status === "CLAIMED"
+      ? '<button class="button primary compact" type="button" data-task-report="' + escapeHtml(task.id) + '">上报完成</button>'
+      : '<span class="task-status-chip">' + escapeHtml(label) + '</span>';
+    return '<article class="task-card"><span class="task-priority">' + escapeHtml(label) + '</span>' +
+      '<div class="task-copy"><h3>' + escapeHtml(task.title) + '</h3>' +
+      '<p>' + escapeHtml(task.description || "管理员发布的社区救助任务") + '</p>' +
+      '<span>' + escapeHtml(communityName(task.community_id, task.community_name)) + '</span>' +
+      (task.completion_note ? '<small>完成说明：' + escapeHtml(task.completion_note) + '</small>' : '') +
+      '</div>' + action + '</article>';
+  }
+
+  function openTaskSheet(taskId) {
+    var task = (state.myTasks || []).find(function (item) { return item.id === taskId; });
+    if (!task) return;
+    state.activeTask = task;
+    byId("task-sheet-intro").textContent = task.title;
+    byId("task-note").value = "";
+    byId("task-status").textContent = "";
+    openSheet("task-sheet");
+  }
+
+  function submitTaskReport(event) {
+    event.preventDefault();
+    var task = state.activeTask;
+    if (!task || state.submitting) return;
+    state.submitting = true;
+    var button = byId("task-submit");
+    button.disabled = true;
+    byId("task-status").textContent = "正在提交…";
+    var file = byId("task-evidence").files && byId("task-evidence").files[0];
+    var upload = file ? api.uploadImage(file) : Promise.resolve(null);
+    upload.then(function (asset) {
+      return api.request("/api/v1/tasks/" + encodeURIComponent(task.id) + "/complete", {
+        method: "POST",
+        body: { note: byId("task-note").value.trim(), evidence_asset_id: asset ? asset.id : null }
+      });
+    }).then(function () {
+      byId("task-form").reset();
+      closeSheets();
+      toast("已上报完成，谢谢你的付出");
+      return Promise.all([loadMyTasks(), loadPublicData(), loadPublicMetrics()]);
+    }).catch(function (error) {
+      byId("task-status").textContent = errorText(error);
+    }).finally(function () {
+      state.submitting = false;
+      button.disabled = false;
+    });
+  }
+
+  function releaseTask() {
+    var task = state.activeTask;
+    if (!task || state.submitting) return;
+    state.submitting = true;
+    api.request("/api/v1/tasks/" + encodeURIComponent(task.id) + "/reassign", { method: "POST", body: { target_user_id: null } })
+      .then(function () {
+        closeSheets();
+        toast("已退回任务池，谢谢你的时间");
+        return Promise.all([loadMyTasks(), loadPublicData()]);
+      })
+      .catch(function (error) { byId("task-status").textContent = errorText(error); })
+      .finally(function () { state.submitting = false; });
+  }
+
   function renderView() {
     document.querySelectorAll("[data-view]").forEach(function (view) {
       var active = view.dataset.view === state.view;
@@ -397,11 +782,13 @@
       view.hidden = !active;
     });
     document.querySelectorAll(".nav-item").forEach(function (button) {
-      button.classList.toggle("active", button.dataset.nav === state.view || (state.view === "home" && button.dataset.nav === "story-77"));
+      button.classList.toggle("active", button.dataset.nav === state.view);
     });
     var storyActive = state.view === "story-77";
     byId("floating-add-cat").hidden = storyActive || state.view === "profile";
     byId("bottom-nav").hidden = storyActive;
+    if (state.view === "feeding") ensureFeeding();
+    if (state.view === "tasks") loadMyTasks();
   }
 
   function renderApp() {
@@ -413,7 +800,7 @@
     renderView();
   }
 
-  var validViews = ["home", "cats", "tasks", "profile", "story-77"];
+  var validViews = ["home", "cats", "tasks", "feeding", "profile", "story-77"];
 
   function normalizedView(view) {
     var route = String(view || "").split("?")[0];
@@ -694,7 +1081,9 @@
     api.request("/api/v1/tasks/" + encodeURIComponent(taskId) + "/claim", { method: "POST" }).then(function () {
       state.tasks = state.tasks.filter(function (task) { return task.id !== taskId; });
       renderTasks();
-      loadPublicMetrics();
+      // 领取后必须重新拉取我的任务，否则「我领取的任务」不会出现刚领的这一条。
+      return Promise.all([loadMyTasks(), loadPublicMetrics()]);
+    }).then(function () {
       toast("任务领取成功，请按说明完成救助");
     }).catch(function (error) {
       toast(errorText(error));
@@ -817,6 +1206,14 @@
       }
       return;
     }
+    var catOpen = event.target.closest("[data-cat-open]");
+    if (catOpen) { openCatDetail(catOpen.dataset.catOpen); return; }
+    var contactOpen = event.target.closest("[data-contact-open]");
+    if (contactOpen) { openContactSheet(); return; }
+    var checkInButton = event.target.closest("[data-feeding-checkin]");
+    if (checkInButton) { checkIn(checkInButton.dataset.feedingCheckin, checkInButton); return; }
+    var reportButton = event.target.closest("[data-task-report]");
+    if (reportButton) { openTaskSheet(reportButton.dataset.taskReport); return; }
     var claim = event.target.closest(".claim-task");
     if (claim) { claimTask(claim.dataset.taskId, claim); return; }
     if (event.target.closest("#home-add-cat") || event.target.closest("#floating-add-cat")) { openCatSheet(); return; }
@@ -834,7 +1231,14 @@
     submitCommunityCorrection(correction);
   });
 
-  byId("profile-button").addEventListener("click", function () { navigate("profile"); });
+  // #profile-button 自带 data-nav="profile"，交给上面的委托统一处理，避免重复 pushState。
+  byId("home-create-cat").addEventListener("click", openCatSheet);
+  byId("home-contact").addEventListener("click", openContactSheet);
+  byId("contact-form").addEventListener("submit", submitContact);
+  byId("task-form").addEventListener("submit", submitTaskReport);
+  byId("task-release").addEventListener("click", releaseTask);
+  byId("load-more-feeding").addEventListener("click", function () { loadFeedingPoints(true); });
+  byId("refresh-my-feeding").addEventListener("click", function () { loadFeedingStats(); loadMyFeedingLogs(); });
   byId("auth-form").addEventListener("submit", handleAuth);
   byId("community-form").addEventListener("submit", handleCommunity);
   byId("cat-form").addEventListener("submit", submitCat);
@@ -897,7 +1301,14 @@
   document.addEventListener("visibilitychange", function () {
     if (document.visibilityState === "visible") checkForUpdate();
   });
-  document.addEventListener("keydown", function (event) { if (event.key === "Escape") closeSheets(); });
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape") { closeSheets(); return; }
+    if (event.key !== "Enter" && event.key !== " ") return;
+    var card = event.target && event.target.closest ? event.target.closest("[data-cat-open]") : null;
+    if (!card) return;
+    event.preventDefault();
+    openCatDetail(card.dataset.catOpen);
+  });
   window.addEventListener("hashchange", syncRouteFromHash);
 
   var initialView = window.location.hash.replace("#", "");

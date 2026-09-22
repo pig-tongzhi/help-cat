@@ -142,3 +142,46 @@ body { background: radial-gradient(circle at 88% 6%,rgba(226,220,255,.34),transp
 .lead-status.pending { background: var(--orange-soft); color: #a94b2e; }
 .lead-status.approved { background: var(--green-soft); color: var(--green); }
 .lead-status.muted { background: var(--surface-soft); color: var(--muted); }
+
+/* ---------- 投喂点 / 救助任务 / 救助记录 / 猫咪时间线（2026-08 新增） ---------- */
+/* 总览卡片由 4 张增加到 7 张：桌面自动换行，移动端保持两列，360px 仍为单列。 */
+.summary { grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+.feeding-symbol { background: var(--green-soft); }
+.task-symbol { background: var(--orange-soft); }
+.impact-symbol { background: #eef0ff; }
+@media (max-width: 700px) { .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 360px) { .summary { grid-template-columns: 1fr; } }
+
+/* 侧边栏新导航点：投喂点（碗形）、救助任务（圆形底）、救助记录（折角）。 */
+.nav-dot.feeding-dot { border-radius: 50% 50% 9px 9px; }
+.nav-dot.task-dot { border-radius: 9px 9px 50% 50%; }
+.nav-dot.impact-dot { border-radius: 5px 0 5px 0; }
+
+/* 三块新列表：图标底色、允许长文本换行（沿用 .entity-copy 结构）。 */
+.feeding-entity { background: var(--green-soft); color: var(--green); }
+.task-entity { background: var(--orange-soft); color: #a94b2e; }
+.impact-entity { background: #eef0ff; color: #3655b8; }
+.feeding-item .entity-copy p, .task-item .entity-copy p, .impact-item .entity-copy p { overflow: visible; white-space: normal; text-overflow: clip; }
+.task-item .entity-copy strong, .feeding-item .entity-copy strong, .impact-item .entity-copy strong { flex-wrap: wrap; }
+.feeding-item .badges, .task-item .badges, .impact-item .badges { flex-wrap: wrap; }
+
+/* 状态徽章沿用 .badges span 的形状，只补语义配色。 */
+.feeding-status.active { background: var(--green-soft); color: var(--green); }
+.feeding-status.paused { background: var(--gold-soft); color: #8f6b18; }
+.feeding-status.archived { background: var(--surface-soft); color: var(--muted); }
+.task-status.open { background: var(--orange-soft); color: #a94b2e; }
+.task-status.claimed { background: var(--green-soft); color: var(--green); }
+.task-status.completed { background: var(--surface-soft); color: #65736b; }
+.task-status.cancelled { background: #fff0ef; color: var(--danger); }
+.reversed-badge { padding: 4px 7px; border-radius: 999px; background: var(--surface-soft); color: var(--muted); font-size: 9px; font-weight: 750; }
+.impact-amount { color: #a2aaa5; font-size: 9px; font-weight: 650; }
+.impact-item.reversed { opacity: .55; }
+
+/* 任务取消原因整行输入；猫咪时间线整行表单。 */
+.task-note { flex: 1 0 100%; display: grid; gap: 6px; margin-top: 2px; color: var(--muted); font-size: 11px; }
+.task-note input { max-width: 420px; }
+.cat-event-workbench { flex: 1 0 100%; display: grid; grid-template-columns: minmax(150px,.6fr) minmax(220px,1fr) minmax(240px,1.2fr) auto; gap: 12px; align-items: end; margin-top: 2px; padding: 16px; border: 1px solid #e8e2dd; border-radius: 14px; background: linear-gradient(145deg,#fffaf6,#f8faf7); }
+.cat-event-workbench label { color: var(--muted); font-size: 11px; }
+.cat-event-workbench .button { white-space: nowrap; }
+@media (max-width: 1024px) { .cat-event-workbench { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 430px) { .cat-event-workbench { grid-template-columns: 1fr; } .task-note input { max-width: none; } }

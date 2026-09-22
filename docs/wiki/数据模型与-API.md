@@ -56,6 +56,18 @@
 
 欢迎页访客留下的联系方式。保存称呼、联系方式类型、联系方式、留言内容、来源渠道、处理状态（`NEW`/`CONTACTED`/`CLOSED`）、管理员备注、来源 IP、处理人和处理时间。`contact` 与 `status` 有索引；同一联系方式在去重窗口内重复提交会复用原记录。
 
+### feeding_points
+
+固定喂食点。保存名称、可选小区、位置说明、投喂时间、照看说明和状态（`ACTIVE`/`PAUSED`/`ARCHIVED`）。
+
+### feeding_logs
+
+志愿者打卡。按 `(point_id, user_id, fed_on)` 唯一，`fed_on` 为 Asia/Shanghai 日期，因此同一个人同一天在同一喂食点只记一次。
+
+### cat_events
+
+猫咪公开时间线。`kind` ∈ `RESCUE`/`FEED`/`MEDICAL`/`CHECKUP`/`ADOPTED`/`NOTE`，保存标题、说明和发生时间。
+
 ### audit_logs
 
 保存操作者、动作、实体类型、实体 ID、操作前后 JSON 和时间。当前有写入能力，没有公开查询 API。
@@ -142,6 +154,27 @@
 
 `/public/contact` 的内容由 `HELPCAT_ADMIN_WECHAT`、`HELPCAT_ADMIN_WECHAT_NOTE`、`HELPCAT_ADMIN_PHONE`、`HELPCAT_ADMIN_QR_IMAGE`、`HELPCAT_ADMIN_CONTACT_NOTE` 配置；欢迎页另外保留一份写死的微信号，作为 API 不可用时的兜底。留言是只写不读的：公开接口不会返回任何留言内容，读取必须带管理员令牌。
 
+## 定点投喂与任务闭环
+
+| 方法 | 路径 | 权限 | 作用 |
+|---|---|---|---|
+| GET | `/public/feeding-stats` | 公开 | 喂食点数、今日/近 7 天打卡数、参与志愿者数 |
+| GET | `/feeding-points` | 公开 | ACTIVE 喂食点分页；带令牌时额外返回 `fed_by_me` |
+| POST | `/feeding-points/{id}/logs` | 登录 | 打卡投喂；同一人同一天重复提交返回原记录 |
+| GET | `/feeding-logs/mine` | 登录 | 我的打卡记录 |
+| POST | `/admin/feeding-points` | ADMIN+ | 新建喂食点 |
+| PATCH | `/admin/feeding-points/{id}` | ADMIN+ | 修改喂食点或状态 |
+| GET | `/admin/feeding-points` | ADMIN+ | 全部状态的喂食点分页 |
+| GET | `/cats/{id}/events` | 公开 | 已公开猫咪的时间线，按发生时间升序 |
+| POST | `/admin/cats/{id}/events` | ADMIN+ | 追加一条猫咪时间线记录 |
+| GET | `/tasks/mine` | 登录 | 我领取的任务（任意状态） |
+| POST | `/tasks/{id}/complete` | 领取者或 ADMIN+ | 上报完成，可附完成说明与现场照片 |
+| POST | `/tasks/{id}/cancel` | ADMIN+ | 取消任务并记录原因 |
+| POST | `/tasks/{id}/reassign` | ADMIN+（普通用户可退回自己领取的任务） | 转派给他人或退回任务池 |
+| GET | `/admin/tasks` | ADMIN+ | 全部状态的任务分页 |
+
+任务状态：`OPEN` → `CLAIMED` → `COMPLETED`，或任一非终态 → `CANCELLED`。完成任务与转派都写审计日志。
+
 ## 常见错误码
 
 | code | 含义 |
@@ -150,6 +183,11 @@
 | `username_exists` | 用户名已存在 |
 | `lead_message_not_found` | 留言不存在或已被删除 |
 | `too_many_messages` | 同一访客短时间提交过于频繁 |
+| `feeding_point_not_found` | 喂食点不存在或已暂停 |
+| `task_already_closed` | 任务已结束，不能再操作 |
+| `task_not_claimed` | 任务尚未被领取，无法上报完成 |
+| `task_not_yours` | 只有领取者或管理员可以上报完成 |
+| `cat_not_found` | 猫咪档案不存在或尚未公开 |
 | `unauthorized` / `session_expired` | 未登录或会话过期 |
 | `user_disabled` | 账号停用 |
 | `forbidden` | 当前角色无权限 |
@@ -175,7 +213,7 @@
 ## 数据库迁移
 
 - SQLAlchemy 模型是运行时数据结构来源。
-- Alembic 位于 `server/helpcat/migrations/`；`002_community_candidates` 添加候选字段，`003_scale_integrity` 增加猫咪版本/幂等键和完整性约束，`004_public_metrics` 增加 QA 标记，`005_public_profiles` 增加唯一 `profile_key` 并兼容回填旧 77，`007_lead_messages` 增加欢迎页留言表。
+- Alembic 位于 `server/helpcat/migrations/`；`002_community_candidates` 添加候选字段，`003_scale_integrity` 增加猫咪版本/幂等键和完整性约束，`004_public_metrics` 增加 QA 标记，`005_public_profiles` 增加唯一 `profile_key` 并兼容回填旧 77，`007_lead_messages` 增加欢迎页留言表，`008_feeding_and_task_closure` 增加喂食点、打卡与猫咪时间线表，并为任务补充完成/取消/凭证字段。
 - 迁移环境读取 `HELPCAT_DATABASE_URL`；生产执行时必须提供绝对 SQLite URL。
 - `ensure_schema()` 为早期 SQLite 试运行提供小范围向前兼容补列，不应替代正式生产迁移。
 - 迁移 PostgreSQL 前必须先做数据备份、双向数量校验、业务抽样和回滚演练。

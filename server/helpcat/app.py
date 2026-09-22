@@ -21,8 +21,8 @@ from .auth import DUMMY_PASSWORD_HASH, WechatProvider, current_user_factory, has
 from .config import Settings
 from .community_rules import normalize_community_name
 from .db import Base, ensure_schema, make_session_factory
-from .models import AuditLog, Cat, Community, DailyCatQuota, ImpactEvent, LeadMessage, MediaAsset, Session as AuthSession, Task, User, new_id
-from .schemas import CatCommunityReassign, CatCreate, CommunityArchive, CommunityCreate, CommunityEdit, CommunityMerge, CommunityReview, ImpactEventCreate, LeadMessageCreate, LeadMessageStatusUpdate, PasswordLoginRequest, RegisterRequest, ReviewRequest, RoleUpdate, TaskCreate, VisibilityRequest, WechatLoginRequest
+from .models import AuditLog, Cat, CatEvent, Community, DailyCatQuota, FeedingLog, FeedingPoint, ImpactEvent, LeadMessage, MediaAsset, Session as AuthSession, Task, User, new_id
+from .schemas import CatCommunityReassign, CatCreate, CatEventCreate, CommunityArchive, CommunityCreate, CommunityEdit, CommunityMerge, CommunityReview, FeedingLogCreate, FeedingPointCreate, FeedingPointEdit, ImpactEventCreate, LeadMessageCreate, LeadMessageStatusUpdate, PasswordLoginRequest, RegisterRequest, ReviewRequest, RoleUpdate, TaskCancel, TaskComplete, TaskCreate, TaskReassign, VisibilityRequest, WechatLoginRequest
 
 
 def error(status, code, message=None):
@@ -219,6 +219,56 @@ def lead_message_payload(item):
     }
 
 
+def task_payload(item, community_name="", claimed_by_username="", evidence_available=False):
+    return {
+        "id": item.id, "title": item.title, "description": item.description, "community_id": item.community_id,
+        "community_name": community_name, "status": item.status, "created_by": item.created_by,
+        "claimed_by": item.claimed_by, "claimed_by_username": claimed_by_username,
+        "claimed_at": iso_utc(item.claimed_at), "completed_at": iso_utc(item.completed_at),
+        "completion_note": item.completion_note, "evidence_asset_id": item.evidence_asset_id,
+        "evidence_available": bool(evidence_available or item.evidence_asset_id),
+        "cancelled_at": iso_utc(item.cancelled_at), "cancel_reason": item.cancel_reason,
+        "created_at": iso_utc(item.created_at),
+    }
+
+
+def feeding_point_payload(item, fed_today=0, fed_by_me=False, last_fed_at=None, community_name=""):
+    return {
+        "id": item.id, "name": item.name, "community_id": item.community_id, "community_name": community_name,
+        "location_note": item.location_note, "feeding_time": item.feeding_time,
+        "caretaker_note": item.caretaker_note, "status": item.status,
+        "fed_today": fed_today, "fed_by_me": fed_by_me, "last_fed_at": iso_utc(last_fed_at),
+    }
+
+
+def feeding_log_payload(item, point_name=""):
+    return {
+        "id": item.id, "point_id": item.point_id, "point_name": point_name, "user_id": item.user_id,
+        "fed_on": item.fed_on, "fed_at": iso_utc(item.fed_at), "food_note": item.food_note,
+        "note": item.note, "photo_asset_id": item.photo_asset_id,
+    }
+
+
+def cat_event_payload(item):
+    return {
+        "id": item.id, "cat_id": item.cat_id, "kind": item.kind, "title": item.title,
+        "detail": item.detail, "occurred_at": iso_utc(item.occurred_at),
+    }
+
+
+def shanghai_today():
+    return datetime.now(ZoneInfo("Asia/Shanghai")).date().isoformat()
+
+
+def community_names(db, ids):
+    """Resolve the community names shown next to tasks and feeding points."""
+    wanted = {value for value in ids if value}
+    if not wanted:
+        return {}
+    rows = db.execute(select(Community.id, Community.name).where(Community.id.in_(wanted))).all()
+    return {row[0]: row[1] for row in rows}
+
+
 def create_app(database_url=None, storage_root=None, fake_admin_openids=None):
     settings = Settings(database_url=database_url, storage_root=storage_root, fake_admin_openids=fake_admin_openids)
     if settings.database_url.startswith("sqlite:///") and settings.database_url not in {"sqlite:///", "sqlite:///:memory:"}:
@@ -232,6 +282,15 @@ def create_app(database_url=None, storage_root=None, fake_admin_openids=None):
     app.state.wechat_provider = WechatProvider(settings)
     app.add_middleware(CORSMiddleware, allow_origins=settings.allowed_origins or ["http://localhost"], allow_credentials=True, allow_methods=["GET", "POST", "PATCH", "OPTIONS"], allow_headers=["Authorization", "Content-Type", "Idempotency-Key"])
     current_user = current_user_factory(session_factory, settings)
+
+    def optional_user(authorization: Optional[str] = Header(default=None)):
+        """Public endpoints that behave differently for a signed-in visitor."""
+        if not authorization or not authorization.startswith("Bearer "):
+            return None
+        try:
+            return current_user(authorization)
+        except HTTPException:
+            return None
 
     @app.exception_handler(HTTPException)
     async def api_http_error(_, exc):
@@ -1011,6 +1070,366 @@ def create_app(database_url=None, storage_root=None, fake_admin_openids=None):
         audit(db, actor[0], "CLAIM", "task", task.id, before={"status": "OPEN"}, after={"status": task.status, "claimed_by": actor[0]})
         db.commit()
         return task_payload(task)
+
+    def task_users(db, tasks):
+        ids = {value for task in tasks for value in (task.created_by, task.claimed_by) if value}
+        if not ids:
+            return {}
+        rows = db.execute(select(User.id, User.username, User.nickname).where(User.id.in_(ids))).all()
+        return {row[0]: (row[1] or row[2] or "") for row in rows}
+
+    @app.get("/api/v1/tasks/mine")
+    def list_my_tasks(
+        status: Optional[str] = None,
+        cursor: Optional[str] = None,
+        limit: int = Query(default=24, ge=1, le=100),
+        actor=Depends(current_user),
+        db: DbSession = Depends(db_session),
+    ):
+        """Tasks this volunteer claimed, so they can report completion."""
+        stmt = select(Task).where(Task.is_qa.is_(False), Task.claimed_by == actor[0])
+        if status:
+            stmt = stmt.where(Task.status == status)
+        items, next_cursor = paginated_items(db, stmt, Task, cursor, limit)
+        names = community_names(db, [item.community_id for item in items])
+        users = task_users(db, items)
+        return {
+            "items": [task_payload(item, names.get(item.community_id, ""), users.get(item.claimed_by, "")) for item in items],
+            "next_cursor": next_cursor,
+        }
+
+    @app.post("/api/v1/tasks/{task_id}/complete")
+    def complete_task(
+        task_id: str,
+        payload: TaskComplete,
+        actor=Depends(current_user),
+        db: DbSession = Depends(db_session),
+    ):
+        """The volunteer who claimed the task reports it done, optionally with a photo."""
+        task = db.scalar(select(Task).where(Task.id == task_id).with_for_update())
+        if not task:
+            error(404, "task_not_found")
+        if actor[1] not in {"ADMIN", "SUPER_ADMIN"} and task.claimed_by != actor[0]:
+            error(403, "task_not_yours")
+        if task.status != "CLAIMED":
+            error(409, "task_not_claimed")
+        if payload.evidence_asset_id:
+            asset = db.get(MediaAsset, payload.evidence_asset_id)
+            if not asset or (asset.created_by != actor[0] and actor[1] not in {"ADMIN", "SUPER_ADMIN"}):
+                error(403, "evidence_asset_forbidden")
+        task.status = "COMPLETED"
+        task.completed_at = datetime.now(timezone.utc)
+        task.completion_note = payload.note
+        task.evidence_asset_id = payload.evidence_asset_id
+        audit(db, actor[0], "COMPLETE", "task", task.id, before={"status": "CLAIMED"}, after={
+            "status": task.status, "evidence_asset_id": task.evidence_asset_id,
+        })
+        db.commit()
+        return task_payload(task, community_names(db, [task.community_id]).get(task.community_id, ""))
+
+    @app.post("/api/v1/tasks/{task_id}/cancel")
+    def cancel_task(
+        task_id: str,
+        payload: TaskCancel,
+        actor=Depends(current_user),
+        db: DbSession = Depends(db_session),
+    ):
+        require_admin(actor)
+        task = db.scalar(select(Task).where(Task.id == task_id).with_for_update())
+        if not task:
+            error(404, "task_not_found")
+        if task.status in {"COMPLETED", "CANCELLED"}:
+            error(409, "task_already_closed")
+        before = {"status": task.status, "claimed_by": task.claimed_by}
+        task.status = "CANCELLED"
+        task.cancelled_at = datetime.now(timezone.utc)
+        task.cancel_reason = payload.reason
+        audit(db, actor[0], "CANCEL", "task", task.id, before=before, after={"status": task.status, "reason": payload.reason})
+        db.commit()
+        return task_payload(task)
+
+    @app.post("/api/v1/tasks/{task_id}/reassign")
+    def reassign_task(
+        task_id: str,
+        payload: TaskReassign,
+        actor=Depends(current_user),
+        db: DbSession = Depends(db_session),
+    ):
+        """Hand a task to another volunteer, or release it back to the open pool.
+
+        Administrators may reassign to anyone; a volunteer may only release
+        the task they claimed themselves.
+        """
+        task = db.scalar(select(Task).where(Task.id == task_id).with_for_update())
+        if not task:
+            error(404, "task_not_found")
+        if actor[1] not in {"ADMIN", "SUPER_ADMIN"}:
+            if payload.target_user_id or task.claimed_by != actor[0]:
+                error(403, "forbidden")
+        if task.status in {"COMPLETED", "CANCELLED"}:
+            error(409, "task_already_closed")
+        before = {"status": task.status, "claimed_by": task.claimed_by}
+        if payload.target_user_id:
+            target = db.get(User, payload.target_user_id)
+            if not target or target.status != "ACTIVE":
+                error(404, "target_user_not_found")
+            task.status = "CLAIMED"
+            task.claimed_by = target.id
+            task.claimed_at = datetime.now(timezone.utc)
+        else:
+            task.status = "OPEN"
+            task.claimed_by = None
+            task.claimed_at = None
+        audit(db, actor[0], "REASSIGN", "task", task.id, before=before, after={
+            "status": task.status, "claimed_by": task.claimed_by,
+        })
+        db.commit()
+        users = task_users(db, [task])
+        return task_payload(task, community_names(db, [task.community_id]).get(task.community_id, ""), users.get(task.claimed_by, ""))
+
+    @app.get("/api/v1/admin/tasks")
+    def admin_list_tasks(
+        status: Optional[str] = None,
+        cursor: Optional[str] = None,
+        limit: int = Query(default=24, ge=1, le=100),
+        actor=Depends(current_user),
+        db: DbSession = Depends(db_session),
+    ):
+        require_admin(actor)
+        stmt = select(Task).where(Task.is_qa.is_(False))
+        if status:
+            stmt = stmt.where(Task.status == status)
+        items, next_cursor = paginated_items(db, stmt, Task, cursor, limit)
+        names = community_names(db, [item.community_id for item in items])
+        users = task_users(db, items)
+        return {
+            "items": [task_payload(item, names.get(item.community_id, ""), users.get(item.claimed_by, "")) for item in items],
+            "next_cursor": next_cursor,
+        }
+
+    # ---- 定点投喂 ------------------------------------------------------
+
+    @app.get("/api/v1/public/feeding-stats")
+    def public_feeding_stats(db: DbSession = Depends(db_session)):
+        today = shanghai_today()
+        week_start = (datetime.now(ZoneInfo("Asia/Shanghai")).date() - timedelta(days=6)).isoformat()
+        live = (FeedingLog.is_qa.is_(False),)
+        points_active = db.scalar(select(func.count()).select_from(FeedingPoint).where(
+            FeedingPoint.is_qa.is_(False), FeedingPoint.status == "ACTIVE",
+        )) or 0
+        feeds_today = db.scalar(select(func.count()).select_from(FeedingLog).where(*live, FeedingLog.fed_on == today)) or 0
+        feeds_week = db.scalar(select(func.count()).select_from(FeedingLog).where(*live, FeedingLog.fed_on >= week_start)) or 0
+        volunteers_week = db.scalar(select(func.count(func.distinct(FeedingLog.user_id))).where(*live, FeedingLog.fed_on >= week_start)) or 0
+        last_fed_at = db.scalar(select(func.max(FeedingLog.fed_at)).where(*live))
+        return {
+            "points_active": points_active, "feeds_today": feeds_today, "feeds_week": feeds_week,
+            "volunteers_week": volunteers_week, "last_fed_at": iso_utc(last_fed_at), "today": today,
+        }
+
+    @app.get("/api/v1/feeding-points")
+    def list_feeding_points(
+        cursor: Optional[str] = None,
+        limit: int = Query(default=24, ge=1, le=100),
+        actor=Depends(optional_user),
+        db: DbSession = Depends(db_session),
+    ):
+        stmt = select(FeedingPoint).where(FeedingPoint.is_qa.is_(False), FeedingPoint.status == "ACTIVE")
+        items, next_cursor = paginated_items(db, stmt, FeedingPoint, cursor, limit)
+        today = shanghai_today()
+        ids = [item.id for item in items]
+        counts, lasts, mine = {}, {}, set()
+        if ids:
+            counts = dict(db.execute(
+                select(FeedingLog.point_id, func.count()).where(
+                    FeedingLog.is_qa.is_(False), FeedingLog.fed_on == today, FeedingLog.point_id.in_(ids),
+                ).group_by(FeedingLog.point_id)
+            ).all())
+            lasts = dict(db.execute(
+                select(FeedingLog.point_id, func.max(FeedingLog.fed_at)).where(
+                    FeedingLog.is_qa.is_(False), FeedingLog.point_id.in_(ids),
+                ).group_by(FeedingLog.point_id)
+            ).all())
+            if actor:
+                mine = {row[0] for row in db.execute(
+                    select(FeedingLog.point_id).where(
+                        FeedingLog.is_qa.is_(False), FeedingLog.fed_on == today,
+                        FeedingLog.point_id.in_(ids), FeedingLog.user_id == actor[0],
+                    )
+                ).all()}
+        names = community_names(db, [item.community_id for item in items])
+        return {
+            "items": [
+                feeding_point_payload(item, counts.get(item.id, 0), item.id in mine, lasts.get(item.id), names.get(item.community_id, ""))
+                for item in items
+            ],
+            "next_cursor": next_cursor,
+        }
+
+    @app.post("/api/v1/feeding-points/{point_id}/logs", status_code=201)
+    def create_feeding_log(
+        point_id: str,
+        payload: FeedingLogCreate,
+        actor=Depends(current_user),
+        db: DbSession = Depends(db_session),
+    ):
+        """Check in at a feeding point. One check-in per volunteer per point per day."""
+        point = db.get(FeedingPoint, point_id)
+        if not point or point.status != "ACTIVE":
+            error(404, "feeding_point_not_found")
+        if payload.photo_asset_id:
+            asset = db.get(MediaAsset, payload.photo_asset_id)
+            if not asset or asset.created_by != actor[0]:
+                error(403, "photo_asset_forbidden")
+        today = shanghai_today()
+        existing = db.scalar(select(FeedingLog).where(
+            FeedingLog.point_id == point.id, FeedingLog.user_id == actor[0], FeedingLog.fed_on == today,
+        ))
+        if existing:
+            # Same volunteer, same point, same day: report the original check-in.
+            return feeding_log_payload(existing, point.name)
+        item = FeedingLog(
+            point_id=point.id, user_id=actor[0], fed_on=today, food_note=payload.food_note,
+            note=payload.note, photo_asset_id=payload.photo_asset_id, is_qa=False,
+        )
+        db.add(item)
+        db.flush()
+        audit(db, actor[0], "FEED", "feeding_point", point.id, after={"fed_on": today, "log_id": item.id})
+        db.commit()
+        return feeding_log_payload(item, point.name)
+
+    @app.get("/api/v1/feeding-logs/mine")
+    def list_my_feeding_logs(
+        cursor: Optional[str] = None,
+        limit: int = Query(default=24, ge=1, le=100),
+        actor=Depends(current_user),
+        db: DbSession = Depends(db_session),
+    ):
+        stmt = select(FeedingLog).where(FeedingLog.is_qa.is_(False), FeedingLog.user_id == actor[0])
+        items, next_cursor = paginated_items(db, stmt, FeedingLog, cursor, limit)
+        point_names = {}
+        if items:
+            point_names = dict(db.execute(
+                select(FeedingPoint.id, FeedingPoint.name).where(FeedingPoint.id.in_({item.point_id for item in items}))
+            ).all())
+        return {
+            "items": [feeding_log_payload(item, point_names.get(item.point_id, "")) for item in items],
+            "next_cursor": next_cursor,
+        }
+
+    @app.post("/api/v1/admin/feeding-points", status_code=201)
+    def create_feeding_point(payload: FeedingPointCreate, actor=Depends(current_user), db: DbSession = Depends(db_session)):
+        require_admin(actor)
+        if payload.community_id:
+            community = db.get(Community, payload.community_id)
+            if not community or community.status != "ACTIVE":
+                error(404, "community_not_found")
+        item = FeedingPoint(
+            name=payload.name.strip(), community_id=payload.community_id, location_note=payload.location_note,
+            feeding_time=payload.feeding_time, caretaker_note=payload.caretaker_note, created_by=actor[0], is_qa=False,
+        )
+        db.add(item)
+        db.flush()
+        audit(db, actor[0], "CREATE", "feeding_point", item.id, after={"name": item.name})
+        db.commit()
+        return feeding_point_payload(
+            item, community_name=community_names(db, [item.community_id]).get(item.community_id, ""),
+        )
+
+    @app.patch("/api/v1/admin/feeding-points/{point_id}")
+    def edit_feeding_point(
+        point_id: str,
+        payload: FeedingPointEdit,
+        actor=Depends(current_user),
+        db: DbSession = Depends(db_session),
+    ):
+        require_admin(actor)
+        item = db.get(FeedingPoint, point_id)
+        if not item:
+            error(404, "feeding_point_not_found")
+        before = {"name": item.name, "status": item.status, "feeding_time": item.feeding_time}
+        for field in ("name", "location_note", "feeding_time", "caretaker_note", "status"):
+            value = getattr(payload, field)
+            if value is not None:
+                setattr(item, field, value.strip() if field != "status" else value)
+        audit(db, actor[0], "UPDATE", "feeding_point", item.id, before=before, after={
+            "name": item.name, "status": item.status, "feeding_time": item.feeding_time,
+        })
+        db.commit()
+        return feeding_point_payload(item)
+
+    @app.get("/api/v1/admin/feeding-points")
+    def admin_list_feeding_points(
+        status: Optional[str] = None,
+        cursor: Optional[str] = None,
+        limit: int = Query(default=24, ge=1, le=100),
+        actor=Depends(current_user),
+        db: DbSession = Depends(db_session),
+    ):
+        require_admin(actor)
+        stmt = select(FeedingPoint).where(FeedingPoint.is_qa.is_(False))
+        if status:
+            stmt = stmt.where(FeedingPoint.status == status)
+        items, next_cursor = paginated_items(db, stmt, FeedingPoint, cursor, limit)
+        today = shanghai_today()
+        ids = [item.id for item in items]
+        counts, lasts = {}, {}
+        if ids:
+            counts = dict(db.execute(
+                select(FeedingLog.point_id, func.count()).where(
+                    FeedingLog.is_qa.is_(False), FeedingLog.fed_on == today, FeedingLog.point_id.in_(ids),
+                ).group_by(FeedingLog.point_id)
+            ).all())
+            lasts = dict(db.execute(
+                select(FeedingLog.point_id, func.max(FeedingLog.fed_at)).where(
+                    FeedingLog.is_qa.is_(False), FeedingLog.point_id.in_(ids),
+                ).group_by(FeedingLog.point_id)
+            ).all())
+        names = community_names(db, [item.community_id for item in items])
+        return {
+            "items": [
+                feeding_point_payload(item, counts.get(item.id, 0), False, lasts.get(item.id), names.get(item.community_id, ""))
+                for item in items
+            ],
+            "next_cursor": next_cursor,
+        }
+
+    # ---- 猫咪时间线 ----------------------------------------------------
+
+    @app.get("/api/v1/cats/{cat_id}/events")
+    def list_cat_events(cat_id: str, db: DbSession = Depends(db_session)):
+        cat = db.scalar(
+            select(Cat).join(Community, Cat.community_id == Community.id).where(
+                Cat.id == cat_id, Cat.review_status == "APPROVED", Cat.visibility_status == "ACTIVE",
+                Cat.is_qa.is_(False), Community.status == "ACTIVE", Community.is_qa.is_(False),
+            )
+        )
+        if not cat:
+            error(404, "cat_not_found")
+        rows = db.scalars(select(CatEvent).where(
+            CatEvent.cat_id == cat.id, CatEvent.is_qa.is_(False),
+        ).order_by(CatEvent.occurred_at.asc())).all()
+        return {"items": [cat_event_payload(item) for item in rows]}
+
+    @app.post("/api/v1/admin/cats/{cat_id}/events", status_code=201)
+    def create_cat_event(
+        cat_id: str,
+        payload: CatEventCreate,
+        actor=Depends(current_user),
+        db: DbSession = Depends(db_session),
+    ):
+        require_admin(actor)
+        cat = db.get(Cat, cat_id)
+        if not cat:
+            error(404, "cat_not_found")
+        item = CatEvent(
+            cat_id=cat.id, kind=payload.kind, title=payload.title.strip(), detail=payload.detail,
+            occurred_at=payload.occurred_at or datetime.now(timezone.utc), created_by=actor[0], is_qa=False,
+        )
+        db.add(item)
+        db.flush()
+        audit(db, actor[0], "CREATE", "cat_event", item.id, after={"cat_id": cat.id, "kind": item.kind})
+        db.commit()
+        return cat_event_payload(item)
 
     @app.post("/api/v1/media/images", status_code=201)
     async def upload_image(file: UploadFile = File(...), actor=Depends(current_user), db: DbSession = Depends(db_session)):

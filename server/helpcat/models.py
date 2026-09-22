@@ -135,7 +135,76 @@ class Task(Base):
     claimed_by: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     claimed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    completion_note: Mapped[str] = mapped_column(Text, default="")
+    evidence_asset_id: Mapped[Optional[str]] = mapped_column(ForeignKey("media_assets.id"), nullable=True)
+    cancelled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancel_reason: Mapped[str] = mapped_column(Text, default="")
     is_qa: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sql_text("0"), nullable=False, index=True)
+
+
+class FeedingPoint(Base):
+    """A fixed spot where volunteers feed the community cats."""
+
+    __tablename__ = "feeding_points"
+    __table_args__ = (
+        CheckConstraint("status IN ('ACTIVE','PAUSED','ARCHIVED')", name="ck_feeding_points_status"),
+    )
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    community_id: Mapped[Optional[str]] = mapped_column(ForeignKey("communities.id"), nullable=True, index=True)
+    name: Mapped[str] = mapped_column(String(120), index=True)
+    location_note: Mapped[str] = mapped_column(String(240), default="")
+    feeding_time: Mapped[str] = mapped_column(String(80), default="")
+    caretaker_note: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(20), default="ACTIVE", index=True)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    is_qa: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sql_text("0"), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+
+class FeedingLog(Base):
+    """One volunteer check-in at a feeding point.
+
+    `fed_on` carries the Asia/Shanghai calendar date so the same volunteer
+    cannot double-count the same point on the same day.
+    """
+
+    __tablename__ = "feeding_logs"
+    __table_args__ = (
+        UniqueConstraint("point_id", "user_id", "fed_on", name="uq_feeding_logs_point_user_day"),
+    )
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    point_id: Mapped[str] = mapped_column(ForeignKey("feeding_points.id"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    fed_on: Mapped[str] = mapped_column(String(10), index=True)
+    fed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    food_note: Mapped[str] = mapped_column(String(120), default="")
+    note: Mapped[str] = mapped_column(Text, default="")
+    photo_asset_id: Mapped[Optional[str]] = mapped_column(ForeignKey("media_assets.id"), nullable=True)
+    is_qa: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sql_text("0"), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+
+
+class CatEvent(Base):
+    """A dated entry in a cat's public timeline (相遇、投喂、就医、检查、领养…)."""
+
+    __tablename__ = "cat_events"
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('RESCUE','FEED','MEDICAL','CHECKUP','ADOPTED','NOTE')",
+            name="ck_cat_events_kind",
+        ),
+    )
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    cat_id: Mapped[str] = mapped_column(ForeignKey("cats.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(20), index=True)
+    title: Mapped[str] = mapped_column(String(120))
+    detail: Mapped[str] = mapped_column(Text, default="")
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    is_qa: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sql_text("0"), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 
 class ImpactEvent(Base):

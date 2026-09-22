@@ -32,7 +32,10 @@
         <button class="side-nav active" type="button" data-section="overview"><span class="nav-dot overview-dot"></span>总览</button>
         <button class="side-nav" type="button" data-section="cats"><span class="nav-dot cat-dot"></span>猫咪档案</button>
         <button class="side-nav" type="button" data-section="communities"><span class="nav-dot community-dot"></span>小区管理</button>
+        <button class="side-nav" type="button" data-section="feeding"><span class="nav-dot feeding-dot"></span>投喂点</button>
+        <button class="side-nav" type="button" data-section="tasks"><span class="nav-dot task-dot"></span>救助任务</button>
         <button class="side-nav" type="button" data-section="messages"><span class="nav-dot message-dot"></span>留言板<span class="nav-badge" id="message-nav-badge" hidden>0</span></button>
+        <button class="side-nav" type="button" data-section="impact"><span class="nav-dot impact-dot"></span>救助记录</button>
         <button class="side-nav" id="users-nav" type="button" data-section="users" hidden><span class="nav-dot user-dot"></span>用户与权限</button>
       </nav>
       <div class="sidebar-foot"><span class="live-dot"></span><span>服务运行中</span></div>
@@ -52,6 +55,9 @@
           <article><span class="metric-symbol community-symbol"></span><div><strong id="community-count">0</strong><small>小区</small></div></article>
           <article class="pending-card"><span class="metric-symbol review-symbol"></span><div><strong id="pending-count">0</strong><small>待审核事项</small></div></article>
           <article><span class="metric-symbol message-symbol"></span><div><strong id="message-count">0</strong><small>待联系留言</small></div></article>
+          <article><span class="metric-symbol feeding-symbol"></span><div><strong id="feeding-count">0</strong><small>投喂点</small></div></article>
+          <article><span class="metric-symbol task-symbol"></span><div><strong id="admin-task-count">0</strong><small>进行中任务</small></div></article>
+          <article><span class="metric-symbol impact-symbol"></span><div><strong id="impact-count">0</strong><small>生效救助记录</small></div></article>
           <article id="user-summary" hidden><span class="metric-symbol user-symbol"></span><div><strong id="user-count">0</strong><small>平台注册用户</small></div></article>
         </div>
         <div class="welcome-panel"><div><span class="eyebrow">TODAY'S GOVERNANCE</span><h2>让每一条社区信息<br>都真实、清晰、可追溯</h2><p>优先处理待审核档案；隐藏和归档不会物理删除数据。</p></div><button class="button primary" type="button" data-section-link="cats">处理待审核档案</button></div>
@@ -71,6 +77,41 @@
         <div class="load-more-row"><button class="button secondary" id="load-more-admin-communities" type="button" hidden>加载更多小区</button></div>
       </section>
 
+      <section class="admin-section" data-admin-section="feeding" hidden>
+        <div class="section-heading"><div><span class="eyebrow">FEEDING POINTS</span><h2>投喂点管理</h2><p>维护定点投喂位置与照看说明。暂停后居民端不再展示，归档表示该点已停用。</p></div><button class="button secondary" id="refresh-feeding" type="button">刷新投喂点</button></div>
+        <form class="inline-form" id="feeding-form">
+          <label>投喂点名称<input id="feeding-name" required maxlength="120" placeholder="例如：银湖公园北门投喂点"></label>
+          <label>位置说明<input id="feeding-location" maxlength="240" placeholder="例如：北门石凳旁，靠近地下车库出口"></label>
+          <label>投喂时间<input id="feeding-time" maxlength="80" placeholder="每天 18:00"></label>
+          <label>所属小区<select id="feeding-community"><option value="">不指定小区</option></select></label>
+          <label>照看说明<textarea id="feeding-note" maxlength="1000" placeholder="例如：猫粮放在树洞里，记得收走空罐"></textarea></label>
+          <button class="button primary" type="submit">新增投喂点</button>
+        </form>
+        <p class="panel-message" id="feeding-panel-message" role="status"></p>
+        <div id="feeding-points" class="list"></div>
+        <div class="load-more-row"><button class="button secondary" id="load-more-admin-feeding" type="button" hidden>加载更多投喂点</button></div>
+      </section>
+
+      <section class="admin-section" data-admin-section="tasks" hidden>
+        <div class="section-heading"><div><span class="eyebrow">RESCUE TASKS</span><h2>救助任务</h2><p>发布社区救助任务，居民在手机端领取。取消需要填写原因，释放会把任务放回待领取。</p></div><button class="button secondary" id="refresh-tasks" type="button">刷新任务</button></div>
+        <form class="inline-form" id="task-form">
+          <label>任务标题<input id="task-title" required maxlength="120" placeholder="例如：银湖公园有小猫需要送医"></label>
+          <label>任务说明<textarea id="task-description" maxlength="2000" placeholder="描述位置、现场情况和需要的帮助"></textarea></label>
+          <label>所属小区<select id="task-community"><option value="">不指定小区</option></select></label>
+          <button class="button primary" type="submit">发布任务</button>
+        </form>
+        <div class="message-filters" role="group" aria-label="按状态筛选救助任务">
+          <button class="filter-chip active" type="button" data-task-filter="">全部</button>
+          <button class="filter-chip" type="button" data-task-filter="OPEN">待领取</button>
+          <button class="filter-chip" type="button" data-task-filter="CLAIMED">进行中</button>
+          <button class="filter-chip" type="button" data-task-filter="COMPLETED">已完成</button>
+          <button class="filter-chip" type="button" data-task-filter="CANCELLED">已取消</button>
+        </div>
+        <p class="panel-message" id="task-panel-message" role="status"></p>
+        <div id="admin-tasks" class="list"></div>
+        <div class="load-more-row"><button class="button secondary" id="load-more-admin-tasks" type="button" hidden>加载更多任务</button></div>
+      </section>
+
       <section class="admin-section" data-admin-section="messages" hidden>
         <div class="section-heading"><div><span class="eyebrow">VISITOR LEADS</span><h2>留言板</h2><p>首页访客留下的联系方式。联系上之后请标记状态，避免重复添加。</p></div><button class="button secondary" id="refresh-messages" type="button">刷新留言</button></div>
         <div class="message-filters" role="group" aria-label="按状态筛选留言">
@@ -82,6 +123,24 @@
         <p class="panel-message" id="message-panel-message" role="status"></p>
         <div id="messages" class="list"></div>
         <div class="load-more-row"><button class="button secondary" id="load-more-admin-messages" type="button" hidden>加载更多留言</button></div>
+      </section>
+
+      <section class="admin-section" data-admin-section="impact" hidden>
+        <div class="section-heading"><div><span class="eyebrow">IMPACT LEDGER</span><h2>救助记录</h2><p>这里记录的每一笔都会进入首页公开计数；结果为空时首页会显示“正在积累”。</p></div><button class="button secondary" id="refresh-impact" type="button">刷新记录</button></div>
+        <form class="inline-form" id="impact-form">
+          <label>记录类型<select id="impact-kind">
+            <option value="RESCUED">已救助</option>
+            <option value="ADOPTED">找到新家</option>
+            <option value="MEDICAL">医疗救助</option>
+            <option value="SUPPORTER">爱心支持</option>
+          </select></label>
+          <label>数量<input id="impact-amount" type="number" min="1" max="1000000" step="1" value="1"></label>
+          <label>备注<textarea id="impact-note" maxlength="1000" placeholder="例如：7 月 12 日银湖公园救助一只小奶猫"></textarea></label>
+          <button class="button primary" type="submit">记录一笔</button>
+        </form>
+        <p class="panel-message" id="impact-panel-message" role="status"></p>
+        <div id="impact-events" class="list"></div>
+        <div class="load-more-row"><button class="button secondary" id="load-more-admin-impact" type="button" hidden>加载更多记录</button></div>
       </section>
 
       <section class="admin-section users-panel" id="users-panel" data-admin-section="users" hidden>
