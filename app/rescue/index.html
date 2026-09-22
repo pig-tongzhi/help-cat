@@ -164,8 +164,23 @@
       </section>
 
       <section class="view" data-view="feeding" aria-labelledby="feeding-title" hidden>
-        <div class="page-heading"><span class="section-kicker">DAILY FEEDING</span><h1 id="feeding-title">定点投喂</h1><p>选一个喂食点打卡，让社区知道今天有谁喂过。</p></div>
+        <div class="page-heading"><span class="section-kicker">DAILY FEEDING</span><h1 id="feeding-title">定点投喂</h1><p>每天打卡一次，让社区知道今天有谁喂过。</p></div>
+
+        <section class="streak-card" id="streak-card" aria-label="我的打卡进度">
+          <div class="streak-main"><strong id="streak-days">—</strong><span>天连续投喂</span></div>
+          <div class="streak-detail">
+            <p id="streak-line">登录后可以记录你的投喂打卡。</p>
+            <div class="streak-week" id="streak-week" role="img" aria-label="最近七天的打卡情况"></div>
+            <p class="streak-next" id="streak-next" hidden></p>
+          </div>
+        </section>
+
         <div class="feeding-stats" id="feeding-stats" aria-label="投喂统计"></div>
+
+        <div class="feeding-toolbar">
+          <p class="feeding-today-line" id="feeding-today-line" role="status"></p>
+          <button class="text-button" id="sort-nearby" type="button">按距离排序</button>
+        </div>
         <p class="module-status" id="feeding-status" hidden></p>
         <div class="feeding-list" id="feeding-list"><div class="skeleton row-skeleton"></div></div>
         <div class="load-more-row"><button class="button secondary" id="load-more-feeding" type="button" hidden>加载更多喂食点</button></div>

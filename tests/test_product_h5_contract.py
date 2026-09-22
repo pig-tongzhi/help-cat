@@ -143,6 +143,38 @@ class ProductH5ContractTests(unittest.TestCase):
         narrow = styles.rindex(".primary-action-grid { grid-template-columns: 1fr; }")
         self.assertGreater(narrow, base, "窄屏单列规则必须写在三支柱基础规则之后")
 
+    def test_daily_check_in_gameplay_surface(self):
+        html, script, styles = self.h5(), self.script(), self.styles()
+        for marker in (
+            'id="streak-card"', 'id="streak-days"', 'id="streak-week"', 'id="streak-next"',
+            'id="feeding-today-line"', 'id="sort-nearby"',
+        ):
+            self.assertIn(marker, html)
+        for marker in (
+            "/feeding-logs/mine/summary", "loadFeedingSummary", "renderStreakWeek", "sortNearby",
+            "needs_feed", "distance_m", "formatDistance", "sort=today",
+        ):
+            self.assertIn(marker, script)
+        for marker in (".streak-card", ".streak-day.is-fed", ".feeding-badge", ".feeding-distance"):
+            self.assertIn(marker, styles)
+        # 与三支柱同理：连续打卡卡的窄屏堆叠规则必须写在基础规则之后，
+        # 否则 390px 下仍是两列、7 天格会溢出视口（实测超出 45px）。
+        base = styles.rindex("grid-template-columns: minmax(0, 150px) minmax(0, 1fr);")
+        narrow = styles.rindex(".streak-card { grid-template-columns: 1fr; }")
+        self.assertGreater(narrow, base, "窄屏堆叠规则必须写在连续打卡卡基础规则之后")
+
+    def test_mobile_h5_compatibility_basics(self):
+        styles = self.styles()
+        for marker in (
+            "text-size-adjust: 100%",   # iOS 不擅自放大文字
+            "min-height: 100dvh",       # 地址栏收放不再抖动
+            "touch-action: manipulation",  # 去掉点击延迟
+            "@media (hover: none)",     # 触摸设备禁用 hover 粘滞
+            "font-size: 16px",          # 防 iOS 聚焦输入框时整页放大
+            "overscroll-behavior: contain",
+        ):
+            self.assertIn(marker, styles)
+
     def test_no_leftover_browser_probe_files(self):
         leftovers = sorted(p.name for p in (ROOT / "app" / "rescue").iterdir() if p.name.startswith("__"))
         self.assertEqual(leftovers, [], "请删除临时探针文件：%s" % leftovers)

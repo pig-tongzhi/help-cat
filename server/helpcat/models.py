@@ -156,6 +156,8 @@ class FeedingPoint(Base):
     location_note: Mapped[str] = mapped_column(String(240), default="")
     feeding_time: Mapped[str] = mapped_column(String(80), default="")
     caretaker_note: Mapped[str] = mapped_column(Text, default="")
+    latitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    longitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="ACTIVE", index=True)
     created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
     is_qa: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sql_text("0"), nullable=False, index=True)

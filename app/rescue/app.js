@@ -12,6 +12,8 @@
     publicDataStatus: { cats: "loading", tasks: "loading", communities: "loading", metrics: "loading" },
     feedingPoints: [],
     homeFeeding: [],
+    myFeedingSummary: null,
+    nearby: null,
     feedingStats: null,
     myFeedingLogs: [],
     contact: null,
@@ -615,9 +617,14 @@
 
   function feedingPointCard(point) {
     var meta = [point.feeding_time, point.location_note].filter(Boolean).join(" · ");
-    return '<article class="feeding-card"><div class="feeding-copy"><strong>' + escapeHtml(point.name) + '</strong>' +
+    return '<article class="feeding-card' + (point.needs_feed ? " needs-feed" : "") + '"><div class="feeding-copy">' +
+      '<strong>' + escapeHtml(point.name) + '</strong>' +
       '<p>' + escapeHtml(meta || "投喂时间待补充") + '</p>' +
-      (point.community_name ? '<span class="feeding-community">' + escapeHtml(point.community_name) + '</span>' : '') +
+      '<span class="feeding-tags">' +
+      (point.needs_feed ? '<span class="feeding-badge">今天还没人喂</span>' : "") +
+      (point.community_name ? '<span class="feeding-community">' + escapeHtml(point.community_name) + '</span>' : "") +
+      (point.distance_m != null ? '<span class="feeding-distance">约 ' + escapeHtml(formatDistance(point.distance_m)) + '</span>' : "") +
+      '</span>' +
       (point.caretaker_note ? '<p class="feeding-note">' + escapeHtml(point.caretaker_note) + '</p>' : '') +
       '<small class="feeding-today">今天已有 ' + point.fed_today + ' 人打卡</small></div>' +
       (point.fed_by_me
@@ -626,10 +633,27 @@
       '</article>';
   }
 
+  function formatDistance(metres) {
+    if (metres == null) return "";
+    return metres < 1000 ? metres + " 米" : (metres / 1000).toFixed(1) + " 公里";
+  }
+
+  function pad2(value) {
+    return (value < 10 ? "0" : "") + value;
+  }
+
   function loadFeedingPoints(append) {
-    if (append && !state.cursors.feedingPoints) return Promise.resolve();
+    if (append && (!state.cursors.feedingPoints || state.nearby)) return Promise.resolve();
     var params = ["limit=24"];
-    if (append) params.push("cursor=" + encodeURIComponent(state.cursors.feedingPoints));
+    if (state.nearby) {
+      // 定位成功时按距离排序；服务端在这种模式下不分页，next_cursor 固定为 null
+      params.push("lat=" + state.nearby.latitude);
+      params.push("lng=" + state.nearby.longitude);
+    } else {
+      // 默认「今天还没人喂」优先，形成每日打卡的秩序感
+      params.push("sort=today");
+      if (append) params.push("cursor=" + encodeURIComponent(state.cursors.feedingPoints));
+    }
     return api.request("/api/v1/feeding-points?" + params.join("&")).then(function (payload) {
       state.feedingPoints = append
         ? communityForm.appendUnique(state.feedingPoints, payload.items || [])
@@ -648,7 +672,100 @@
     target.innerHTML = state.feedingPoints.length
       ? state.feedingPoints.map(feedingPointCard).join("")
       : emptyCard("还没有喂食点", "管理员发布喂食点后，这里就能打卡记录投喂。");
-    byId("load-more-feeding").hidden = !state.cursors.feedingPoints;
+    byId("load-more-feeding").hidden = !state.cursors.feedingPoints || Boolean(state.nearby);
+    var line = byId("feeding-today-line");
+    if (line) {
+      var pending = state.feedingPoints.filter(function (point) { return point.needs_feed; }).length;
+      line.textContent = !state.feedingPoints.length ? ""
+        : pending ? "今天还有 " + pending + " 个喂食点没人喂" : "今天的喂食点都有人喂过了，谢谢大家";
+    }
+  }
+
+  // ---- 每日打卡进度（连续天数 / 近 7 天 / 里程碑） ---------------------
+
+  function loadFeedingSummary() {
+    if (!state.user) { state.myFeedingSummary = null; renderStreak(); return Promise.resolve(); }
+    return api.request("/api/v1/feeding-logs/mine/summary").then(function (payload) {
+      state.myFeedingSummary = payload;
+      renderStreak();
+    }).catch(function () {
+      state.myFeedingSummary = null;
+      renderStreak();
+    });
+  }
+
+  function renderStreak() {
+    var card = byId("streak-card");
+    if (!card) return;
+    var days = byId("streak-days");
+    var line = byId("streak-line");
+    var next = byId("streak-next");
+    if (!state.user) {
+      days.textContent = "—";
+      line.textContent = "登录后可以记录投喂打卡，并累计连续天数。";
+      byId("streak-week").innerHTML = "";
+      next.hidden = true;
+      return;
+    }
+    var summary = state.myFeedingSummary;
+    if (!summary) {
+      days.textContent = "…";
+      line.textContent = "正在读取打卡记录…";
+      return;
+    }
+    days.textContent = formatMetric(summary.streak_days);
+    line.textContent = summary.checked_in_today
+      ? "今天已打卡" + (summary.points_checked_today > 1 ? "（" + summary.points_checked_today + " 个喂食点）" : "") +
+        "，本周 " + summary.days_this_week + " 天，累计 " + summary.total_days + " 天"
+      : "今天还没打卡，今天打一次就能续上连续记录。";
+    renderStreakWeek();
+    if (summary.next_milestone) {
+      next.textContent = "再坚持 " + (summary.next_milestone - summary.streak_days) + " 天，达成「连续 " + summary.next_milestone + " 天」";
+      next.hidden = false;
+    } else {
+      next.hidden = true;
+    }
+  }
+
+  function renderStreakWeek() {
+    var target = byId("streak-week");
+    if (!target) return;
+    var fed = {};
+    (state.myFeedingLogs || []).forEach(function (log) { fed[log.fed_on] = true; });
+    // 以 Asia/Shanghai 的今天为基准，避免客户端时区导致日期错位
+    var todayKey = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Shanghai" });
+    var base = new Date(todayKey + "T00:00:00");
+    var labels = ["日", "一", "二", "三", "四", "五", "六"];
+    var cells = [];
+    for (var offset = 6; offset >= 0; offset--) {
+      var day = new Date(base.getTime() - offset * 86400000);
+      var key = day.getFullYear() + "-" + pad2(day.getMonth() + 1) + "-" + pad2(day.getDate());
+      cells.push('<span class="streak-day' + (fed[key] ? " is-fed" : "") + (offset === 0 ? " is-today" : "") + '">' +
+        (offset === 0 ? "今" : labels[day.getDay()]) + "</span>");
+    }
+    target.innerHTML = cells.join("");
+  }
+
+  function sortNearby(button) {
+    if (!navigator.geolocation) {
+      toast("当前浏览器不支持定位，已按待喂情况排列");
+      return;
+    }
+    button.disabled = true;
+    button.textContent = "定位中…";
+    navigator.geolocation.getCurrentPosition(function (position) {
+      state.nearby = {
+        latitude: Number(position.coords.latitude.toFixed(6)),
+        longitude: Number(position.coords.longitude.toFixed(6))
+      };
+      button.disabled = false;
+      button.textContent = "已按距离排序";
+      loadFeedingPoints(false);
+    }, function () {
+      button.disabled = false;
+      button.textContent = "按距离排序";
+      toast("没拿到定位权限，已按待喂情况排列");
+    }, { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
   }
 
   function checkIn(pointId, button) {
@@ -659,7 +776,7 @@
     api.request("/api/v1/feeding-points/" + encodeURIComponent(pointId) + "/logs", { method: "POST", body: {} })
       .then(function () {
         toast("打卡成功，谢谢你的投喂");
-        return Promise.all([loadFeedingPoints(false), loadFeedingStats(), loadMyFeedingLogs(), loadHomeFeeding()]);
+        return Promise.all([loadFeedingPoints(false), loadFeedingStats(), loadMyFeedingLogs(), loadHomeFeeding(), loadFeedingSummary()]);
       })
       .catch(function (error) {
         toast(errorText(error));
@@ -670,13 +787,15 @@
   }
 
   function loadMyFeedingLogs() {
-    if (!state.user) { state.myFeedingLogs = []; renderMyFeedingLogs(); return Promise.resolve(); }
+    if (!state.user) { state.myFeedingLogs = []; renderMyFeedingLogs(); renderStreak(); return Promise.resolve(); }
     return api.request("/api/v1/feeding-logs/mine?limit=24").then(function (payload) {
       state.myFeedingLogs = payload.items || [];
       renderMyFeedingLogs();
+      renderStreak();
     }).catch(function () {
       state.myFeedingLogs = [];
       renderMyFeedingLogs();
+      renderStreak();
     });
   }
 
@@ -699,6 +818,7 @@
   function ensureFeeding() {
     loadFeedingStats();
     loadMyFeedingLogs();
+    loadFeedingSummary();
     if (!state.feedingPoints.length) return loadFeedingPoints(false);
     return Promise.resolve();
   }
@@ -1274,6 +1394,7 @@
   byId("task-form").addEventListener("submit", submitTaskReport);
   byId("task-release").addEventListener("click", releaseTask);
   byId("load-more-feeding").addEventListener("click", function () { loadFeedingPoints(true); });
+  byId("sort-nearby").addEventListener("click", function (event) { sortNearby(event.currentTarget); });
   byId("refresh-my-feeding").addEventListener("click", function () { loadFeedingStats(); loadMyFeedingLogs(); });
   byId("auth-form").addEventListener("submit", handleAuth);
   byId("community-form").addEventListener("submit", handleCommunity);

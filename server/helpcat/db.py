@@ -32,6 +32,7 @@ def ensure_schema(engine):
     cat_columns = {item["name"] for item in inspector.get_columns("cats")}
     community_columns = {item["name"] for item in inspector.get_columns("communities")}
     task_columns = {item["name"] for item in inspector.get_columns("tasks")}
+    feeding_point_columns = {item["name"] for item in inspector.get_columns("feeding_points")}
     if "username" not in user_columns:
         statements.append("ALTER TABLE users ADD COLUMN username VARCHAR(80)")
     if "password_hash" not in user_columns:
@@ -74,6 +75,10 @@ def ensure_schema(engine):
         statements.append("ALTER TABLE tasks ADD COLUMN cancelled_at DATETIME")
     if "cancel_reason" not in task_columns:
         statements.append("ALTER TABLE tasks ADD COLUMN cancel_reason TEXT NOT NULL DEFAULT ''")
+    if "latitude" not in feeding_point_columns:
+        statements.append("ALTER TABLE feeding_points ADD COLUMN latitude FLOAT")
+    if "longitude" not in feeding_point_columns:
+        statements.append("ALTER TABLE feeding_points ADD COLUMN longitude FLOAT")
     if statements:
         with engine.begin() as connection:
             for statement in statements:

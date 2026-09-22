@@ -1,4 +1,5 @@
 import json
+import math
 import mimetypes
 import secrets
 import base64
@@ -232,12 +233,14 @@ def task_payload(item, community_name="", claimed_by_username="", evidence_avail
     }
 
 
-def feeding_point_payload(item, fed_today=0, fed_by_me=False, last_fed_at=None, community_name=""):
+def feeding_point_payload(item, fed_today=0, fed_by_me=False, last_fed_at=None, community_name="", distance_m=None, needs_feed=None):
     return {
         "id": item.id, "name": item.name, "community_id": item.community_id, "community_name": community_name,
         "location_note": item.location_note, "feeding_time": item.feeding_time,
         "caretaker_note": item.caretaker_note, "status": item.status,
+        "latitude": item.latitude, "longitude": item.longitude,
         "fed_today": fed_today, "fed_by_me": fed_by_me, "last_fed_at": iso_utc(last_fed_at),
+        "distance_m": distance_m, "needs_feed": not fed_today if needs_feed is None else needs_feed,
     }
 
 
@@ -258,6 +261,29 @@ def cat_event_payload(item):
 
 def shanghai_today():
     return datetime.now(ZoneInfo("Asia/Shanghai")).date().isoformat()
+
+
+EARTH_RADIUS_M = 6371000
+FEEDING_STREAK_MILESTONES = (3, 7, 14, 30, 60)
+
+
+def haversine_distance_m(lat1, lng1, lat2, lng2):
+    """Great-circle distance in metres between two WGS84 points."""
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    delta_phi = math.radians(lat2 - lat1)
+    delta_lng = math.radians(lng2 - lng1)
+    a = math.sin(delta_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lng / 2) ** 2
+    return 2 * EARTH_RADIUS_M * math.asin(math.sqrt(a))
+
+
+def feeding_point_today_sort_key(point, fed_today, last_fed_at):
+    """Points nobody fed today first, then never-fed points, then the oldest feed."""
+    return (
+        0 if fed_today == 0 else 1,
+        0 if last_fed_at is None else 1,
+        last_fed_at.isoformat() if last_fed_at is not None else "",
+        point.name,
+    )
 
 
 def community_names(db, ids):
@@ -1230,12 +1256,23 @@ def create_app(database_url=None, storage_root=None, fake_admin_openids=None):
     def list_feeding_points(
         cursor: Optional[str] = None,
         limit: int = Query(default=24, ge=1, le=100),
+        lat: Optional[float] = Query(default=None, ge=-90, le=90),
+        lng: Optional[float] = Query(default=None, ge=-180, le=180),
+        sort: Optional[str] = None,
         actor=Depends(optional_user),
         db: DbSession = Depends(db_session),
     ):
         stmt = select(FeedingPoint).where(FeedingPoint.is_qa.is_(False), FeedingPoint.status == "ACTIVE")
-        items, next_cursor = paginated_items(db, stmt, FeedingPoint, cursor, limit)
         today = shanghai_today()
+        distance_mode = lat is not None and lng is not None
+        ordered = distance_mode or sort == "today" or lat is not None or lng is not None or sort is not None
+        # Distance and "today" orderings are computed in Python, and a bare lat/lng/sort
+        # still opts out of the created_at cursor order, so the cursor is ignored here
+        # and the response always reports next_cursor = None.
+        if ordered:
+            items, next_cursor = list(db.scalars(stmt).all()), None
+        else:
+            items, next_cursor = paginated_items(db, stmt, FeedingPoint, cursor, limit)
         ids = [item.id for item in items]
         counts, lasts, mine = {}, {}, set()
         if ids:
@@ -1256,10 +1293,28 @@ def create_app(database_url=None, storage_root=None, fake_admin_openids=None):
                         FeedingLog.point_id.in_(ids), FeedingLog.user_id == actor[0],
                     )
                 ).all()}
+        distances = {}
+        if distance_mode:
+            # Points without coordinates keep distance_m = None and sort after the located ones.
+            located = [item for item in items if item.latitude is not None and item.longitude is not None]
+            unlocated = [item for item in items if item.latitude is None or item.longitude is None]
+            for item in located:
+                distances[item.id] = round(haversine_distance_m(lat, lng, item.latitude, item.longitude))
+            located.sort(key=lambda item: (distances[item.id], item.name))
+            items = located + unlocated
+        elif sort == "today":
+            items.sort(key=lambda item: feeding_point_today_sort_key(item, counts.get(item.id, 0), lasts.get(item.id)))
+        elif ordered:
+            items.sort(key=lambda item: (item.created_at, item.id), reverse=True)
+        if ordered:
+            items = items[:limit]
         names = community_names(db, [item.community_id for item in items])
         return {
             "items": [
-                feeding_point_payload(item, counts.get(item.id, 0), item.id in mine, lasts.get(item.id), names.get(item.community_id, ""))
+                feeding_point_payload(
+                    item, counts.get(item.id, 0), item.id in mine, lasts.get(item.id),
+                    names.get(item.community_id, ""), distances.get(item.id),
+                )
                 for item in items
             ],
             "next_cursor": next_cursor,
@@ -1316,6 +1371,41 @@ def create_app(database_url=None, storage_root=None, fake_admin_openids=None):
             "next_cursor": next_cursor,
         }
 
+    @app.get("/api/v1/feeding-logs/mine/summary")
+    def my_feeding_summary(actor=Depends(current_user), db: DbSession = Depends(db_session)):
+        """This volunteer's own check-in progress on the Asia/Shanghai calendar."""
+        today = datetime.now(ZoneInfo("Asia/Shanghai")).date()
+        rows = db.scalars(select(FeedingLog.fed_on).where(
+            FeedingLog.is_qa.is_(False), FeedingLog.user_id == actor[0],
+        ).distinct()).all()
+        days = set()
+        for value in rows:
+            try:
+                days.add(datetime.fromisoformat(value).date())
+            except (TypeError, ValueError):
+                continue
+        checked_in_today = today in days
+        # A streak only breaks once a whole day is missed, so an un-fed today still
+        # counts backwards from yesterday.
+        streak_days = 0
+        cursor_day = today if checked_in_today else today - timedelta(days=1)
+        while cursor_day in days:
+            streak_days += 1
+            cursor_day -= timedelta(days=1)
+        week_start = today - timedelta(days=6)
+        points_checked_today = db.scalar(select(func.count()).select_from(FeedingLog).where(
+            FeedingLog.is_qa.is_(False), FeedingLog.user_id == actor[0], FeedingLog.fed_on == today.isoformat(),
+        )) or 0
+        return {
+            "checked_in_today": checked_in_today,
+            "streak_days": streak_days,
+            "days_this_week": sum(1 for day in days if week_start <= day <= today),
+            "total_days": len(days),
+            "last_fed_on": max(days).isoformat() if days else None,
+            "next_milestone": next((value for value in FEEDING_STREAK_MILESTONES if value > streak_days), None),
+            "points_checked_today": points_checked_today,
+        }
+
     @app.post("/api/v1/admin/feeding-points", status_code=201)
     def create_feeding_point(payload: FeedingPointCreate, actor=Depends(current_user), db: DbSession = Depends(db_session)):
         require_admin(actor)
@@ -1325,7 +1415,8 @@ def create_app(database_url=None, storage_root=None, fake_admin_openids=None):
                 error(404, "community_not_found")
         item = FeedingPoint(
             name=payload.name.strip(), community_id=payload.community_id, location_note=payload.location_note,
-            feeding_time=payload.feeding_time, caretaker_note=payload.caretaker_note, created_by=actor[0], is_qa=False,
+            feeding_time=payload.feeding_time, caretaker_note=payload.caretaker_note,
+            latitude=payload.latitude, longitude=payload.longitude, created_by=actor[0], is_qa=False,
         )
         db.add(item)
         db.flush()
@@ -1351,6 +1442,10 @@ def create_app(database_url=None, storage_root=None, fake_admin_openids=None):
             value = getattr(payload, field)
             if value is not None:
                 setattr(item, field, value.strip() if field != "status" else value)
+        for field in ("latitude", "longitude"):
+            value = getattr(payload, field)
+            if value is not None:
+                setattr(item, field, value)
         audit(db, actor[0], "UPDATE", "feeding_point", item.id, before=before, after={
             "name": item.name, "status": item.status, "feeding_time": item.feeding_time,
         })

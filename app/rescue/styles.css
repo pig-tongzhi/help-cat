@@ -838,3 +838,87 @@ body { background: #f5f5f3; }
 @media (max-width: 360px) {
   .quick-action-grid, .impact-strip.metric-grid { grid-template-columns: 1fr; }
 }
+
+/* ==========================================================================
+   手机 H5 兼容
+   ========================================================================== */
+
+/* iOS 横竖屏切换 / 系统字号不再擅自放大文字 */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+
+/* 移动端地址栏出现与隐藏会改变 100vh：用动态视口单位，100vh 作为回退 */
+.app-shell { min-height: 100dvh; }
+
+/* 去掉 300ms 点击延迟与双击缩放误判 */
+button, a, label, select, .nav-item, .quick-action, .primary-action,
+.pillar-card, .cat-card, .task-card, .feeding-card, .text-button { touch-action: manipulation; }
+
+/* 触摸设备上 :hover 会「粘住」，只在真正支持悬停的设备上启用位移/阴影 */
+@media (hover: none) {
+  .primary-action:hover, .pillar-card:hover, .quick-action:hover,
+  .cat-card:hover, .feeding-card:hover { transform: none; box-shadow: none; }
+  .pillar-card:hover .pillar-go { transform: none; }
+}
+
+@media (max-width: 720px) {
+  /* iOS Safari 聚焦字号小于 16px 的输入框会放大整个页面 */
+  input, select, textarea { font-size: 16px; }
+  /* 触摸目标不小于 44px */
+  .text-button, .inline-link { min-height: 44px; padding-inline: 10px; }
+  .sheet-close { width: 44px; height: 44px; }
+  /* 手指滑到弹层尽头时不要带动背后页面一起滚 */
+  .sheet { overscroll-behavior: contain; }
+}
+
+/* ==========================================================================
+   每日打卡玩法：连续进度 / 今日待喂 / 距离
+   ========================================================================== */
+
+.streak-card {
+  display: grid;
+  grid-template-columns: minmax(0, 150px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: center;
+  margin-bottom: 18px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: linear-gradient(135deg, #FFFFFF, #FFF6EC);
+}
+.streak-main { display: grid; gap: 2px; padding-right: 18px; border-right: 1px solid var(--line); }
+.streak-main strong { font-size: clamp(34px, 6vw, 46px); line-height: 1; letter-spacing: -.04em; color: var(--brand-dark); }
+.streak-main span { color: var(--muted); font-size: 12px; }
+.streak-detail { display: grid; gap: 9px; min-width: 0; }
+.streak-detail p { margin: 0; color: var(--ink-2); font-size: 13px; line-height: 1.6; }
+
+.streak-week { display: flex; flex-wrap: wrap; gap: 6px; }
+.streak-day {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+.streak-day.is-fed { border-color: transparent; background: var(--brand); color: #fff; }
+.streak-day.is-today { box-shadow: 0 0 0 2px rgba(217,104,58,.35); }
+.streak-next { color: var(--brand-dark) !important; font-size: 12px !important; }
+
+.feeding-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 14px; }
+.feeding-today-line { margin: 0; color: var(--ink-2); font-size: 13px; }
+.feeding-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.feeding-badge { padding: 2px 9px; border-radius: 999px; background: var(--warning-soft); color: #8f6114; font-size: 11px; font-weight: 700; }
+.feeding-distance { padding: 2px 9px; border-radius: 999px; background: var(--brand-soft); color: var(--brand-dark); font-size: 11px; font-weight: 700; }
+.feeding-card.needs-feed { border-color: rgba(217,139,39,.4); box-shadow: 0 10px 26px rgba(217,139,39,.09); }
+
+/* 连续打卡卡的窄屏堆叠必须写在上面基础规则之后：
+   同优先级下后写的生效，否则 390px 下仍是 150px+180px 两列，
+   7 天格会溢出到视口外（实测超出 45px）。 */
+@media (max-width: 720px) {
+  .streak-card { grid-template-columns: 1fr; }
+  .streak-main { padding-right: 0; padding-bottom: 14px; border-right: 0; border-bottom: 1px solid var(--line); }
+}

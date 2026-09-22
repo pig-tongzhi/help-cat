@@ -152,6 +152,8 @@ class FeedingPointCreate(BaseModel):
     location_note: str = Field(default="", max_length=240)
     feeding_time: str = Field(default="", max_length=80)
     caretaker_note: str = Field(default="", max_length=1000)
+    latitude: Optional[float] = Field(default=None, ge=-90, le=90)
+    longitude: Optional[float] = Field(default=None, ge=-180, le=180)
 
 
 class FeedingPointEdit(BaseModel):
@@ -160,6 +162,8 @@ class FeedingPointEdit(BaseModel):
     feeding_time: Optional[str] = Field(default=None, max_length=80)
     caretaker_note: Optional[str] = Field(default=None, max_length=1000)
     status: Optional[Literal["ACTIVE", "PAUSED", "ARCHIVED"]] = None
+    latitude: Optional[float] = Field(default=None, ge=-90, le=90)
+    longitude: Optional[float] = Field(default=None, ge=-180, le=180)
 
 
 class FeedingLogCreate(BaseModel):
