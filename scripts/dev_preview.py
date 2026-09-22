@@ -157,6 +157,9 @@ class PreviewHandler(http.server.SimpleHTTPRequestHandler):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--port", type=int, default=8199)
+    parser.add_argument("--host", default="127.0.0.1",
+                        help="监听地址。用 0.0.0.0 让同一局域网的手机也能打开；"
+                             "注意 /__dev_login 会一并暴露给局域网")
     parser.add_argument("--api", default="http://127.0.0.1:8000", help="FastAPI 服务地址")
     parser.add_argument("--admin-token", default="", help="用于 /__dev_login 的管理员令牌（仅本地预览）")
     args = parser.parse_args()
@@ -164,8 +167,10 @@ def main():
     PreviewHandler.api_origin = args.api.rstrip("/")
     PreviewHandler.admin_token = args.admin_token
     socketserver.TCPServer.allow_reuse_address = True
-    with socketserver.TCPServer(("127.0.0.1", args.port), PreviewHandler) as server:
-        print("本地预览: http://127.0.0.1:%d/   (API -> %s)" % (args.port, PreviewHandler.api_origin), flush=True)
+    with socketserver.TCPServer((args.host, args.port), PreviewHandler) as server:
+        print("本地预览: http://%s:%d/   (API -> %s)" % (args.host, args.port, PreviewHandler.api_origin), flush=True)
+        if args.host not in ("127.0.0.1", "localhost"):
+            print("提示: 已监听 %s，同一局域网的手机可访问；/__dev_login 也一并暴露。" % args.host, flush=True)
         server.serve_forever()
 
 

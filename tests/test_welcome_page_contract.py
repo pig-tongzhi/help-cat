@@ -18,7 +18,7 @@ class WelcomePageContractTests(unittest.TestCase):
         for marker in (
             "我在做一个", "帮流浪猫", "招同行人",
             "定点投喂", "伤病救助", "网站共建",
-            "一起把这件事做起来",
+            "一起帮助小猫",
             "查看管理员联系方式", "留个联系方式",
             "个人业余发起 · 有空时回复，不承诺随时响应",
             "www.helpcat.xyz",
