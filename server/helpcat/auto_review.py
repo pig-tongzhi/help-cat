@@ -54,9 +54,11 @@ class Decision:
         }
 
     def describe(self) -> str:
+        # 规则的中文说明写的是"要求"（有照片 / 小区已开放…），所以不通过时必须加
+        # "未满足："，否则审计读起来像列表里的都是通过项。
         if self.approved:
-            return "自动通过（" + "、".join(self.passed_labels) + "）"
-        return "未自动通过（" + "、".join(self.failed_labels) + "）"
+            return "自动通过（满足：" + "、".join(self.passed_labels) + "）"
+        return "未自动通过（未满足：" + "、".join(self.failed_labels) + "）"
 
 
 def decide(rules: Sequence[RuleResult]) -> Decision:

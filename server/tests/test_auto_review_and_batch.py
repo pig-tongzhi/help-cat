@@ -78,8 +78,11 @@ class RuleTests(unittest.TestCase):
         self.assertIn("clean_text", junk.failed)
 
     def test_describe_says_which_rules_decided(self):
-        self.assertIn("有照片", self.clean().describe())
-        self.assertIn("位置描述不含门牌号", self.clean(location_note="3号楼").describe())
+        self.assertIn("满足：有照片", self.clean().describe())
+        # 不通过时要写明"未满足"，否则一串正向短语读起来像通过了
+        rejected = self.clean(location_note="3号楼").describe()
+        self.assertIn("未自动通过", rejected)
+        self.assertIn("未满足：位置描述不含门牌号", rejected)
 
 
 class SubmissionWiringTests(unittest.TestCase):
