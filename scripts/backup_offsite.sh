@@ -5,6 +5,7 @@
 #
 # 用法:
 #   scripts/backup_offsite.sh                  # 备份一次
+#   scripts/backup_offsite.sh --quiet           # 只留告警和错误（systemd 单元用）
 #   scripts/backup_offsite.sh --dry-run        # 只说会做什么
 #   scripts/backup_offsite.sh --verify latest  # 校验最近的备份能不能恢复
 #   scripts/backup_offsite.sh --verify /opt/help-cat/backups/20260924-032000
@@ -30,11 +31,13 @@ KEEP_DAYS="${HELPCAT_BACKUP_KEEP_DAYS:-14}"
 RELEASE_LINK="${HELPCAT_RELEASE_LINK:-/opt/help-cat/current}"
 
 DRY_RUN=0
+QUIET=0
 MODE="backup"
 VERIFY_TARGET=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
+    --quiet|-q) QUIET=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     --verify) MODE="verify"; VERIFY_TARGET="${2:-latest}"; shift 2 ;;
     --verify=*) MODE="verify"; VERIFY_TARGET="${1#*=}"; shift ;;
@@ -42,6 +45,8 @@ while [ $# -gt 0 ]; do
     *) printf '未知参数：%s\n' "$1" >&2; exit 2 ;;
   esac
 done
+
+say() { [ "$QUIET" -eq 1 ] || printf '%s\n' "$*"; }
 
 # 优先用部署环境的解释器：它一定带 sqlite3 模块，且和线上版本一致。
 PYTHON="${HELPCAT_PYTHON:-}"
@@ -58,11 +63,11 @@ verify_backup() {
     printf '备份目录不存在：%s\n' "$target" >&2
     return 1
   fi
-  printf '校验 %s\n' "$target"
+  say "校验 $target"
 
   if [ -f "$target/SHA256SUMS" ]; then
     if (cd "$target" && sha256sum -c --quiet SHA256SUMS 2>/dev/null || shasum -a 256 -c SHA256SUMS >/dev/null 2>&1); then
-      printf '✓ 校验和一致\n'
+      say "✓ 校验和一致"
     else
       printf '✗ 校验和不一致（备份可能损坏）\n'; status=1
     fi
@@ -93,12 +98,12 @@ PY
 
   if [ -f "$target/uploads.tar.gz" ]; then
     if tar -tzf "$target/uploads.tar.gz" >/dev/null 2>&1; then
-      printf '✓ 上传目录压缩包可解（%s 个条目）\n' "$(tar -tzf "$target/uploads.tar.gz" | wc -l | tr -d ' ')"
+      say "✓ 上传目录压缩包可解（$(tar -tzf "$target/uploads.tar.gz" | wc -l | tr -d ' ') 个条目）"
     else
       printf '✗ uploads.tar.gz 损坏\n'; status=1
     fi
   else
-    printf '· 没有 uploads.tar.gz（当时上传目录是空的）\n'
+    say "· 没有 uploads.tar.gz（当时上传目录是空的）"
   fi
   return "$status"
 }
@@ -180,7 +185,7 @@ while IFS= read -r old; do
   [ -n "$old" ] || continue
   rm -rf "$old" && PRUNED=$(( PRUNED + 1 ))
 done < <(find "$BACKUP_DIR" -maxdepth 1 -mindepth 1 -type d -name '20*' -mtime "+$KEEP_DAYS")
-printf '· 清理超过 %s 天的备份：%s 个\n' "$KEEP_DAYS" "$PRUNED"
+say "· 清理超过 $KEEP_DAYS 天的备份：$PRUNED 个"
 
 # 5) 异地
 REMOTE_DONE=0
@@ -194,9 +199,9 @@ elif [ -n "${HELPCAT_BACKUP_S3_URL:-}" ] && command -v aws >/dev/null 2>&1; then
   aws s3 cp --recursive "$TARGET" "$HELPCAT_BACKUP_S3_URL/$STAMP" --only-show-errors && REMOTE_DONE=1
 fi
 
-printf '备份完成：%s\n' "$TARGET"
+say "备份完成：$TARGET"
 if [ "$REMOTE_DONE" -eq 1 ]; then
-  printf '· 已上传到异地\n'
+  say "· 已上传到异地"
 else
   printf '⚠ 未配置异地目标（HELPCAT_BACKUP_RCLONE_REMOTE / COSCMD_BUCKET / S3_URL / UPLOAD_CMD），\n'
   printf '  这次只落到了本机 %s —— 磁盘故障仍会一起丢。详见 docs/wiki/部署回滚与运维.md。\n' "$BACKUP_DIR"

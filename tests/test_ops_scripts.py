@@ -199,6 +199,26 @@ class OpsScriptTests(unittest.TestCase):
         self.assertFalse(stale.exists(), "超过保留期的备份没有被清理")
         self.assertIn("清理超过 14 天的备份：1 个", result.stdout)
 
+    def test_backup_quiet_keeps_warnings_but_drops_the_chatter(self):
+        """systemd 单元传 --quiet，脚本必须认这个参数（线上真的漏过一次）。"""
+        self.seed_database()
+        result = self.run_backup("--quiet")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertNotIn("校验和一致", result.stdout)
+        self.assertNotIn("备份完成", result.stdout)
+        # 告警不能被静音：没有异地目标是要有人处理的
+        self.assertIn("未配置异地目标", result.stdout)
+
+    def test_backup_quiet_still_reports_a_broken_snapshot_and_fails(self):
+        self.seed_database()
+        self.assertEqual(self.run_backup("--quiet").returncode, 0)
+        snapshot = sorted((self.root / "backups").iterdir())[0] / "help-cat.db"
+        snapshot.write_bytes(b"broken")
+
+        result = self.run_backup("--verify", "latest", "--quiet")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("✗", result.stdout)
+
     def test_backup_dry_run_touches_nothing(self):
         self.seed_database()
         result = self.run_backup("--dry-run")
