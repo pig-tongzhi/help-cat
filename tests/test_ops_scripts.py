@@ -168,7 +168,9 @@ class UptimeWorkflowTests(unittest.TestCase):
     def test_it_needs_no_secrets(self):
         source = self.workflow()
         self.assertNotIn("secrets.", source, "外部探针不该依赖任何密钥")
-        self.assertIn("permissions: {}", source)
+        # 只读权限，且真的要 checkout：版本比对用的是仓库里的 version.js
+        self.assertIn("contents: read", source)
+        self.assertIn("actions/checkout@v4", source)
 
 
 class OpsScriptTests(unittest.TestCase):

@@ -16,13 +16,17 @@ on:
     - cron: "*/15 * * * *"
   workflow_dispatch:
 
-permissions: {}
+permissions:
+  contents: read
 
 jobs:
   probe:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      # 只为比对「线上静态资源版本 vs 仓库里的版本」，探测本身不需要仓库内容。
+      - uses: actions/checkout@v4
+
       - name: 后端 readiness（含真实数据库查询）
         run: |
           set -euo pipefail
