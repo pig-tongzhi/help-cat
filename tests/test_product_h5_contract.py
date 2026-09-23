@@ -343,27 +343,52 @@ class DevPreviewToolContractTests(unittest.TestCase):
 
 
 class ServerRouteContractTests(unittest.TestCase):
-    """新增接口必须真的注册在服务端，避免前后端契约漂移。"""
+    """新增接口必须真的注册在服务端，避免前后端契约漂移。
+
+    这里查的是**注册出来的路由表**而不是源码字符串：路由已经拆到
+    `server/helpcat/routers/` 下按领域分开，查字符串既脆弱又查不到真实行为。
+    """
+
+    def registered_routes(self):
+        import tempfile
+        from server.helpcat.app import create_app
+
+        with tempfile.TemporaryDirectory() as tmp:
+            app = create_app("sqlite://", storage_root=Path(tmp))
+            routes = {}
+            for route in app.routes:
+                if not hasattr(route, "methods"):
+                    continue
+                for method in route.methods:
+                    routes[(method, route.path)] = route
+            return routes
 
     def test_server_defines_the_feeding_task_and_timeline_routes(self):
-        source = (ROOT / "server" / "helpcat" / "app.py").read_text(encoding="utf-8")
-        for route in (
-            '@app.get("/api/v1/feeding-points")',
-            '@app.post("/api/v1/feeding-points/{point_id}/logs", status_code=201)',
-            '@app.get("/api/v1/feeding-logs/mine")',
-            '@app.get("/api/v1/public/feeding-stats")',
-            '@app.post("/api/v1/admin/feeding-points", status_code=201)',
-            '@app.patch("/api/v1/admin/feeding-points/{point_id}")',
-            '@app.get("/api/v1/admin/feeding-points")',
-            '@app.get("/api/v1/tasks/mine")',
-            '@app.post("/api/v1/tasks/{task_id}/complete")',
-            '@app.post("/api/v1/tasks/{task_id}/cancel")',
-            '@app.post("/api/v1/tasks/{task_id}/reassign")',
-            '@app.get("/api/v1/admin/tasks")',
-            '@app.get("/api/v1/cats/{cat_id}/events")',
-            '@app.post("/api/v1/admin/cats/{cat_id}/events", status_code=201)',
+        routes = self.registered_routes()
+        for method, path in (
+            ("GET", "/api/v1/feeding-points"),
+            ("POST", "/api/v1/feeding-points/{point_id}/logs"),
+            ("GET", "/api/v1/feeding-logs/mine"),
+            ("GET", "/api/v1/public/feeding-stats"),
+            ("POST", "/api/v1/admin/feeding-points"),
+            ("PATCH", "/api/v1/admin/feeding-points/{point_id}"),
+            ("GET", "/api/v1/admin/feeding-points"),
+            ("GET", "/api/v1/tasks/mine"),
+            ("POST", "/api/v1/tasks/{task_id}/complete"),
+            ("POST", "/api/v1/tasks/{task_id}/cancel"),
+            ("POST", "/api/v1/tasks/{task_id}/reassign"),
+            ("GET", "/api/v1/admin/tasks"),
+            ("GET", "/api/v1/cats/{cat_id}/events"),
+            ("POST", "/api/v1/admin/cats/{cat_id}/events"),
         ):
-            self.assertIn(route, source)
+            self.assertIn((method, path), routes, "%s %s 没有注册" % (method, path))
+
+        # 新建资源的两个接口必须是 201，前端按这个约定处理。
+        for method, path in (
+            ("POST", "/api/v1/admin/feeding-points"),
+            ("POST", "/api/v1/admin/cats/{cat_id}/events"),
+        ):
+            self.assertEqual(201, routes[(method, path)].status_code, "%s %s 应为 201" % (method, path))
 
 
 if __name__ == "__main__":
