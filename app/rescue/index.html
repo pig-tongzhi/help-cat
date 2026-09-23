@@ -1,17 +1,17 @@
 <!doctype html>
-<html lang="zh-CN" data-app-version="20260923-product-r13">
+<html lang="zh-CN" data-app-version="20260923-product-r14">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#F7F5F1">
   <meta name="description" content="帮帮小猫 Help Cat，记录社区猫咪档案，协作完成救助任务。">
   <title>帮帮小猫 Help Cat</title>
-  <link rel="icon" href="assets/brand/favicon.svg?v=20260923-product-r13">
-  <link rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png?v=20260923-product-r13">
-  <link rel="manifest" href="manifest.webmanifest?v=20260923-product-r13">
-  <link rel="stylesheet" href="styles.css?v=20260923-product-r13">
+  <link rel="icon" href="assets/brand/favicon.svg?v=20260923-product-r14">
+  <link rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png?v=20260923-product-r14">
+  <link rel="manifest" href="manifest.webmanifest?v=20260923-product-r14">
+  <link rel="stylesheet" href="styles.css?v=20260923-product-r14">
   <style>
-    .brand-logo.brand-logo-77 { background: transparent url("assets/brand/helpcat-77-mark.svg?v=20260923-product-r13") center / contain no-repeat; border-radius: 0; box-shadow: none; }
+    .brand-logo.brand-logo-77 { background: transparent url("assets/brand/helpcat-77-mark.svg?v=20260923-product-r14") center / contain no-repeat; border-radius: 0; box-shadow: none; }
     .brand-logo.brand-logo-77::before, .brand-logo.brand-logo-77::after { content: none; }
   </style>
 </head>
@@ -53,18 +53,19 @@
             </div>
           </div>
           <picture class="editorial-hero-visual">
-            <source media="(max-width: 720px)" srcset="assets/77/hero-mobile.webp?v=20260923-product-r13">
-            <img src="assets/77/hero-desktop.webp?v=20260923-product-r13" alt="77，一只白底黑斑的猫咪" width="960" height="720" decoding="async">
+            <source media="(max-width: 720px)" srcset="assets/77/hero-mobile.webp?v=20260923-product-r14">
+            <img src="assets/77/hero-desktop.webp?v=20260923-product-r14" alt="77，一只白底黑斑的猫咪" width="960" height="720" decoding="async">
           </picture>
         </section>
 
         <section class="pillar-section" data-product-section="primary-actions" aria-labelledby="pillar-title">
-          <div class="pillar-heading">
+          <div class="pillar-heading" data-reveal>
             <span class="section-kicker">HOW TO JOIN</span>
             <h2 id="pillar-title">三件事，挑一件开始</h2>
+            <span class="section-rule" aria-hidden="true"></span>
             <p>不用先注册，也不用承诺时间。看看哪一件你现在就能做。</p>
           </div>
-          <div class="primary-action-grid">
+          <div class="primary-action-grid" data-reveal-group>
             <button class="primary-action pillar-card cat-pillar" id="home-view-cats" type="button" data-nav="cats">
               <span class="primary-action-icon cat-icon" aria-hidden="true">🐾</span>
               <span class="primary-action-copy"><strong>查看猫咪档案</strong><small>社区里每只猫的照片、健康与时间线</small></span>
@@ -81,7 +82,7 @@
               <span class="pillar-go" aria-hidden="true">→</span>
             </button>
           </div>
-          <div class="quick-action-grid">
+          <div class="quick-action-grid" data-reveal-group>
             <button class="quick-action" id="home-create-cat" type="button"><strong>为猫咪建档</strong><small>记录你遇见的小猫</small></button>
             <button class="quick-action" id="home-contact" type="button"><strong>加入我们</strong><small>懂技术、有喂猫经验，或只是喜欢猫</small></button>
             <button class="quick-action" id="home-my-submissions" type="button" data-nav="profile"><strong>我的提交</strong><small>查看审核进度</small></button>
@@ -89,11 +90,11 @@
         </section>
 
         <section class="impact-band" aria-labelledby="metrics-title">
-          <div class="impact-band-head">
-            <div><span class="section-kicker">OUR PROGRESS</span><h2 id="metrics-title">社区救助成果</h2></div>
+          <div class="impact-band-head" data-reveal>
+            <div><span class="section-kicker">OUR PROGRESS</span><h2 id="metrics-title">社区救助成果</h2><span class="section-rule" aria-hidden="true"></span></div>
             <p class="impact-band-note">数字来自管理员逐条录入的真实记录，可追溯到审计日志。</p>
           </div>
-          <div class="impact-strip metric-grid" id="home-metrics-status" aria-label="社区救助成果">
+          <div class="impact-strip metric-grid" id="home-metrics-status" data-reveal-group aria-label="社区救助成果">
             <article class="metric-card" data-metric-state="loading"><span class="editorial-metric-icon heart-icon" aria-hidden="true">♡</span><div><strong id="metric-rescued">0</strong><small id="metric-rescued-label">已救助</small></div></article>
             <article class="metric-card" data-metric-state="loading"><span class="editorial-metric-icon home-metric-icon" aria-hidden="true">⌂</span><div><strong id="metric-adopted">0</strong><small id="metric-adopted-label">找到新家</small></div></article>
             <article class="metric-card" data-metric-state="loading"><span class="editorial-metric-icon rescue-icon" aria-hidden="true">♧</span><div><strong id="metric-medical">0</strong><small id="metric-medical-label">医疗救助</small></div></article>
@@ -103,13 +104,13 @@
         </section>
 
         <div class="reference-content-grid home-editorial-grid">
-          <section class="content-section" data-product-section="cat-preview">
+          <section class="content-section" data-product-section="cat-preview" data-reveal>
             <div class="section-title"><div><h2>猫咪档案</h2></div><button class="text-button" type="button" data-nav="cats">查看全部 <span>→</span></button></div>
             <p class="module-status" id="home-cats-status" hidden></p>
             <div class="cat-grid compact-grid" id="home-cats"><div class="skeleton card-skeleton"></div><div class="skeleton card-skeleton"></div></div>
           </section>
 
-          <section class="content-section task-feature" data-product-section="task-preview">
+          <section class="content-section task-feature" data-product-section="task-preview" data-reveal>
             <div class="section-title"><div><h2>救助任务</h2></div><button class="text-button" type="button" data-nav="tasks">全部任务 <span>→</span></button></div>
             <p class="module-status" id="home-tasks-status" hidden></p>
             <div class="task-list" id="home-tasks"><div class="skeleton row-skeleton"></div></div>
@@ -380,10 +381,10 @@
     <button id="reload-version" type="button">立即刷新</button>
   </aside>
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
-  <script src="api.js?v=20260923-product-r13"></script>
-  <script src="community-form.js?v=20260923-product-r13"></script>
-  <script src="version.js?v=20260923-product-r13"></script>
-  <script src="story-77.js?v=20260923-product-r13"></script>
-  <script src="app.js?v=20260923-product-r13"></script>
+  <script src="api.js?v=20260923-product-r14"></script>
+  <script src="community-form.js?v=20260923-product-r14"></script>
+  <script src="version.js?v=20260923-product-r14"></script>
+  <script src="story-77.js?v=20260923-product-r14"></script>
+  <script src="app.js?v=20260923-product-r14"></script>
 </body>
 </html>

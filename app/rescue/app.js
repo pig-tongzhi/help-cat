@@ -161,6 +161,197 @@
     target.classList.toggle("error", status === "error");
   }
 
+  // ---- 动效（渐进增强）----------------------------------------------------
+  // 三条原则：
+  // 1) 只有 JS 正常跑起来才启用：给 <html> 加 has-motion，CSS 里的"未揭示"状态才生效。
+  //    脚本一旦失败，页面是完整可见的，不会出现"内容全透明"那种事故。
+  // 2) 只动 transform / opacity，且用 IntersectionObserver，不做逐帧滚动监听。
+  // 3) 系统开了"减少动效"就完全不启用（reducedMotion 里已经判过）。
+  var motion = { observer: null, enabled: false };
+
+  function motionEnabled() {
+    return motion.enabled;
+  }
+
+  function initMotion() {
+    if (reducedMotion()) return;
+    if (!("IntersectionObserver" in window) || !window.requestAnimationFrame) return;
+    motion.enabled = true;
+    document.documentElement.classList.add("has-motion");
+
+    // 首屏各层依次落位（延迟写在 CSS 的 nth-child 里，这里只负责在下一帧放开）
+    var heroCopy = document.querySelector(".editorial-hero-copy");
+
+    // 卡片组内按顺序落位
+    Array.prototype.forEach.call(document.querySelectorAll("[data-reveal-group]"), function (group) {
+      Array.prototype.forEach.call(group.children, function (child, index) {
+        child.style.setProperty("--reveal-index", String(Math.min(index, 8)));
+      });
+    });
+
+    motion.observer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) return;
+        entry.target.classList.add("is-revealed");
+        // 揭示一次就够了，之后不再观察（省掉后续的相交计算）
+        motion.observer.unobserve(entry.target);
+      });
+    // rootMargin 必须留空：负的 bottom 会切掉视口最下面一条，
+    // 静止停在那条带子里的卡片就永远等不到 is-revealed（子元素一直 opacity:0）。
+    }, { threshold: 0.1 });
+    observeReveals(document.documentElement);
+
+    // 大图的推近要在浏览器算过初始状态之后再放开，否则不会产生过渡
+    window.requestAnimationFrame(function () {
+      window.requestAnimationFrame(function () {
+        if (heroCopy) heroCopy.classList.add("is-in");
+        document.documentElement.classList.add("is-hero-ready");
+      });
+    });
+    // 兜底：万一过渡因为任何原因没跑完（节流、宿主环境不推进过渡、老旧实现），
+    // 视口内的元素绝不允许停在透明状态 —— "内容看不见"比"没有动效"严重得多。
+    window.setTimeout(settleVisibleMotion, 2600);
+  }
+
+  // 过渡是否真的在推进。CSS transition 在 getAnimations() 里是一个 CSSTransition。
+  function isTransitioning(node) {
+    return typeof node.getAnimations === "function" &&
+      node.getAnimations().some(function (a) { return a.playState === "running"; });
+  }
+
+  function isInViewport(node) {
+    var rect = node.getBoundingClientRect();
+    return rect.bottom > 0 && rect.top < (window.innerHeight || 0);
+  }
+
+  // 找出"该看见却还是透明"的元素。卡片组的容器本身从不透明（透明的是它的子元素），
+  // 所以必须连子元素一起看，否则兜底对卡片组完全不生效 —— 这是曾经的线上隐患：
+  // 按钮/卡片一直 opacity:0，而容器 opacity:1，怎么查都查不出问题。
+  function fadedNodes() {
+    var selectors = ".editorial-hero-copy > *, [data-reveal], [data-reveal-group] > *";
+    var faded = [];
+    Array.prototype.forEach.call(document.querySelectorAll(selectors), function (node) {
+      if (Number(window.getComputedStyle(node).opacity) > 0.85) return;
+      var anchor = node.parentElement && node.parentElement.hasAttribute("data-reveal-group")
+        ? node.parentElement : node;
+      if (isInViewport(anchor)) faded.push([node, anchor]);
+    });
+    return faded;
+  }
+
+  var fadedSince = null;   // WeakMap：第一次发现"它还是透明的"是什么时候
+
+  function settleVisibleMotion() {
+    if (!motion.enabled) return;
+    if (!fadedSince) fadedSince = new WeakMap();
+    var now = Date.now();
+    fadedNodes().forEach(function (pair) {
+      var node = pair[0];
+      if (fadedSince.get(node) === undefined) fadedSince.set(node, now);
+      // 正在跑的过渡绝不能打断 —— 那正是想要的效果（滚动兜底是在滚动后 300ms 触发，
+      // 而揭示过渡有 560ms + 递进延迟，不判断就会把动画掐掉、直接跳终态）。
+      // 但也不给"我还在跑"当永久免死金牌：超过 1.6s 还没跑完的，
+      // 就是卡住了（宿主不推进过渡），必须落到终态。
+      if (isTransitioning(node) && now - fadedSince.get(node) < 1600) return;
+      if (pair[1] !== node) pair[1].classList.add("is-revealed");
+      node.classList.add("is-in", "is-revealed", "motion-settled");
+    });
+  }
+
+  function observeReveals(root) {
+    if (!motion.observer || !root || !root.querySelectorAll) return;
+    Array.prototype.forEach.call(
+      root.querySelectorAll("[data-reveal]:not(.is-revealed), [data-reveal-group]:not(.is-revealed)"),
+      function (node) { motion.observer.observe(node); }
+    );
+  }
+
+  // 切换视图时补一次：隐藏视图里的元素尺寸为 0，观察器永远不会判定它"进入视口"，
+  // 所以在切回来的那一刻，把已经在视口内的直接标记为已揭示，其余交给观察器。
+  function refreshMotionForView() {
+    if (!motion.observer) return;
+    var view = document.querySelector(".view.active") || document.documentElement;
+    Array.prototype.forEach.call(view.querySelectorAll("[data-reveal], [data-reveal-group]"), function (node) {
+      var rect = node.getBoundingClientRect();
+      if (rect.top < window.innerHeight && rect.bottom > 0) node.classList.add("is-revealed");
+      else motion.observer.observe(node);
+    });
+  }
+
+  // 顶部栏滚动状态：滚动一点点之后收窄并加阴影
+  function initHeaderMotion() {
+    if (reducedMotion()) return;
+    var ticking = false;
+    function sync() {
+      document.documentElement.classList.toggle("is-scrolled", window.scrollY > 24);
+      ticking = false;
+    }
+    window.addEventListener("scroll", function () {
+      if (ticking) return;
+      ticking = true;
+      window.requestAnimationFrame(sync);
+    }, { passive: true });
+    sync();
+
+    // 滚动停下来之后再兜一次底：内容滚进视口却因为任何原因没揭示时，
+    // 300ms 内一定落到终态，而不是一直透明。
+    var settleTimer = null;
+    window.addEventListener("scroll", function () {
+      if (settleTimer) window.clearTimeout(settleTimer);
+      settleTimer = window.setTimeout(settleVisibleMotion, 300);
+    }, { passive: true });
+  }
+
+  // 底部导航的滑块：跟着当前项滑动，而不是每项各自变色
+  function syncNavIndicator() {
+    if (reducedMotion()) return;
+    var nav = byId("bottom-nav");
+    if (!nav) return;
+    var active = nav.querySelector(".nav-item.active");
+    if (!active) return;
+    var indicator = nav.querySelector(".nav-indicator");
+    if (!indicator) {
+      indicator = document.createElement("span");
+      indicator.className = "nav-indicator";
+      indicator.setAttribute("aria-hidden", "true");
+      nav.insertBefore(indicator, nav.firstChild);
+      nav.classList.add("has-indicator");
+    }
+    var navRect = nav.getBoundingClientRect();
+    var itemRect = active.getBoundingClientRect();
+    indicator.style.width = itemRect.width + "px";
+    indicator.style.transform = "translateX(" + (itemRect.left - navRect.left - 7) + "px)";
+  }
+
+  // 数字从 0 跳到目标值（只在第一次拿到真实数据时跳）
+  function animateMetricNumber(element, amount) {
+    var duration = 900;
+    var finalText = formatMetric(amount);
+    var startedAt = null;
+    var settled = false;
+    function settle() {
+      if (settled) return;
+      settled = true;
+      // 兜底：无论动画有没有跑完，最终值一定是真实数字。
+      // requestAnimationFrame 在切后台、省电模式、被节流时会停，如果只靠它收尾，
+      // 数字会永远停在中间值上 —— 那比不动画更糟（显示错数据）。
+      element.textContent = finalText;
+      element.classList.remove("is-counting");
+    }
+    element.classList.add("is-counting");
+    function frame(now) {
+      if (settled) return;
+      if (startedAt === null) startedAt = now;
+      var progress = Math.min(1, (now - startedAt) / duration);
+      var eased = 1 - Math.pow(1 - progress, 3);
+      element.textContent = formatMetric(Math.round(amount * eased));
+      if (progress < 1) window.requestAnimationFrame(frame);
+      else settle();
+    }
+    window.requestAnimationFrame(frame);
+    window.setTimeout(settle, duration + 260);
+  }
+
   function renderMetrics() {
     var definitions = [
       { key: "rescued", label: "已救助" },
@@ -178,6 +369,8 @@
         var amount = state.metrics.values[definition.key];
         total += amount;
         value.textContent = amount === 0 ? "正在积累" : formatMetric(amount);
+        // 第一次拿到真实数字时从 0 跳上去；之后刷新直接给结果，避免每次轮询都跳
+        if (amount > 0 && motionEnabled() && !state.metrics.counted) animateMetricNumber(value, amount);
         // 占位文案用小字样式，避免和真实数字一样抢眼
         value.classList.toggle("is-placeholder", amount === 0);
         value.setAttribute("aria-label", definition.label + " " + formatMetric(amount));
@@ -188,6 +381,7 @@
         else value.setAttribute("aria-label", definition.label + "正在加载");
       }
     });
+    if (state.metrics.status === "ready") state.metrics.counted = true;
     renderHomeModuleState("metrics", state.metrics.status);
     var note = byId("home-metrics-note");
     if (!note) return;
@@ -1125,6 +1319,10 @@
     byId("bottom-nav").hidden = storyActive;
     if (state.view === "feeding") ensureFeeding();
     if (state.view === "tasks") loadMyTasks();
+    // 动效侧收尾：切换视图后补一次揭示，并把底部导航滑块移到新的选中项
+    refreshMotionForView();
+    settleVisibleMotion();
+    syncNavIndicator();
   }
 
   function renderApp() {
@@ -1711,6 +1909,10 @@
   if (validViews.indexOf(initialView) >= 0) state.view = initialView;
   renderStory();
   renderApp();
+  initMotion();
+  initHeaderMotion();
+  syncNavIndicator();
+  window.addEventListener("resize", function () { syncNavIndicator(); });
   checkForUpdate();
   var initialMetrics = loadPublicMetrics();
   api.restoreSession().then(function (user) {

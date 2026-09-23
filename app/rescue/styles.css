@@ -1087,3 +1087,182 @@ button, a, label, select, .nav-item, .quick-action, .primary-action,
   .impact-band, .feeding-teaser, .trust-panel { margin-bottom: 22px; }
   .pillar-card { padding: 14px; }
 }
+
+/* ==========================================================================
+   动效层（2026-09-24）
+   参考取向：Apple 产品页的首屏分层入场、Linear / Vercel 那种克制的滚动揭示、
+   以及 Airbnb 卡片式的按压反馈 —— 共同点是**只动 transform / opacity**，
+   时长在 200–600ms、缓动带一点回弹但不夸张。
+
+   两条硬约束：
+   1) 必须放在文件最后。这个项目已经被"后面的规则覆盖前面媒体查询"坑过三次，
+      动效层依赖级联顺序，放中间会被后面的基础规则吃掉。
+   2) 初始的"未揭示"状态只在 JS 加上 html.has-motion 之后才生效（见下方选择器）。
+      这样 JS 没跑起来时页面是完整可见的，而不是一片空白 —— 揭示类动效最常见的
+      事故就是"脚本挂了，内容全透明"。
+   ========================================================================== */
+
+/* 变量挂在 .has-motion 上（而不是再开一个 :root）：
+   一是不覆盖品牌 token 所在的 :root，二是这些值只在启用动效时才有意义。 */
+.has-motion {
+  --ease-out-soft: cubic-bezier(.22, .61, .36, 1);
+  --ease-spring: cubic-bezier(.34, 1.56, .64, 1);
+  --motion-reveal: 620ms;
+  --motion-tap: 160ms;
+}
+
+/* ---------- 首屏分层入场 ---------- */
+
+/* 首屏五层（标签 / 大标题 / 说明 / 区域 / 按钮）依次落位。
+   刻意不给 HTML 加标记：hero 的标签与标题被既有契约测试按精确字符串钉着，
+   而这五个元素本来就是 .editorial-hero-copy 的直接子元素，用 nth-child 足够。 */
+.has-motion .editorial-hero-copy > * {
+  opacity: 0;
+  transform: translateY(14px);
+}
+.has-motion .editorial-hero-copy.is-in > * {
+  opacity: 1;
+  transform: none;
+  transition: opacity 620ms var(--ease-out-soft), transform 620ms var(--ease-out-soft);
+}
+.has-motion .editorial-hero-copy.is-in > *:nth-child(1) { transition-delay: 140ms; }
+.has-motion .editorial-hero-copy.is-in > *:nth-child(2) { transition-delay: 235ms; }
+.has-motion .editorial-hero-copy.is-in > *:nth-child(3) { transition-delay: 330ms; }
+.has-motion .editorial-hero-copy.is-in > *:nth-child(4) { transition-delay: 425ms; }
+.has-motion .editorial-hero-copy.is-in > *:nth-child(5) { transition-delay: 520ms; }
+
+/* 首屏大图：入场时轻微推近，制造景深 */
+.has-motion .editorial-hero-visual img,
+.has-motion .editorial-hero-visual source + img {
+  transform: scale(1.045);
+  transition: transform 1200ms var(--ease-out-soft);
+}
+.has-motion.is-hero-ready .editorial-hero-visual img {
+  transform: scale(1);
+}
+
+/* ---------- 滚动揭示 ---------- */
+
+.has-motion [data-reveal] {
+  opacity: 0;
+  transform: translateY(22px);
+}
+
+.has-motion [data-reveal].is-revealed {
+  opacity: 1;
+  transform: none;
+  transition: opacity var(--motion-reveal) var(--ease-out-soft),
+              transform var(--motion-reveal) var(--ease-out-soft);
+  transition-delay: var(--reveal-delay, 0ms);
+}
+
+/* 卡片组：同组内按 --reveal-index 递进，形成"逐个落位"的节奏 */
+.has-motion [data-reveal-group] > * {
+  opacity: 0;
+  transform: translateY(18px) scale(.985);
+}
+.has-motion [data-reveal-group].is-revealed > * {
+  opacity: 1;
+  transform: none;
+  transition: opacity 560ms var(--ease-out-soft), transform 560ms var(--ease-spring);
+  transition-delay: calc(var(--reveal-index, 0) * 70ms);
+}
+
+/* 区块标题下面那道短线：揭示时从左展开 */
+.section-rule {
+  display: block;
+  width: 46px;
+  height: 2px;
+  margin-top: 10px;
+  background: var(--brand);
+  transform: scaleX(0);
+  transform-origin: left center;
+}
+.has-motion [data-reveal].is-revealed .section-rule,
+.has-motion [data-reveal-group].is-revealed .section-rule {
+  transform: scaleX(1);
+  transition: transform 760ms var(--ease-out-soft) 120ms;
+}
+
+/* ---------- 卡片物理反馈 ---------- */
+
+.pillar-card,
+.quick-action,
+.cat-card,
+.metric-card {
+  transition: transform var(--motion-tap) var(--ease-out-soft),
+              box-shadow var(--motion-tap) var(--ease-out-soft),
+              background-color var(--motion-tap) var(--ease-out-soft);
+}
+
+/* 主按钮的按压反馈（观感仍由品牌那条最终规则说了算，这里只补 :active） */
+.editorial-story-link:active { transform: scale(.98); }
+
+@media (hover: hover) {
+  .pillar-card:hover,
+  .quick-action:hover,
+  .cat-card:hover {
+    transform: translateY(-3px);
+  }
+  .pillar-card:hover { box-shadow: 0 20px 40px rgba(23, 23, 23, .12); }
+  .pillar-card:hover .pillar-go { transform: translateX(4px); }
+  .cat-card:hover .cat-photo img { transform: scale(1.045); }
+}
+
+.pillar-card:active,
+.quick-action:active,
+.cat-card:active { transform: scale(.985); }
+
+.pillar-go { transition: transform 240ms var(--ease-out-soft); }
+.cat-photo img { transition: transform 520ms var(--ease-out-soft); }
+
+/* ---------- 顶部栏滚动状态 ---------- */
+
+.app-header { transition: min-height 260ms var(--ease-out-soft), box-shadow 260ms var(--ease-out-soft); }
+.is-scrolled .app-header { min-height: 62px; box-shadow: 0 10px 30px rgba(23, 23, 23, .07); }
+
+/* ---------- 底部导航的滑动指示 ---------- */
+
+.bottom-nav { position: fixed; }
+.nav-indicator {
+  position: absolute;
+  top: 7px;
+  bottom: 7px;
+  left: 7px;
+  width: 0;
+  border-radius: 16px;
+  background: var(--brand-soft);
+  transition: transform 420ms var(--ease-spring), width 420ms var(--ease-spring);
+  pointer-events: none;
+}
+.nav-item { position: relative; z-index: 1; }
+/* 有了滑块就不必再给当前项上底色，否则会看到两层色块 */
+.bottom-nav.has-indicator .nav-item.active { background: transparent; }
+
+/* ---------- 指标数字跳动 ---------- */
+
+.metric-card strong.is-counting { font-variant-numeric: tabular-nums; }
+
+/* 兜底：JS 判定某个元素"该显示却还是透明"时加上这个类，直接落到终态。
+   出现这种情况说明过渡没有推进（宿主环境限制、极端节流等），此时宁可不动画，
+   也不能让内容看不见。 */
+.motion-settled,
+.motion-settled > * {
+  opacity: 1 !important;
+  transform: none !important;
+  transition: none !important;
+}
+
+/* ---------- 尊重系统设置 ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .has-motion .editorial-hero-copy > *,
+  .has-motion [data-reveal],
+  .has-motion [data-reveal-group] > * {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .has-motion .editorial-hero-visual img { transform: none !important; }
+  .section-rule { transform: scaleX(1) !important; }
+  .nav-indicator { transition: none !important; }
+}

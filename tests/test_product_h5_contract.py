@@ -301,6 +301,90 @@ class ProductH5ContractTests(unittest.TestCase):
         self.assertNotIn("图片像素过大", script)
         self.assertNotIn("image_too_many_pixels: \"图片", script)
 
+    def test_motion_layer_is_progressive_enhancement(self):
+        """揭示类动效最经典的事故是"脚本没跑起来，内容全透明"，这里把它钉死。"""
+        html, script, styles = self.h5(), self.script(), self.styles()
+        # 1) "未揭示"状态只挂在 .has-motion 之下 —— JS 不加这个类，内容就一直是可见的
+        self.assertIn(".has-motion [data-reveal]", styles)
+        self.assertIn(".has-motion .editorial-hero-copy > *", styles)
+        self.assertNotIn("\n[data-reveal] {", styles)
+        self.assertNotIn("\n[data-enter] {", styles)
+        # 2) 由 JS 加类，且要求浏览器支持 IntersectionObserver
+        self.assertIn('classList.add("has-motion")', script)
+        self.assertIn('"IntersectionObserver" in window', script)
+        # 3) 兜底：视口内仍透明的元素强制落到终态（过渡没推进也不会看不见内容）
+        self.assertIn("function settleVisibleMotion", script)
+        self.assertIn('"motion-settled"', script)
+        self.assertIn(".motion-settled", styles)
+        self.assertIn("opacity: 1 !important", styles)
+        # 4) 揭示一次就不再观察，避免无谓的相交计算
+        self.assertIn("unobserve(entry.target)", script)
+        # 5) 尊重系统的"减少动效"
+        self.assertIn("prefers-reduced-motion: reduce", styles)
+        self.assertIn("if (reducedMotion()) return;", script)
+
+    def test_motion_hooks_exist_on_the_home_view(self):
+        html = self.h5()
+        for marker in ("data-reveal", "data-reveal-group", "section-rule"):
+            self.assertIn(marker, html)
+        # 首屏入场刻意不写标记：hero 的标签与标题被别的契约测试按精确字符串钉着，
+        # 依靠 .editorial-hero-copy 的子元素顺序（nth-child）分层，see styles.css
+        self.assertEqual('<h1 id="home-title">让每一只小猫，<br>都被认真看见</h1>' in html, True)
+        self.assertNotIn("data-enter", html)
+        # 三处卡片组逐个落位：主操作、快捷操作、数据条
+        self.assertEqual(3, html.count("data-reveal-group"))
+
+    def test_motion_reveal_trigger_does_not_shrink_the_viewport(self):
+        """曾经的事故：观察器用了 rootMargin: "0px 0px -10% 0px"，
+        于是静止停在视口最下面那条带子里的卡片永远等不到 is-revealed，
+        子元素一直 opacity:0（容器本身不透明，肉眼看就是一块空白）。"""
+        script = self.script()
+        # 断言的是"选项形式"，不是这个词本身 —— 解释这条约束的注释里会出现 rootMargin
+        self.assertNotIn("rootMargin:", script)
+        self.assertIn("{ threshold: 0.1 }", script)
+
+    def test_motion_fallback_sees_into_card_groups(self):
+        """卡片组的透明者是它的子元素，容器 opacity 恒为 1。
+        兜底如果只查容器自己的 opacity，等于对卡片组完全没生效。"""
+        script, styles = self.script(), self.styles()
+        self.assertIn("[data-reveal-group] > *", script)
+        # 兜底要能压住子元素，否则给容器加上终态类也救不回看不见的按钮
+        self.assertIn(".motion-settled > *", styles)
+        # 滚动之后也要兜一次，而不是只在加载后兜一次
+        self.assertIn("settleTimer = window.setTimeout(settleVisibleMotion", script)
+
+    def test_motion_fallback_does_not_cut_running_transitions(self):
+        """兜底在滚动后 300ms 触发，而揭示过渡有 560ms + 递进延迟。
+        不判断"过渡是否正在跑"就会把动画掐掉、直接跳终态 —— 等于白做动效。"""
+        script = self.script()
+        self.assertIn("function isTransitioning", script)
+        self.assertIn("a.playState === \"running\"", script)
+        # 但"我还在跑"不能是永久免死金牌：卡住的过渡超过上限仍要落到终态
+        self.assertIn("< 1600", script)
+
+    def test_metric_count_up_always_lands_on_the_real_number(self):
+        """数字动不动画都行，但绝不能停在中间值 —— 那等于显示错数据。"""
+        script = self.script()
+        self.assertIn("function animateMetricNumber", script)
+        self.assertIn("window.setTimeout(settle, duration + 260)", script)
+        self.assertIn("if (settled) return;", script)
+
+    def test_bottom_nav_uses_a_sliding_indicator(self):
+        script, styles = self.script(), self.styles()
+        self.assertIn("function syncNavIndicator", script)
+        self.assertIn('nav.insertBefore(indicator, nav.firstChild)', script)
+        self.assertIn(".nav-indicator", styles)
+        self.assertIn(".bottom-nav.has-indicator .nav-item.active { background: transparent; }", styles)
+
+    def test_motion_layer_stays_at_the_end_of_the_stylesheet(self):
+        """动效层依赖级联顺序（这个项目被"后面的规则覆盖前面媒体查询"坑过三次）。"""
+        styles = self.styles()
+        self.assertGreater(
+            styles.index("动效层（2026-09-24）"),
+            styles.index("Brand hero final cascade"),
+            "动效层必须留在样式表最后，别被后面的基础规则吃掉",
+        )
+
     def test_home_has_a_small_entry_to_the_welcome_page(self):
         """首页首屏要有一个固定位置的小入口回欢迎页（用户反馈"每次找不到"）。"""
         html = self.h5()
