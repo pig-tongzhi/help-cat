@@ -10,6 +10,8 @@ from pathlib import Path
 from sqlalchemy import inspect, text
 from sqlalchemy.orm.exc import StaleDataError
 
+from alembic.script import ScriptDirectory
+
 from server.helpcat.db import ensure_schema, make_session_factory
 from server.helpcat.models import Cat, Community, User
 
@@ -273,10 +275,20 @@ class CommercialMigrationTests(unittest.TestCase):
                 check=True, cwd=Path.cwd(), env=environment, capture_output=True, text=True,
             )
             with sqlite3.connect(database) as connection:
-                self.assertEqual(connection.execute("SELECT version_num FROM alembic_version").fetchone()[0], "003_scale_integrity")
+                head = ScriptDirectory(
+                    str((Path.cwd() / "server/helpcat/migrations").resolve())
+                ).get_current_head()
+                self.assertEqual(
+                    connection.execute("SELECT version_num FROM alembic_version").fetchone()[0], head
+                )
                 self.assertEqual(connection.execute("SELECT community_id FROM cats WHERE id='cat1'").fetchone()[0], "c1")
                 self.assertEqual(connection.execute("SELECT status, merged_into_id FROM communities WHERE id='c2'").fetchone(), ("MERGED", "c1"))
-                self.assertTrue(any(row[2] == "merged_into_id" for row in connection.execute("PRAGMA foreign_key_list(communities)")))
+                # PRAGMA foreign_key_list 的列序是 (id, seq, table, from, to, ...)：
+                # 第 2 列是**被引用**的表名，本地列在第 3 列。
+                self.assertTrue(any(
+                    row[3] == "merged_into_id" and row[2] == "communities"
+                    for row in connection.execute("PRAGMA foreign_key_list(communities)")
+                ))
                 self.assertIn("uq_communities_live_location_name", {row[1] for row in connection.execute("PRAGMA index_list(communities)")})
                 self.assertIn("uq_cats_actor_idempotency", {row[1] for row in connection.execute("PRAGMA index_list(cats)")})
 

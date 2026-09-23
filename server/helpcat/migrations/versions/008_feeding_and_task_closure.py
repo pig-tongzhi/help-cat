@@ -1,4 +1,10 @@
-"""Add feeding points, feeding check-ins, cat timelines, and task closure."""
+"""Add feeding points, feeding check-ins, cat timelines, and task closure.
+
+Every step is guarded: revision ``001_initial`` builds its tables from the
+current models, so a database that starts from the models already has these
+tables and columns.  The guards keep the chain replayable from an empty
+database, from a legacy pilot database, and from one already at head.
+"""
 
 from alembic import op
 import sqlalchemy as sa
@@ -9,8 +15,16 @@ down_revision = "007_lead_messages"
 branch_labels = None
 depends_on = None
 
+TASK_CLOSURE_COLUMNS = (
+    ("completed_at", lambda: sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True)),
+    ("completion_note", lambda: sa.Column("completion_note", sa.Text(), nullable=False, server_default="")),
+    ("evidence_asset_id", lambda: sa.Column("evidence_asset_id", sa.String(length=32), nullable=True)),
+    ("cancelled_at", lambda: sa.Column("cancelled_at", sa.DateTime(timezone=True), nullable=True)),
+    ("cancel_reason", lambda: sa.Column("cancel_reason", sa.Text(), nullable=False, server_default="")),
+)
 
-def upgrade():
+
+def _create_feeding_points():
     op.create_table(
         "feeding_points",
         sa.Column("id", sa.String(length=32), nullable=False),
@@ -35,6 +49,8 @@ def upgrade():
     op.create_index("ix_feeding_points_is_qa", "feeding_points", ["is_qa"])
     op.create_index("ix_feeding_points_created_at", "feeding_points", ["created_at"])
 
+
+def _create_feeding_logs():
     op.create_table(
         "feeding_logs",
         sa.Column("id", sa.String(length=32), nullable=False),
@@ -59,6 +75,8 @@ def upgrade():
     op.create_index("ix_feeding_logs_is_qa", "feeding_logs", ["is_qa"])
     op.create_index("ix_feeding_logs_created_at", "feeding_logs", ["created_at"])
 
+
+def _create_cat_events():
     op.create_table(
         "cat_events",
         sa.Column("id", sa.String(length=32), nullable=False),
@@ -83,36 +101,48 @@ def upgrade():
     op.create_index("ix_cat_events_occurred_at", "cat_events", ["occurred_at"])
     op.create_index("ix_cat_events_is_qa", "cat_events", ["is_qa"])
 
-    op.add_column("tasks", sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True))
-    op.add_column("tasks", sa.Column("completion_note", sa.Text(), nullable=False, server_default=""))
-    op.add_column("tasks", sa.Column("evidence_asset_id", sa.String(length=32), nullable=True))
-    op.add_column("tasks", sa.Column("cancelled_at", sa.DateTime(timezone=True), nullable=True))
-    op.add_column("tasks", sa.Column("cancel_reason", sa.Text(), nullable=False, server_default=""))
+
+def upgrade():
+    inspector = sa.inspect(op.get_bind())
+    if not inspector.has_table("feeding_points"):
+        _create_feeding_points()
+    if not inspector.has_table("feeding_logs"):
+        _create_feeding_logs()
+    if not inspector.has_table("cat_events"):
+        _create_cat_events()
+
+    task_columns = {column["name"] for column in inspector.get_columns("tasks")}
+    for name, factory in TASK_CLOSURE_COLUMNS:
+        if name not in task_columns:
+            op.add_column("tasks", factory())
 
 
 def downgrade():
-    op.drop_column("tasks", "cancel_reason")
-    op.drop_column("tasks", "cancelled_at")
-    op.drop_column("tasks", "evidence_asset_id")
-    op.drop_column("tasks", "completion_note")
-    op.drop_column("tasks", "completed_at")
+    task_columns = {column["name"] for column in sa.inspect(op.get_bind()).get_columns("tasks")}
+    for name, _factory in reversed(TASK_CLOSURE_COLUMNS):
+        if name in task_columns:
+            op.drop_column("tasks", name)
 
-    op.drop_index("ix_cat_events_is_qa", table_name="cat_events")
-    op.drop_index("ix_cat_events_occurred_at", table_name="cat_events")
-    op.drop_index("ix_cat_events_kind", table_name="cat_events")
-    op.drop_index("ix_cat_events_cat_id", table_name="cat_events")
-    op.drop_table("cat_events")
+    inspector = sa.inspect(op.get_bind())
+    if inspector.has_table("cat_events"):
+        op.drop_index("ix_cat_events_is_qa", table_name="cat_events")
+        op.drop_index("ix_cat_events_occurred_at", table_name="cat_events")
+        op.drop_index("ix_cat_events_kind", table_name="cat_events")
+        op.drop_index("ix_cat_events_cat_id", table_name="cat_events")
+        op.drop_table("cat_events")
 
-    op.drop_index("ix_feeding_logs_created_at", table_name="feeding_logs")
-    op.drop_index("ix_feeding_logs_is_qa", table_name="feeding_logs")
-    op.drop_index("ix_feeding_logs_fed_on", table_name="feeding_logs")
-    op.drop_index("ix_feeding_logs_user_id", table_name="feeding_logs")
-    op.drop_index("ix_feeding_logs_point_id", table_name="feeding_logs")
-    op.drop_table("feeding_logs")
+    if inspector.has_table("feeding_logs"):
+        op.drop_index("ix_feeding_logs_created_at", table_name="feeding_logs")
+        op.drop_index("ix_feeding_logs_is_qa", table_name="feeding_logs")
+        op.drop_index("ix_feeding_logs_fed_on", table_name="feeding_logs")
+        op.drop_index("ix_feeding_logs_user_id", table_name="feeding_logs")
+        op.drop_index("ix_feeding_logs_point_id", table_name="feeding_logs")
+        op.drop_table("feeding_logs")
 
-    op.drop_index("ix_feeding_points_created_at", table_name="feeding_points")
-    op.drop_index("ix_feeding_points_is_qa", table_name="feeding_points")
-    op.drop_index("ix_feeding_points_status", table_name="feeding_points")
-    op.drop_index("ix_feeding_points_community_id", table_name="feeding_points")
-    op.drop_index("ix_feeding_points_name", table_name="feeding_points")
-    op.drop_table("feeding_points")
+    if inspector.has_table("feeding_points"):
+        op.drop_index("ix_feeding_points_created_at", table_name="feeding_points")
+        op.drop_index("ix_feeding_points_is_qa", table_name="feeding_points")
+        op.drop_index("ix_feeding_points_status", table_name="feeding_points")
+        op.drop_index("ix_feeding_points_community_id", table_name="feeding_points")
+        op.drop_index("ix_feeding_points_name", table_name="feeding_points")
+        op.drop_table("feeding_points")

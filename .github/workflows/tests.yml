@@ -19,10 +19,6 @@ jobs:
           pip install pytest httpx
       - name: Run the suite
         run: |
-          # tests/ 与 server/tests/ 分开跑：前者是前端契约，后者是 API 行为
+          # tests/ 与 server/tests/ 分开跑：前者是前端契约与迁移行为，后者是 API 行为
           python -m pytest server/tests -q
-          python -m pytest tests -q \
-            --deselect tests/test_commercial_migrations.py::CommercialMigrationTests::test_alembic_upgrade_executes_against_legacy_sqlite_and_reconciles_collisions
-        # 说明：上面 deselect 的那条是**基线就存在**的失败（001 迁移用 create_all，
-        # 从空库跑迁移链会撞 "table already exists"）。它属于「schema 单一来源」那项
-        # 结构优化，修完之后应把这行删掉。
+          python -m pytest tests -q

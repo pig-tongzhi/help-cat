@@ -10,7 +10,12 @@ deployment_database_url = os.getenv("HELPCAT_DATABASE_URL")
 if deployment_database_url:
     config.set_main_option("sqlalchemy.url", deployment_database_url)
 if config.config_file_name:
-    fileConfig(config.config_file_name)
+    # A caller may point Alembic at a trimmed ini (the migration tests do), and
+    # fileConfig raises KeyError when the logging sections are absent.
+    try:
+        fileConfig(config.config_file_name)
+    except KeyError:
+        pass
 target_metadata = Base.metadata
 
 def run_migrations_offline():
