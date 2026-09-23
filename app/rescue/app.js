@@ -228,7 +228,7 @@
   // 所以必须连子元素一起看，否则兜底对卡片组完全不生效 —— 这是曾经的线上隐患：
   // 按钮/卡片一直 opacity:0，而容器 opacity:1，怎么查都查不出问题。
   function fadedNodes() {
-    var selectors = ".editorial-hero-copy > *, [data-reveal], [data-reveal-group] > *";
+    var selectors = ".editorial-hero-copy > *, .hero-caption, .hero-keepsakes, [data-reveal], [data-reveal-group] > *";
     var faded = [];
     Array.prototype.forEach.call(document.querySelectorAll(selectors), function (node) {
       if (Number(window.getComputedStyle(node).opacity) > 0.85) return;
@@ -284,6 +284,9 @@
     var ticking = false;
     function sync() {
       document.documentElement.classList.toggle("is-scrolled", window.scrollY > 24);
+      // 背景层的视差：往上挪一点点（封顶 -24px，氛围层上下各留了 40px 余量）
+      var hero = document.querySelector(".editorial-hero");
+      if (hero) hero.style.setProperty("--hero-drift", (-Math.min(window.scrollY, 400) * 0.06).toFixed(2) + "px");
       ticking = false;
     }
     window.addEventListener("scroll", function () {

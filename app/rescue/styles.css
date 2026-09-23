@@ -1089,6 +1089,213 @@ button, a, label, select, .nav-item, .quick-action, .primary-action,
 }
 
 /* ==========================================================================
+   主页面 hero 视觉层（2026-09-24）
+   位置要求：必须在 "Brand hero final cascade" 之后（要覆盖它的平色底），
+   但必须留在"动效层"之前（动效层是文件最后一段，有契约测试钉着）。
+
+   这里有一条容易被绊倒的规则：契约测试会扫描 final cascade 之后的**每一条**规则，
+   凡是选择器里出现 .reference-hero / .editorial-hero-copy / .editorial-hero-visual 的，
+   background 只允许 var(--hero-backdrop) 或 transparent、border 必须是 0
+   （见 test_hero_uses_one_continuous_warm_backdrop）。
+   所以装饰元素一律用独立类名（.hero-atmosphere / .hero-photo-wash / .hero-caption …），
+   绝不挂在那三个选择器下面；那三个选择器上只做"允许的"改动。
+
+   要解决的问题：原来整屏只有 #F5F1EB 一个平色，77 又恰好是白猫 + 米色墙，
+   于是首屏是一大片没有层次的米色。现在改成：斜向暖渐变 + 三团柔光 + 纸感点阵 + 同心弧，
+   照片上加一层暖光/底部暖调，再补一张 77 的说明卡和两张小照片。
+   ========================================================================== */
+
+/* 背景氛围层：渐变兜底 + 柔光 + 同心弧 + 点阵。
+   刻意留了上下 40px 余量，给滚动视差（--hero-drift）留位移空间，不然会露边。 */
+.hero-atmosphere {
+  position: absolute;
+  top: -40px;
+  bottom: -40px;
+  left: 0;
+  right: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 74% 52%, rgba(255, 255, 255, .88) 0%, rgba(255, 255, 255, 0) 44%),
+    radial-gradient(circle at 86% 24%, rgba(238, 166, 116, .32) 0%, rgba(238, 166, 116, 0) 42%),
+    radial-gradient(circle at 14% 86%, rgba(231, 186, 140, .36) 0%, rgba(231, 186, 140, 0) 46%),
+    linear-gradient(152deg, #FFFDFA 0%, #F8F1E8 46%, #F0E2D1 100%);
+}
+/* 同心弧：以猫头位置为圆心一圈圈散开，像日出。用 mask 只让它在中上显影，
+   手机上照片卡是内缩的，这圈弧正好露在卡片四周。 */
+.hero-atmosphere:after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 74% 54%, rgba(217, 104, 58, 0) 0 118px, rgba(217, 104, 58, .10) 121px, rgba(217, 104, 58, 0) 128px),
+    radial-gradient(circle at 74% 54%, rgba(217, 104, 58, 0) 0 176px, rgba(217, 104, 58, .075) 179px, rgba(217, 104, 58, 0) 187px),
+    radial-gradient(circle at 74% 54%, rgba(217, 104, 58, 0) 0 242px, rgba(217, 104, 58, .055) 245px, rgba(217, 104, 58, 0) 255px);
+  -webkit-mask-image: radial-gradient(circle at 74% 54%, #000 0%, rgba(0, 0, 0, .34) 36%, transparent 64%);
+  mask-image: radial-gradient(circle at 74% 54%, #000 0%, rgba(0, 0, 0, .34) 36%, transparent 64%);
+}
+/* 纸感点阵：很轻，只铺在左侧文案区，免得整屏发花 */
+.hero-atmosphere:before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgba(23, 23, 23, .075) 1px, transparent 1.1px);
+  background-size: 20px 20px;
+  -webkit-mask-image: linear-gradient(118deg, #000 0%, rgba(0, 0, 0, .28) 40%, transparent 64%);
+  mask-image: linear-gradient(118deg, #000 0%, rgba(0, 0, 0, .28) 40%, transparent 64%);
+}
+
+/* 照片列让出底色，氛围层才透得上来。transparent 是契约明确允许的取值，
+   视觉上仍是同一块连续暖底（渐变本身就是那块底）。 */
+.reference-hero .editorial-hero-visual { background: transparent; }
+
+/* 照片上的暖色处理。做成独立图层而不是写在 .editorial-hero-visual 上：
+   一是那张图在 <picture> 里、加不了伪元素，二是那条选择器受背景契约限制。
+   最左边一道是"融进文案底"，把照片左缘接回同一个底色（原来那道硬缝的补丁）。 */
+.hero-photo-wash {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 50%;
+  height: 100%;
+  z-index: 2;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 46% 40%, rgba(255, 252, 246, .42) 0%, rgba(255, 252, 246, 0) 40%),
+    linear-gradient(90deg, #F5F1EB 0%, rgba(245, 241, 235, .5) 8%, rgba(245, 241, 235, 0) 22%),
+    linear-gradient(180deg, rgba(255, 246, 236, .48) 0%, rgba(255, 246, 236, 0) 26%),
+    linear-gradient(0deg, rgba(224, 172, 124, .32) 0%, rgba(224, 172, 124, 0) 34%);
+}
+
+/* 77 的说明卡：初见时间与名字由来都取自 story-77.js 的既有事实，不另编。 */
+.hero-caption {
+  position: absolute;
+  left: 53%;
+  bottom: 52px;
+  z-index: 3;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  width: min(330px, 32vw);
+  margin: 0;
+  padding: 12px 16px 12px 12px;
+  border: 1px solid rgba(217, 104, 58, .14);
+  border-radius: 18px;
+  background: rgba(255, 253, 250, .88);
+  box-shadow: 0 18px 42px rgba(88, 58, 34, .14);
+  color: var(--editorial-ink);
+  pointer-events: none;
+}
+.hero-caption-photo {
+  display: block;
+  width: 54px;
+  height: 54px;
+  border-radius: 14px;
+  object-fit: cover;
+  object-position: 50% 24%;
+}
+.hero-caption strong { display: block; font-size: 14px; letter-spacing: .01em; }
+.hero-caption small { display: block; margin-top: 3px; color: var(--muted); font-size: 11.5px; line-height: 1.55; }
+
+/* 两张小照片（宝丽来式）：把 77 的成长线摆在首屏，也把右侧的空位填起来。 */
+.hero-keepsakes { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
+.hero-keepsake {
+  position: absolute;
+  display: block;
+  padding: 6px 6px 21px;
+  border-radius: 14px;
+  background: #FFFFFF;
+  box-shadow: 0 16px 34px rgba(88, 58, 34, .18);
+}
+/* 两张小照片统一裁成近方形并各自取景：
+   rescue-day 是极近特写（整张缩到 88px 只有一团蓝），要裁到猫脸；
+   grown-up 是"被人扶着"的正面照，裁到脸即可，别把手臂也带进来。 */
+/* height: auto 不能省：img 上有 height="460" 属性，CSS 里不写就会拿属性值当高度，
+   小照片会被拉成 460px 高。aspect-ratio 负责出近方形。 */
+.hero-keepsake img { display: block; width: 100%; height: auto; aspect-ratio: 10 / 9; border-radius: 9px; object-fit: cover; }
+.hero-keepsake-day img { object-position: 72% 82%; }
+.hero-keepsake-grown img { object-position: 50% 26%; }
+.hero-keepsake em {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 5px;
+  color: var(--muted);
+  font-size: 10px;
+  font-style: normal;
+  letter-spacing: .1em;
+  text-align: center;
+}
+.hero-keepsake-day { left: 54%; top: 13%; width: 124px; transform: rotate(-4.5deg); }
+.hero-keepsake-grown { right: 5.5%; top: 9%; width: 150px; transform: rotate(3.5deg); }
+
+/* 手机端：照片收成一张圆角卡片（原来是一条通栏、猫只占右半边，左半边全空），
+   高度从 244 提到 300，让 77 更大。
+   卡片高度只留一个变量：暖色层靠"贴住 hero 底部"来对齐卡片，
+   不另算一遍间距 —— 绝对定位的 bottom 是相对**内边距盒**的，那个盒子本来就含内边距，
+   再减一次 padding 会整体偏高（实际踩到过：手机上暖色层比照片卡高 22px）。 */
+.reference-hero { --hero-photo-h: 300px; }
+
+@media (max-width: 720px) {
+  /* 说明卡改成正常的网格行（夹在按钮和照片之间），不再绝对定位：
+     绝对定位放在首屏底部时，会被固定的「猫咪建档」悬浮按钮压住一角。
+     行号显式写出来，因为它前面还有绝对定位的装饰层。 */
+  .hero-caption {
+    position: static;
+    grid-row: 2;
+    width: auto;
+    margin: 0 16px 14px;
+    padding: 10px 13px 10px 10px;
+    border-radius: 16px;
+  }
+  .hero-caption-photo { width: 46px; height: 46px; border-radius: 12px; }
+  .hero-caption strong { font-size: 13px; }
+  .hero-caption small { font-size: 11px; }
+  .reference-hero .editorial-hero-visual {
+    grid-row: 3;
+    height: var(--hero-photo-h);
+    margin: 0 16px;
+    border-radius: 22px;
+    background: transparent;
+  }
+  .hero-photo-wash {
+    left: 16px;
+    right: 16px;
+    top: auto;
+    width: auto;
+    bottom: 0;
+    height: var(--hero-photo-h);
+    border-radius: 22px;
+    overflow: hidden;
+  }
+  /* 同心弧在手机上换成"以猫头为圆心"：桌面端照片铺满右半屏，这圈弧本来就被照片盖住，
+     只有手机端照片是内缩的卡片、弧才露得出来。半径用 px 收在卡片范围内，
+     不然最外那圈会扫过上面的按钮区，看着像一道划痕。 */
+  .hero-atmosphere:after {
+    background:
+      radial-gradient(circle at 74% 84%, rgba(217, 104, 58, 0) 0 96px, rgba(217, 104, 58, .13) 99px, rgba(217, 104, 58, 0) 106px),
+      radial-gradient(circle at 74% 84%, rgba(217, 104, 58, 0) 0 150px, rgba(217, 104, 58, .10) 153px, rgba(217, 104, 58, 0) 161px),
+      radial-gradient(circle at 74% 84%, rgba(217, 104, 58, 0) 0 208px, rgba(217, 104, 58, .07) 211px, rgba(217, 104, 58, 0) 220px);
+    -webkit-mask-image: radial-gradient(circle at 74% 84%, #000 0 130px, rgba(0, 0, 0, .4) 190px, transparent 250px);
+    mask-image: radial-gradient(circle at 74% 84%, #000 0 130px, rgba(0, 0, 0, .4) 190px, transparent 250px);
+  }
+  /* 手机端照片是内缩卡片，不需要桌面那道"融进文案底"的竖条，
+     改成以猫头为中心的一团柔光（原来那条竖条会让卡片左半边发白发平）。 */
+  .hero-photo-wash {
+    background:
+      radial-gradient(circle at 72% 58%, rgba(255, 252, 246, .5) 0%, rgba(255, 252, 246, 0) 46%),
+      linear-gradient(180deg, rgba(255, 246, 236, .45) 0%, rgba(255, 246, 236, 0) 30%),
+      linear-gradient(0deg, rgba(224, 172, 124, .3) 0%, rgba(224, 172, 124, 0) 40%);
+  }
+  /* 手机端照片卡左侧有约 90px 空档（图是 contain 靠右的，猫只占右边），
+     正好竖着放两张小照片，把空档填成一条"成长照片条"。
+     两张都在卡片内、互不重叠，也不会盖到猫（猫从 x≈109 起）。 */
+  .hero-keepsake-day { left: 18px; top: auto; bottom: 168px; width: 88px; }
+  .hero-keepsake-grown { left: 22px; right: auto; top: auto; bottom: 58px; width: 88px; }
+}
+
+/* ==========================================================================
    动效层（2026-09-24）
    参考取向：Apple 产品页的首屏分层入场、Linear / Vercel 那种克制的滚动揭示、
    以及 Airbnb 卡片式的按压反馈 —— 共同点是**只动 transform / opacity**，
@@ -1140,6 +1347,39 @@ button, a, label, select, .nav-item, .quick-action, .primary-action,
 .has-motion.is-hero-ready .editorial-hero-visual img {
   transform: scale(1);
 }
+
+/* ---------- 首屏视觉层的入场与微动（配套"主页面 hero 视觉层"） ---------- */
+
+/* 说明卡与两张小照片跟着 hero 文案一起落位：共用 .editorial-hero-copy.is-in 这个开关，
+   它们是文案的**兄弟节点**（不能放进文案里 —— 里面按 nth-child 分层，加子元素会错位）。 */
+.has-motion .hero-caption,
+.has-motion .hero-keepsakes {
+  opacity: 0;
+  transform: translateY(16px);
+}
+.has-motion .editorial-hero-copy.is-in ~ .hero-caption,
+.has-motion .editorial-hero-copy.is-in ~ .hero-keepsakes {
+  opacity: 1;
+  transform: none;
+  transition: opacity 700ms var(--ease-out-soft), transform 700ms var(--ease-out-soft);
+}
+.has-motion .editorial-hero-copy.is-in ~ .hero-caption { transition-delay: 520ms; }
+.has-motion .editorial-hero-copy.is-in ~ .hero-keepsakes { transition-delay: 660ms; }
+
+/* 背景层随滚动轻微视差。只有 transform、不加 transition（跟随滚动，不能有延迟），
+   位移由 JS 写进 --hero-drift；氛围层上下各留了 40px 余量，不会露边。 */
+.has-motion .hero-atmosphere {
+  transform: translate3d(0, var(--hero-drift, 0px), 0);
+  will-change: transform;
+}
+
+/* 小照片缓慢浮动：幅度很小，只是为了别让画面完全静止 */
+@keyframes hero-keepsake-float {
+  0%, 100% { transform: translateY(0) rotate(var(--tilt, 0deg)); }
+  50% { transform: translateY(-7px) rotate(var(--tilt, 0deg)); }
+}
+.has-motion .hero-keepsake-day { --tilt: -4.5deg; animation: hero-keepsake-float 7.5s ease-in-out 1.4s infinite; }
+.has-motion .hero-keepsake-grown { --tilt: 3.5deg; animation: hero-keepsake-float 8.6s ease-in-out 1.7s infinite; }
 
 /* ---------- 滚动揭示 ---------- */
 
@@ -1262,6 +1502,16 @@ button, a, label, select, .nav-item, .quick-action, .primary-action,
     opacity: 1 !important;
     transform: none !important;
   }
+  .has-motion .hero-caption,
+  .has-motion .hero-keepsakes {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .has-motion .hero-keepsake {
+    animation: none !important;
+    transform: rotate(var(--tilt, 0deg)) !important;
+  }
+  .has-motion .hero-atmosphere { transform: none !important; }
   .has-motion .editorial-hero-visual img { transform: none !important; }
   .section-rule { transform: scaleX(1) !important; }
   .nav-indicator { transition: none !important; }
