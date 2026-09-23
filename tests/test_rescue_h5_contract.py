@@ -10,6 +10,27 @@ from PIL import Image
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
+def last_rule(css, selector):
+    """取某选择器在样式表里**最后**一条规则的主题 —— 级联里后写的生效。
+    直接 re.search 拿第一条会读到被覆盖的旧规则（这个坑踩过不止一次）。"""
+    # 选择器必须是"整条选择器"：`.has-motion .hero-atmosphere` 里的那一段不算
+    # （否则会读到减少动效块里的 transform: none，而不是基础规则）
+    pattern = r"(?:^|[},])\s*" + re.escape(selector) + r"\s*\{(?P<body>[^}]*)\}"
+    matches = list(re.finditer(pattern, css, re.M))
+    assert matches, selector + " 缺少规则"
+    return matches[-1].group("body")
+
+
+def all_rules(css, selector):
+    """某选择器的**所有**规则主题拼起来。
+
+    用在"这条属性有没有被设过"上：后面的规则只会覆盖它自己声明的属性，
+    所以基础规则里写的 max-width / background 在没有被重复声明时依然生效。
+    （要判断"某个属性最终是什么"，才该用 last_rule。）"""
+    pattern = r"(?:^|[},])\s*" + re.escape(selector) + r"\s*\{(?P<body>[^}]*)\}"
+    return "\n".join(match.group("body") for match in re.finditer(pattern, css, re.M))
+
+
 def without_css_comments(css):
     r"""去掉 CSS 注释再做规则扫描。
 
@@ -45,7 +66,7 @@ class RescueH5ContractTests(unittest.TestCase):
         for path in ("assets/77/hero-desktop.webp", "assets/77/hero-mobile.webp"):
             self.assertIn(path, html)
         self.assertIn(
-            '<img src="assets/77/hero-desktop.webp?v=20260923-product-r15" alt="77，一只白底黑斑的猫咪" width="960" height="720"',
+            '<img src="assets/77/hero-desktop.webp?v=20260923-product-r16" alt="77，一只白底黑斑的猫咪" width="960" height="720"',
             html,
         )
 
@@ -79,9 +100,9 @@ class RescueH5ContractTests(unittest.TestCase):
         page = (ROOT / "app/rescue/index.html").read_text()
         for marker in (
             '<meta name="theme-color" content="#F7F5F1">',
-            'rel="icon" href="assets/brand/favicon.svg?v=20260923-product-r15"',
-            'rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png?v=20260923-product-r15"',
-            'rel="manifest" href="manifest.webmanifest?v=20260923-product-r15"',
+            'rel="icon" href="assets/brand/favicon.svg?v=20260923-product-r16"',
+            'rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png?v=20260923-product-r16"',
+            'rel="manifest" href="manifest.webmanifest?v=20260923-product-r16"',
             'class="brand-logo brand-logo-77"',
         ):
             self.assertIn(marker, page)
@@ -95,7 +116,7 @@ class RescueH5ContractTests(unittest.TestCase):
     def test_brand_uses_one_77_master_across_all_surfaces(self):
         page = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
         manifest = json.loads((ROOT / "app" / "rescue" / "manifest.webmanifest").read_text(encoding="utf-8"))
-        version = "20260923-product-r15"
+        version = "20260923-product-r16"
         master = "assets/brand/helpcat-77-mark.svg?v=" + version
 
         self.assertRegex(
@@ -174,7 +195,9 @@ class RescueH5ContractTests(unittest.TestCase):
         self.assertNotIn("object-fit: cover", image_rule.group("body"))
         self.assertIn("width: 100%", image_rule.group("body"))
         self.assertIn("height: 100%", image_rule.group("body"))
-        self.assertRegex(image_rule.group("body"), r"object-position:\s*right\s+bottom")
+        # 取景从 right bottom 改为 center bottom（满宽出血后右对齐会让猫贴死右边缘）；
+        # 契约真正要的是 contain —— 77 完整可见、不裁切，这条没变。
+        self.assertRegex(image_rule.group("body"), r"object-position:\s*center\s+bottom")
 
     def test_desktop_hero_is_square_composed_with_headroom(self):
         """桌面 hero 素材必须是近方形构图：猫头占画面 45%~75%、头顶留白、
@@ -214,65 +237,57 @@ class RescueH5ContractTests(unittest.TestCase):
         jumps = [sum(abs(a - b) for a, b in zip(desktop.getpixel((seam_x - 1, y)), desktop.getpixel((seam_x, y)))) for y in range(desktop.height)]
         self.assertLess(sum(jumps) / len(jumps), 8, "desktop hero must not encode a hard center seam")
 
-    def test_hero_layers_are_siblings_of_the_copy_column(self):
-        """说明卡与小照片必须是文案的**兄弟节点**：塞进 .editorial-hero-copy 会打乱
-        nth-child 的分层入场（首屏五层的延迟按下标写死）。"""
-        html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
-        hero = re.search(r'<section class="reference-hero editorial-hero".*?</section>', html, re.S).group(0)
-        order = ("hero-atmosphere", "editorial-hero-copy", "editorial-hero-visual",
-                 "hero-photo-wash", "hero-caption", "hero-keepsakes")
-        positions = [hero.index(marker) for marker in order]
-        self.assertEqual(positions, sorted(positions), "hero 内各层的顺序不应改变")
-        copy_block = hero[positions[1]:positions[2]]
-        self.assertNotIn("hero-caption", copy_block)
-        self.assertNotIn("hero-keepsake", copy_block)
-        # 三个纯装饰层对读屏器隐身；说明卡是真实内容，不能跟着一起隐藏
-        self.assertEqual(
-            3, len(re.findall(r'class="hero-(?:atmosphere|photo-wash|keepsakes)" aria-hidden="true"', hero))
-        )
-        self.assertNotIn('class="hero-caption" aria-hidden', hero)
+    def test_hero_is_a_clean_product_page_stage(self):
+        """首屏走苹果产品页那套：近白底 + 巨大无衬线标题 + 一个强调色。
+        背景里除了渐变和一层几乎看不见的暖光，不允许再有点阵/同心弧/彩色柔光。"""
+        styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
+        atmosphere = all_rules(styles, ".hero-atmosphere")
+        self.assertIn("linear-gradient(180deg, #FFFFFF", atmosphere)
+        self.assertNotIn("repeating-radial-gradient", styles, "同心弧已经删掉了")
+        self.assertNotIn("background-image: radial-gradient(rgba(23, 23, 23", styles, "点阵已经删掉了")
+        # 标题换成系统无衬线（苹果页面是 SF / PingFang），并且不能被旧宽度上限折成碎片
+        h1 = all_rules(styles, ".reference-hero h1")
+        self.assertIn('"PingFang SC"', styles)
+        self.assertIn("max-width: none", h1)
+        self.assertIn("letter-spacing: -.04em", h1)
+        self.assertNotIn("Georgia", h1, "首屏标题不该再用衬线体")
 
-    def test_hero_caption_does_not_invent_77_facts(self):
-        """首屏说明卡上的"初见时间/名字由来"必须与 77 故事里的既有事实一致。"""
+    def test_desktop_stage_fills_while_phone_keeps_77_whole(self):
+        """桌面舞台用 cover 铺满整列；手机必须仍是 contain（77 完整可见）。
+        这两条写反的话，要么桌面留出大片空档，要么手机上把 77 裁掉。"""
+        styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
+        self.assertRegex(
+            styles,
+            r"@media \(min-width: 721px\) \{[^}]*\.reference-hero \.editorial-hero-visual img \{[^}]*object-fit: cover",
+        )
+        mobile = re.search(r"@media \(max-width: 720px\) \{(?P<body>.*?)\n\}", styles, re.S).group("body")
+        self.assertNotIn("object-fit: cover", mobile, "手机端不能把 77 裁掉")
+
+    def test_hero_footnote_carries_the_77_facts(self):
+        """首屏那行脚注是 77 故事的既有事实（初见时间 / 名字由来），不允许另编一套。
+        它必须是文案块的直接子元素，才能跟着 nth-child 的分层入场一起落位。"""
         html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
         story = (ROOT / "app" / "rescue" / "story-77.js").read_text(encoding="utf-8")
         for fact in ("2025 年 6 月 2 日", "农历五月初七"):
             self.assertIn(fact, html)
             self.assertIn(fact, story, fact + " 必须能在 77 故事里找到出处")
-        self.assertIn("初见 77", html)
+        copy_start = html.index('class="product-hero-copy editorial-hero-copy"')
+        copy_end = html.index('<picture class="editorial-hero-visual">')
+        self.assertIn("hero-footnote", html[copy_start:copy_end], "脚注要在文案块内（跟着分层入场）")
+        self.assertGreater(html.index("hero-footnote"), html.index("editorial-hero-actions"))
+        # 首屏只保留两个装饰层，且都对读屏器隐身
+        self.assertEqual(2, len(re.findall(r'class="hero-(?:atmosphere|photo-wash)" aria-hidden="true"', html)))
 
-    def test_hero_keepsake_photos_keep_their_aspect_ratio(self):
-        """img 标签上有 height="460" 属性：CSS 里漏掉 height: auto，浏览器就把属性值
-        当高度用，小照片会被拉成 460px 高（实际踩到过，量了才发现）。"""
+    def test_dark_data_band_keeps_its_numbers_readable(self):
+        """深色数据带：白字压在黑底上。数据条自己带着 #fff 底和描边，
+        只把卡片做成半透明的话白底会透出来 —— 白字压白条，数字直接看不见。"""
         styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
-        rule = re.search(r"\.hero-keepsake img \{(?P<body>[^}]*)\}", styles)
-        self.assertIsNotNone(rule)
-        body = rule.group("body")
-        for expected in ("width: 100%", "height: auto", "aspect-ratio", "object-fit: cover"):
-            self.assertIn(expected, body)
-
-    def test_phone_hero_card_and_wash_share_one_geometry(self):
-        """照片卡与它上面的暖色层由同一对变量驱动（各写一份必然错位），
-        且说明卡在手机上必须走网格行 —— 绝对定位贴着首屏底部会被固定的悬浮按钮压住。"""
-        styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
-        self.assertIn("--hero-photo-h:", styles)
-        self.assertNotIn("--hero-photo-pad", styles, "间距不能再算一遍：绝对定位的 bottom 已含内边距")
-        # 同一条选择器在文件里有多处（前面几层也写过），所以逐条看，只要有一条用变量即可
-        def bodies(pattern):
-            return [match.group("body") for match in re.finditer(pattern, styles)]
-
-        card = [b for b in bodies(r"\.reference-hero \.editorial-hero-visual \{(?P<body>[^}]*)\}") if "--hero-photo-h" in b]
-        wash = [b for b in bodies(r"\.hero-photo-wash \{(?P<body>[^}]*)\}") if "--hero-photo-h" in b]
-        self.assertTrue(card, "手机端照片卡的高度必须由 --hero-photo-h 驱动")
-        self.assertTrue(wash, "暖色层必须跟着同一对变量走")
-        # 高度两边用同一个变量；暖色层贴住 hero 底部 —— 照片卡是最后一行、底边与 hero 齐平
-        for body in card:
-            self.assertIn("var(--hero-photo-h)", body)
-        for body in wash:
-            self.assertIn("var(--hero-photo-h)", body)
-            self.assertIn("bottom: 0", body)
-        # 手机上说明卡走网格行，不贴着首屏底部（那里会被固定的「猫咪建档」按钮压住）
-        self.assertRegex(styles, r"\.hero-caption \{[^}]*position: static[^}]*grid-row: 2")
+        band = all_rules(styles, ".impact-band")
+        self.assertIn("background: #0B0B0C", band)
+        strip = all_rules(styles, ".impact-band .impact-strip")
+        self.assertIn("background: transparent", strip, "深色带里的数据条必须显式清掉自带白底")
+        strong = all_rules(styles, ".impact-band .metric-card strong")
+        self.assertIn("color: #FFFFFF", strong)
 
     def test_rescue_home_has_editorial_hero_and_story_entry(self):
         html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
@@ -528,7 +543,7 @@ class RescueH5ContractTests(unittest.TestCase):
         version_script = (ROOT / "app" / "rescue" / "version.js").read_text(encoding="utf-8")
         styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
         for marker in (
-            'data-app-version="20260923-product-r15"',
+            'data-app-version="20260923-product-r16"',
             'id="version-update"',
             'id="reload-version"',
         ):
@@ -539,7 +554,7 @@ class RescueH5ContractTests(unittest.TestCase):
             'fetchPage(path, { cache: "no-store" })',
             "if (!response.ok)",
             "if (match && match[1] !== current)",
-            'CURRENT_VERSION = "20260923-product-r15"',
+            'CURRENT_VERSION = "20260923-product-r16"',
             "current: CURRENT_VERSION",
         ):
             self.assertIn(marker, version_script)
@@ -557,7 +572,7 @@ class RescueH5ContractTests(unittest.TestCase):
 
     def test_rescue_assets_are_versioned_in_dependency_order(self):
         html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
-        version = "20260923-product-r15"
+        version = "20260923-product-r16"
         for asset in ("styles.css", "api.js", "community-form.js", "version.js", "story-77.js", "app.js"):
             self.assertIn(f'{asset}?v={version}', html)
         api_index = html.index(f'api.js?v={version}')
@@ -595,7 +610,7 @@ class RescueH5ContractTests(unittest.TestCase):
         self.assertIn('<button class="story-back" type="button"', story)
         self.assertIn('<button class="button primary" type="button" data-story-action="cats">', story)
         self.assertIn('<button class="button secondary" type="button" data-story-action="create-cat">', story)
-        self.assertIn('story-77.js?v=20260923-product-r15', html)
+        self.assertIn('story-77.js?v=20260923-product-r16', html)
 
     def test_primary_and_update_actions_meet_77_accessibility_contract(self):
         styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")

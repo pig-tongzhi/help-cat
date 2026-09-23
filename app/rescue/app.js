@@ -227,11 +227,19 @@
   // 找出"该看见却还是透明"的元素。卡片组的容器本身从不透明（透明的是它的子元素），
   // 所以必须连子元素一起看，否则兜底对卡片组完全不生效 —— 这是曾经的线上隐患：
   // 按钮/卡片一直 opacity:0，而容器 opacity:1，怎么查都查不出问题。
+  // 首屏入场是"模糊 → 清晰"：模糊没散掉同样等于没落位（而且比透明更难读）
+  function isBlurred(node) {
+    var filter = window.getComputedStyle(node).filter;
+    if (!filter || filter === "none") return false;
+    var match = /blur\(([\d.]+)px\)/.exec(filter);
+    return !!match && Number(match[1]) > 0.5;
+  }
+
   function fadedNodes() {
-    var selectors = ".editorial-hero-copy > *, .hero-caption, .hero-keepsakes, [data-reveal], [data-reveal-group] > *";
+    var selectors = ".editorial-hero-copy > *, .hero-footnote, [data-reveal], [data-reveal-group] > *";
     var faded = [];
     Array.prototype.forEach.call(document.querySelectorAll(selectors), function (node) {
-      if (Number(window.getComputedStyle(node).opacity) > 0.85) return;
+      if (Number(window.getComputedStyle(node).opacity) > 0.85 && !isBlurred(node)) return;
       var anchor = node.parentElement && node.parentElement.hasAttribute("data-reveal-group")
         ? node.parentElement : node;
       if (isInViewport(anchor)) faded.push([node, anchor]);
