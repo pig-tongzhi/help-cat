@@ -258,6 +258,20 @@ class ProductH5ContractTests(unittest.TestCase):
         self.assertIn("setSheetBackgroundInert(true)", open_sheet)
         self.assertIn("setSheetBackgroundInert(false)", close_sheet)
 
+    def test_every_bottom_nav_item_has_a_drawn_icon(self):
+        import re
+
+        html, styles = self.h5(), self.styles()
+        # HTML 用的图标类名必须和 CSS 规则对得上，否则那格是一个空 span（看不到图标）。
+        # 实际踩过：CSS 写的是 .home-icon/.task-nav-icon，HTML 用 .home-nav-icon/.heart-nav-icon，
+        # 另外两个（.feed-nav-icon/.user-nav-icon）根本没画 —— 5 个里 3 个是空的。
+        start = html.index('class="bottom-nav"')
+        nav = html[start:html.index("</nav>", start)]
+        used = re.findall(r'class="nav-icon ([a-z-]+)"', nav)
+        self.assertEqual(len(used), 5, "底部导航应有 5 个图标")
+        for name in used:
+            self.assertIn("." + name, styles, "底部导航图标 .%s 在 CSS 里没有规则，会渲染成空 span" % name)
+
     def test_no_leftover_browser_probe_files(self):
         leftovers = sorted(p.name for p in (ROOT / "app" / "rescue").iterdir() if p.name.startswith("__"))
         self.assertEqual(leftovers, [], "请删除临时探针文件：%s" % leftovers)
