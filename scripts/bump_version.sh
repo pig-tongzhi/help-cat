@@ -151,7 +151,7 @@ fi
 
 NEW_WELCOME="$(next_version "$CURRENT_WELCOME")"
 
-printf '%s\n' "静态资源版本升级${DRY_RUN:+（dry-run，不写文件）}"
+if [ "$DRY_RUN" -eq 1 ]; then printf '%s\n' "静态资源版本升级（dry-run，不写文件）"; else printf '%s\n' "静态资源版本升级"; fi
 bump_stream primary "$CURRENT_PRIMARY" "$NEW_PRIMARY" "${PRIMARY_FILES[@]}"
 bump_stream welcome "$CURRENT_WELCOME" "$NEW_WELCOME" "${WELCOME_FILES[@]}"
 

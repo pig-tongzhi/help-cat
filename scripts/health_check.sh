@@ -85,6 +85,36 @@ check_status_200() {
   if [ "$code" = "200" ]; then pass "$label"; else fail "$label: HTTP $code ($url)"; fi
 }
 
+# 关键静态素材：发布漏打包一张图时，页面不会报错，只是"照片不显示" —— 线上真踩过
+# （换 77 故事第 6 章的照片时漏了一张未跟踪的 webp）。所以逐个探一遍，并要求
+# Content-Type 确实是图片/样式/脚本，而不是被 SPA 回退成的 index.html。
+check_asset() {
+  local url="$1" label="$2" expected="$3" headers code type
+  headers="$(curl -sS --max-time "$TIMEOUT" -o /dev/null -D - -w '\n%{http_code}' "$url" 2>/dev/null)"
+  code="$(printf '%s' "$headers" | tail -1)"
+  type="$(printf '%s' "$headers" | tr -d '\r' | awk 'tolower($1) == "content-type:" {print $2}' | tail -1)"
+  if [ "$code" != "200" ]; then
+    fail "$label: HTTP $code ($url)"
+    return
+  fi
+  case "$type" in
+    $expected) pass "$label" ;;
+    *) fail "$label: Content-Type 是 ${type}，期望 ${expected}（是不是回退成了 HTML？）" ;;
+  esac
+}
+
+check_static_assets() {
+  local base="$1" prefix="$2"
+  check_asset "$base$prefix/assets/77/hero-desktop.webp" "$prefix 首页主图(桌面)" "image/*"
+  check_asset "$base$prefix/assets/77/hero-mobile.webp" "$prefix 首页主图(手机)" "image/*"
+  check_asset "$base$prefix/assets/77/rescue-day.webp" "$prefix 77故事·初见" "image/*"
+  check_asset "$base$prefix/assets/77/grown-up.webp" "$prefix 77故事·长大" "image/*"
+  check_asset "$base$prefix/assets/77/portrait.webp" "$prefix 77故事·正脸" "image/*"
+  check_asset "$base$prefix/assets/brand/favicon.svg" "$prefix 站点图标" "image/*"
+  check_asset "$base$prefix/styles.css" "$prefix 样式表" "text/css*"
+  check_asset "$base$prefix/story-77.js" "$prefix 77故事脚本" "*javascript*"
+}
+
 say "帮帮小猫探活 $(date '+%F %T')  base=$BASE_URL"
 
 check_json_ok "$BASE_URL$API_PREFIX/api/v1/health" '"status": *"ok"' "后端 liveness"
@@ -93,6 +123,8 @@ check_json_ok "$BASE_URL$API_PREFIX/api/v1/health/ready" '"database": *"ok"' "�
 check_status_200 "$BASE_URL/help-cat/rescue/index.html" "IP 入口 H5"
 check_status_200 "$BASE_URL/help-cat/admin/" "IP 入口后台"
 check_status_200 "$BASE_URL/help-cat/welcome/" "IP 入口欢迎页"
+# 两个入口都提供 /help-cat/rescue/... 这份 alias，所以同一组路径两边都能探。
+check_static_assets "$BASE_URL" "/help-cat/rescue"
 
 # 域名入口：ICP 备案没下来之前解析会被拦，所以默认只告警不计数都难，这里只在
 # 显式换 base 时才检查，避免每天固定误报。
@@ -100,6 +132,7 @@ if [ "$BASE_URL" != "http://175.178.41.19" ]; then
   check_status_200 "$BASE_URL/" "域名入口欢迎页（站点根）"
   check_status_200 "$BASE_URL/rescue/index.html" "域名入口 H5"
   check_status_200 "$BASE_URL/admin/" "域名入口后台"
+  check_static_assets "$BASE_URL" "/rescue"
 fi
 
 # ---- 本机检查（只在服务器上有意义） --------------------------------------

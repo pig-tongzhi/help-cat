@@ -95,14 +95,24 @@ class BumpVersionScriptTests(unittest.TestCase):
                 text = (copy / relative).read_text(encoding="utf-8")
                 self.assertNotIn(old, text, "%s 还留着旧版本号" % relative)
                 self.assertIn(new, text, "%s 没被升到新版本号" % relative)
-            # 欢迎页是另一条版本线，跟着自己的计数器 +1。
-            self.assertIn("-r5", (copy / "app/welcome/index.html").read_text(encoding="utf-8"))
+            # 欢迎页是另一条版本线，跟着自己的计数器 +1（不写死数字：它自己也会往前走）。
+            welcome_after = (copy / "app/welcome/index.html").read_text(encoding="utf-8")
+            self.assertIn(self.next_of(self.current_welcome()), welcome_after)
+            self.assertNotIn(self.current_welcome(), welcome_after)
 
     # ---- 辅助 -----------------------------------------------------------
 
     def current_primary(self):
         text = (REPO_ROOT / "app" / "rescue" / "version.js").read_text(encoding="utf-8")
         return re.search(r'CURRENT_VERSION = "([^"]+)"', text).group(1)
+
+    def current_welcome(self):
+        text = (REPO_ROOT / "app" / "welcome" / "index.html").read_text(encoding="utf-8")
+        return re.search(r'data-app-version="([^"]+)"', text).group(1)
+
+    @staticmethod
+    def next_of(version):
+        return re.sub(r"-r(\d+)$", lambda match: "-r%d" % (int(match.group(1)) + 1), version)
 
     def versioned_files(self):
         return [

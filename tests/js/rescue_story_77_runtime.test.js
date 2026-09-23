@@ -75,6 +75,20 @@ test("77 story images retain a complete-view and retry contract", () => {
   assert.doesNotMatch(html, /object-fit:cover/);
 });
 
+test("77 story image urls carry the asset version so a swapped photo is not served from cache", () => {
+  const source = fs.readFileSync(path.join(__dirname, "../../app/rescue/story-77.js"), "utf8");
+  const sandbox = { window: { HelpCatVersion: { current: "20990101-test-r1" } } };
+  vm.runInNewContext(source, sandbox, { filename: "story-77.js" });
+  const html = sandbox.window.HelpCatStory77.renderToString();
+
+  assert.match(html, /src="assets\/77\/rescue-day\.webp\?v=20990101-test-r1"/);
+  assert.match(html, /src="assets\/77\/portrait\.webp\?v=20990101-test-r1"/);
+  // 没有 version.js 时退化成不带版本号的路径，而不是报错
+  const bare = { window: {} };
+  vm.runInNewContext(source, bare, { filename: "story-77.js" });
+  assert.match(bare.window.HelpCatStory77.renderToString(), /src="assets\/77\/rescue-day\.webp"/);
+});
+
 test("77 story render connects its injected actions without inline handlers", () => {
   const story = loadStory();
   const listeners = {};

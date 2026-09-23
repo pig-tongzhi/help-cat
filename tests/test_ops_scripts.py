@@ -35,20 +35,40 @@ HEALTH_PATHS = (
 
 
 class FakeSite(http.server.BaseHTTPRequestHandler):
-    """最小替身：默认全部 200，readiness 的返回码可以按用例改。"""
+    """最小替身：默认全部 200，readiness 的返回码可以按用例改。
+
+    静态素材要按扩展名给对 Content-Type —— 探活脚本会检查这一点，因为线上出过
+    「素材缺失被 SPA 回退成 index.html(200)」这种静默失败。
+    """
 
     ready_status = 200
     ready_body = b'{"status":"ok","service":"help-cat-api","database":"ok"}'
+    missing_asset_status = 200
+    asset_content_type = None
+
+    CONTENT_TYPES = {
+        ".webp": "image/webp", ".png": "image/png", ".svg": "image/svg+xml",
+        ".css": "text/css", ".js": "application/javascript",
+    }
 
     def do_GET(self):  # noqa: N802 - BaseHTTPRequestHandler 的接口
-        if self.path == "/help-cat-api/api/v1/health/ready":
-            body, status = self.ready_body, self.ready_status
-        elif self.path.startswith("/help-cat-api/api/v1/health"):
-            body, status = b'{"status":"ok","service":"help-cat-api","version":"1.0.0"}', 200
+        path = self.path.split("?")[0]
+        if path == "/help-cat-api/api/v1/health/ready":
+            body, status, content_type = self.ready_body, self.ready_status, "application/json"
+        elif path.startswith("/help-cat-api/api/v1/health"):
+            body, status, content_type = b'{"status":"ok","service":"help-cat-api","version":"1.0.0"}', 200, "application/json"
+        elif "/assets/" in path or path.endswith((".css", ".js")):
+            extension = "." + path.rsplit(".", 1)[-1]
+            if "/assets/" in path and path.endswith(".webp") and self.missing_asset_status != 200:
+                body, status = b"not found", self.missing_asset_status
+                content_type = "text/html"
+            else:
+                body, status = b"binary", 200
+                content_type = self.asset_content_type or self.CONTENT_TYPES.get(extension, "application/octet-stream")
         else:
-            body, status = b"<!doctype html><title>ok</title>", 200
+            body, status, content_type = b"<!doctype html><title>ok</title>", 200, "text/html"
         self.send_response(status)
-        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -225,6 +245,21 @@ class OpsScriptTests(unittest.TestCase):
         self.assertTrue(server.isdigit())
         result = self.run_health("http://127.0.0.1:1")  # 关着的端口
         self.assertEqual(result.returncode, 1)
+
+    def test_health_check_fails_when_a_static_asset_is_missing(self):
+        """素材 404（或被回退成 HTML）必须让探活失败，而不是静默通过。"""
+        base = self.serve(missing_asset_status=404)
+        result = self.run_health(base)
+        self.assertEqual(result.returncode, 1)
+        log = (self.root / "health.log").read_text(encoding="utf-8")
+        self.assertIn("77故事", log)
+
+    def test_health_check_fails_when_an_asset_falls_back_to_html(self):
+        """IP 入口曾经对缺失素材回 index.html(200)，这种静默失败要被抓住。"""
+        base = self.serve(asset_content_type="text/html")
+        result = self.run_health(base)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("回退成了 HTML", (self.root / "health.log").read_text(encoding="utf-8"))
 
     def test_health_check_rejects_unknown_arguments(self):
         result = subprocess.run(

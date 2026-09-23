@@ -9,19 +9,30 @@
 
   var PROFILE_KEY = "story-77";
 
+  // 站内图片是长缓存（7 天）。故事里的照片以前没有版本号，换图之后老用户还会看到旧图，
+  // 所以这里统一从 version.js 读当前版本拼成 `?v=`，和 index.html 里的资源同一套规则。
+  function versioned(path) {
+    var version = (window.HelpCatVersion && window.HelpCatVersion.current) || "";
+    return version ? path + "?v=" + version : path;
+  }
+
+  function withRetry(source) {
+    return source + (source.indexOf("?") === -1 ? "?" : "&") + "retry=" + Date.now();
+  }
+
   var chapters = Object.freeze([
     Object.freeze({ title: "初见 77", marker: "2025 年 6 月 2 日", copy: "2025 年 6 月 2 日，我们第一次遇见了 77。一次相遇，让它被认真记住。", image: "assets/77/rescue-day.webp", alt: "77 幼猫期的近照", width: 620, height: 460 }),
     Object.freeze({ title: "名字的由来", marker: "农历五月初七", copy: "那天是农历五月初七。77 的名字，来自这一份最初的记录。" }),
     Object.freeze({ title: "从脆弱到安心", marker: "幼猫期", copy: "从幼猫期的照料和适应开始，77 的故事被一点点记录下来。公开叙事不对未确认的医疗或健康信息作推断。" }),
     Object.freeze({ title: "77 长大了", marker: "成长记录", copy: "从幼年到长大，日常的相处让这段陪伴有了连续的记录。", image: "assets/77/grown-up.webp", alt: "长大后的 77 正面近照", width: 720, height: 650 }),
     Object.freeze({ title: "为什么有帮帮小猫", marker: "一起接力", copy: "一次个人相遇，也让我们看到：让信息可查、行动可接力，才能让社区救助走得更远。" }),
-    Object.freeze({ title: "从 77 到每一只小猫", marker: "新的开始", copy: "77 的故事是一个开始。帮帮小猫希望让更多被遇见的猫咪，有机会被认真记录、被持续关注。", image: "assets/77/resting.webp", alt: "77 安静休息的近照", width: 670, height: 750 })
+    Object.freeze({ title: "从 77 到每一只小猫", marker: "新的开始", copy: "77 的故事是一个开始。帮帮小猫希望让更多被遇见的猫咪，有机会被认真记录、被持续关注。", image: "assets/77/portrait.webp", alt: "77 正面坐着的近照", width: 670, height: 750 })
   ]);
 
   function renderChapter(chapter, index) {
     var visual = chapter.image
       ? '<figure class="story-visual story-visual-' + (index + 1) + ' has-image">' +
-        '<img data-story-image data-story-source="' + escapeHtml(chapter.image) + '" src="' + escapeHtml(chapter.image) + '" alt="' + escapeHtml(chapter.alt) + '" width="' + chapter.width + '" height="' + chapter.height + '"' + (index === 0 ? '' : ' loading="lazy"') + '>' +
+        '<img data-story-image data-story-source="' + escapeHtml(versioned(chapter.image)) + '" src="' + escapeHtml(versioned(chapter.image)) + '" alt="' + escapeHtml(chapter.alt) + '" width="' + chapter.width + '" height="' + chapter.height + '"' + (index === 0 ? '' : ' loading="lazy"') + '>' +
         '<span>' + escapeHtml(chapter.marker) + '</span><button class="story-image-retry" type="button" data-story-retry hidden>重新加载照片</button></figure>'
       : '<figure class="story-visual story-visual-' + (index + 1) + '" aria-hidden="true"><span>' + escapeHtml(chapter.marker) + '</span></figure>';
     return '<article class="story-chapter">' +
@@ -61,16 +72,28 @@
       if (!image || !image.dataset || !image.dataset.storySource) return;
       var visual = typeof image.closest === "function" ? image.closest(".story-visual") : null;
       if (!visual) return;
+      var attempts = 0;
       image.addEventListener("error", function () {
+        if (attempts === 0) {
+          // 移动网络下一次抖动不该让这张照片永久消失：先自动重试一次。
+          attempts = 1;
+          image.src = withRetry(image.dataset.storySource);
+          return;
+        }
         visual.classList.add("image-failed");
         var retry = visual.querySelector("[data-story-retry]");
         if (retry) retry.hidden = false;
+      });
+      image.addEventListener("load", function () {
+        visual.classList.remove("image-failed");
+        var retry = visual.querySelector("[data-story-retry]");
+        if (retry) retry.hidden = true;
       });
       var retry = visual.querySelector("[data-story-retry]");
       if (retry) retry.addEventListener("click", function () {
         visual.classList.remove("image-failed");
         retry.hidden = true;
-        image.src = image.dataset.storySource + "?retry=" + Date.now();
+        image.src = withRetry(image.dataset.storySource);
       });
     });
     var profileLink = typeof container.querySelector === "function" ? container.querySelector("[data-story-profile-link]") : null;
