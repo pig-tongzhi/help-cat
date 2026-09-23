@@ -10,6 +10,7 @@
 
 import http.server
 import os
+import re
 import sqlite3
 import subprocess
 import sys
@@ -22,6 +23,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 HEALTH_SCRIPT = REPO_ROOT / "scripts" / "health_check.sh"
 BACKUP_SCRIPT = REPO_ROOT / "scripts" / "backup_offsite.sh"
+PULL_SCRIPT = REPO_ROOT / "scripts" / "pull_backup.sh"
 
 HEALTH_PATHS = (
     "/help-cat-api/api/v1/health",
@@ -53,6 +55,120 @@ class FakeSite(http.server.BaseHTTPRequestHandler):
 
     def log_message(self, *args):
         pass
+
+
+class ShellPortabilityTests(unittest.TestCase):
+    """`$VAR` 后面紧跟中文时，macOS 自带的 bash 3.2 会把中文字节吃进变量名。
+
+    这个坑踩过两次（`health_check.sh` 的失败摘要、`pull_backup.sh` 的收尾输出），
+    两次都是「脚本跑到最后一步才炸」。所以直接扫源码：变量引用必须写成 `${VAR}`。
+    """
+
+    def test_no_bare_variable_is_followed_by_a_multibyte_character(self):
+        findings = []
+        for path in sorted((REPO_ROOT / "scripts").glob("*.sh")):
+            for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+                for match in re.finditer(r"\$[A-Za-z_][A-Za-z0-9_]*", line):
+                    following = line[match.end():match.end() + 1]
+                    if following and ord(following) > 127:
+                        findings.append("%s:%d %s" % (path.name, number, line.strip()))
+        self.assertEqual([], findings, "把这些变量改成 ${VAR} 写法：\n" + "\n".join(findings))
+
+
+class PullBackupToolTests(unittest.TestCase):
+    """开发机侧的拉取脚本。用假的 ssh/rsync 跑，不碰真服务器。"""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.bindir = self.root / "bin"
+        self.bindir.mkdir()
+        self._write_stub("ssh", """#!/usr/bin/env bash
+for last in "$@"; do :; done
+case "$last" in
+  *"for d in"*) echo "20260101-000000" ;;
+  *"--verify"*) echo "✓ 数据库可以打开，integrity_check=ok" ;;
+  *"du -sh"*) echo "11M" ;;
+  *) echo "" ;;
+esac
+""")
+        self._write_stub("rsync", """#!/usr/bin/env bash
+for last in "$@"; do :; done
+mkdir -p "$last"
+printf 'snapshot' > "$last/help-cat.db"
+printf 'meta' > "$last/META.txt"
+( cd "$last" && shasum -a 256 help-cat.db META.txt > SHA256SUMS )
+""")
+        self.dest = self.root / "local-backups"
+
+    def _write_stub(self, name, body):
+        path = self.bindir / name
+        path.write_text(body, encoding="utf-8")
+        path.chmod(0o755)
+
+    def run_pull(self, *args):
+        environment = dict(os.environ, PATH=str(self.bindir) + os.pathsep + os.environ["PATH"])
+        return subprocess.run(
+            ["bash", str(PULL_SCRIPT), "--dest", str(self.dest), *args],
+            cwd=REPO_ROOT, env=environment, capture_output=True, text=True,
+        )
+
+    def test_help_and_unknown_arguments(self):
+        help_result = subprocess.run(["bash", str(PULL_SCRIPT), "--help"], capture_output=True, text=True)
+        self.assertEqual(0, help_result.returncode)
+        self.assertIn("--dest", help_result.stdout)
+        self.assertEqual(2, subprocess.run(["bash", str(PULL_SCRIPT), "--nope"], capture_output=True, text=True).returncode)
+
+    def test_it_verifies_on_the_server_then_copies_and_checksums_locally(self):
+        result = self.run_pull()
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        copy = self.dest / "20260101-000000"
+        self.assertTrue((copy / "help-cat.db").exists())
+        self.assertIn("先在服务器上自检", result.stdout)
+        self.assertIn("已拉取 20260101-000000", result.stdout)
+
+    def test_a_failed_local_checksum_stops_the_script(self):
+        # 传输被改坏：本地校验必须失败，而不是留下一份「看着完整」的副本。
+        self._write_stub("rsync", """#!/usr/bin/env bash
+for last in "$@"; do :; done
+mkdir -p "$last"
+printf 'tampered' > "$last/help-cat.db"
+printf 'meta' > "$last/META.txt"
+( cd "$last" && shasum -a 256 help-cat.db META.txt > SHA256SUMS )
+printf 'corrupt' > "$last/help-cat.db"
+""")
+        result = self.run_pull()
+        self.assertNotEqual(0, result.returncode)
+
+    def test_keep_prunes_older_local_copies(self):
+        for stamp in ("20250101-000000", "20250102-000000"):
+            (self.dest / stamp).mkdir(parents=True)
+        result = self.run_pull("--keep", "2")
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        remaining = sorted(path.name for path in self.dest.iterdir())
+        self.assertEqual(["20250102-000000", "20260101-000000"], remaining)
+
+
+class UptimeWorkflowTests(unittest.TestCase):
+    """外部探针必须真的在 GitHub 侧跑，且不需要任何密钥。"""
+
+    def workflow(self):
+        return (REPO_ROOT / ".github" / "workflows" / "uptime.yml").read_text(encoding="utf-8")
+
+    def test_scheduled_and_manual_and_probes_readiness(self):
+        source = self.workflow()
+        self.assertIn("schedule:", source)
+        self.assertIn("cron:", source)
+        self.assertIn("workflow_dispatch:", source)
+        self.assertIn("/api/v1/health/ready", source)
+        self.assertIn("database", source)
+        for path in ("/help-cat/rescue/index.html", "/help-cat/admin/", "/help-cat/welcome/"):
+            self.assertIn(path, source)
+
+    def test_it_needs_no_secrets(self):
+        source = self.workflow()
+        self.assertNotIn("secrets.", source, "外部探针不该依赖任何密钥")
+        self.assertIn("permissions: {}", source)
 
 
 class OpsScriptTests(unittest.TestCase):

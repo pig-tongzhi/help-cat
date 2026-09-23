@@ -1,0 +1,55 @@
+name: uptime
+
+# 「机器挂了没人知道」这个问题的外部探针。
+#
+# 为什么不用服务器上的 timer：机器整体宕机 / 断网 / 磁盘满到起不来时，本机定时任务
+# 只会跟着机器一起静默。这个 workflow 跑在 GitHub 的 runner 上，是真正的第三个位置，
+# 失败时 GitHub 会给仓库所有者发邮件 —— 不需要任何额外的监控账号。
+#
+# 注意：GitHub 的 schedule 有两点脾气，知道就行：
+#   * 高峰期会延迟几分钟到十几分钟，所以判定标准是「连续失败」而不是「准时」；
+#   * 仓库连续 60 天没有提交活动时，GitHub 会自动停掉 schedule 并提前发邮件提醒。
+#     真停了的话在 Actions 页面点一次 Enable 就能恢复。
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: 后端 readiness（含真实数据库查询）
+        run: |
+          set -euo pipefail
+          url="http://175.178.41.19/help-cat-api/api/v1/health/ready"
+          body="$(curl -fsS --max-time 15 --retry 2 --retry-delay 5 "$url")" || {
+            echo "::error::$url 请求失败"; exit 1; }
+          echo "$body"
+          echo "$body" | grep -q '"database":"ok"' || {
+            echo "::error::readiness 没有报告 database=ok"; exit 1; }
+
+      - name: 两套静态入口
+        run: |
+          set -euo pipefail
+          for path in /help-cat/rescue/index.html /help-cat/admin/ /help-cat/welcome/; do
+            code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "http://175.178.41.19$path")"
+            echo "$code $path"
+            [ "$code" = "200" ] || { echo "::error::$path 返回 $code"; exit 1; }
+          done
+
+      - name: 静态版本号与仓库一致
+        run: |
+          set -euo pipefail
+          served="$(curl -fsS --max-time 15 http://175.178.41.19/help-cat/rescue/version.js \
+            | sed -n 's/.*CURRENT_VERSION *= *"\([^"]*\)".*/\1/p' | head -1)"
+          expected="$(sed -n 's/.*CURRENT_VERSION *= *"\([^"]*\)".*/\1/p' app/rescue/version.js | head -1)"
+          echo "线上=$served 仓库=$expected"
+          # 只报告不失败：升版本号的窗口期里，main 可能比线上新一次提交。
+          if [ "$served" != "$expected" ]; then
+            echo "::warning::线上静态资源版本($served)与仓库($expected)不同，确认是不是忘了发布"
+          fi
