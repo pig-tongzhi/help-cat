@@ -276,6 +276,16 @@ class ProductH5ContractTests(unittest.TestCase):
         leftovers = sorted(p.name for p in (ROOT / "app" / "rescue").iterdir() if p.name.startswith("__"))
         self.assertEqual(leftovers, [], "请删除临时探针文件：%s" % leftovers)
 
+    def test_home_has_a_small_entry_to_the_welcome_page(self):
+        """首页首屏要有一个固定位置的小入口回欢迎页（用户反馈"每次找不到"）。"""
+        html = self.h5()
+        self.assertIn('href="../welcome/index.html"', html)
+        self.assertIn('class="editorial-story-link welcome-entry"', html)
+        # 相对路径要在两个入口都对：/help-cat/rescue/ -> /help-cat/welcome/，/rescue/ -> /welcome/
+        self.assertIn('id="enter-help-cat"', (ROOT / "app" / "welcome" / "index.html").read_text(encoding="utf-8"))
+        styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
+        self.assertIn(".welcome-entry", styles)
+
 
 class AdminProductPanelContractTests(unittest.TestCase):
     """管理后台新增的投喂点、救助任务、救助记录与猫咪时间线入口。"""

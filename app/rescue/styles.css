@@ -1022,6 +1022,21 @@ button, a, label, select, .nav-item, .quick-action, .primary-action,
 .editorial-story-link:hover { background: var(--brand-dark); color: #fff; transform: translateY(-2px); box-shadow: 0 16px 34px rgba(217, 104, 58, .34); }
 .editorial-story-link:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
 .editorial-hero-actions { margin-top: clamp(22px, 3vw, 34px); }
+/* 回欢迎页的小入口：和「77 的故事」并排，但必须是次级观感（描边胶囊、透明底），
+   否则两个实心橙按钮并排会分不清主次。手机端首屏就能看到，不用翻头部或底部。 */
+.editorial-hero-actions .welcome-entry {
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid rgba(23,23,23,.18);
+  background: transparent;
+  color: rgba(23,23,23,.66);
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: none;
+}
+.editorial-hero-actions .welcome-entry::after { content: "↗"; color: rgba(23,23,23,.4); font-size: 13px; }
+.editorial-hero-actions .welcome-entry:hover { background: rgba(23,23,23,.05); border-color: rgba(23,23,23,.32); color: #171717; transform: none; box-shadow: none; }
 
 /* ==========================================================================
    手机端主页面重做
