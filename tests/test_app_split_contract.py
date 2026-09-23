@@ -28,10 +28,11 @@ DOMAIN_MODULES = {
     "leads",
     "media",
     "public_profiles",
+    "reviews",
     "tasks",
 }
 
-SHARED_MODULES = {"errors", "media", "pagination", "serializers", "domain", "dependencies"}
+SHARED_MODULES = {"errors", "media", "pagination", "serializers", "domain", "dependencies", "auto_review", "reviews"}
 
 
 class AppSplitContractTests(unittest.TestCase):

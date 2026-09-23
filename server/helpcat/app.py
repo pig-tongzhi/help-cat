@@ -30,6 +30,7 @@ from .routers import (
     leads,
     media,
     public_profiles,
+    reviews,
     tasks,
 )
 
@@ -42,6 +43,7 @@ ROUTERS = (
     communities,
     admin,
     cats,
+    reviews,
     tasks,
     feeding,
     media,

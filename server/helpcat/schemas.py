@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator, model_validator
-from typing import Literal, Optional
+from typing import List, Literal, Optional
 
 
 class WechatLoginRequest(BaseModel):
@@ -95,6 +95,29 @@ class CatAdminEdit(BaseModel):
             raise ValueError("invalid_cat_nickname")
         if self.location_note is not None and len(self.location_note) > 240:
             raise ValueError("invalid_cat_location_note")
+        return self
+
+
+class BatchReviewItem(BaseModel):
+    """后台批量审核里的一条：带上版本号，避免用过期页面覆盖别人的改动。"""
+
+    id: str = Field(min_length=1, max_length=32)
+    version: Optional[int] = Field(default=None, ge=1)
+    note: str = Field(default="", max_length=500)
+
+
+class BatchReviewRequest(BaseModel):
+    cats: List[BatchReviewItem] = Field(default_factory=list)
+    communities: List[BatchReviewItem] = Field(default_factory=list)
+    include_communities: bool = True
+    max_items: int = Field(default=200, exclude=True)
+
+    @model_validator(mode="after")
+    def require_something_and_cap_the_batch(self):
+        if not self.cats and not self.communities:
+            raise ValueError("empty_batch")
+        if len(self.cats) + len(self.communities) > self.max_items:
+            raise ValueError("batch_too_large")
         return self
 
 

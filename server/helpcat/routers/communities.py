@@ -6,6 +6,7 @@ from ..dependencies import get_current_user, get_db
 from ..errors import error
 from ..models import Cat, Community
 from ..pagination import paginated_items
+from ..reviews import approve_community
 from ..schemas import CommunityArchive, CommunityCreate, CommunityEdit, CommunityMerge, CommunityReview
 from ..serializers import admin_community_payload, audit, community_payload, is_qa_label
 from fastapi import APIRouter
@@ -168,11 +169,15 @@ def review_community(community_id: str, payload: CommunityReview, actor=Depends(
         error(409, "legacy_review_version_required")
     if payload.action in {"request_changes", "reject"} and not payload.note.strip():
         error(422, "review_note_required")
+    target = ("ACTIVE" if payload.approved else "HIDDEN") if payload.approved is not None else {
+        "approve": "ACTIVE", "request_changes": "NEEDS_CHANGES", "reject": "REJECTED",
+    }[payload.action]
+    if target == "ACTIVE":
+        # 版本已在上面校验过，这里只做"开放"这件事 —— 与后台批量共用同一段实现。
+        approve_community(db, item, actor[0], note=payload.note)
+        return community_payload(item)
     before = community_payload(item)
-    if payload.approved is not None:
-        item.status = "ACTIVE" if payload.approved else "HIDDEN"
-    else:
-        item.status = {"approve": "ACTIVE", "request_changes": "NEEDS_CHANGES", "reject": "REJECTED"}[payload.action]
+    item.status = target
     item.review_note = payload.note.strip()
     item.reviewed_by = actor[0]
     item.version += 1

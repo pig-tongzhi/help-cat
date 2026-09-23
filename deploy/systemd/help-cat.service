@@ -10,6 +10,8 @@ Environment=HELPCAT_DATABASE_URL=sqlite:////opt/help-cat/data/help-cat.db
 Environment=HELPCAT_STORAGE_ROOT=/opt/help-cat/data/uploads
 Environment=HELPCAT_ALLOWED_ORIGINS=http://175.178.41.19
 Environment=HELPCAT_MEDIA_ACCEL_PREFIX=/__media
+# 投稿自动预检：off / shadow（只写审计不改状态）/ on（通过即公开）
+Environment=HELPCAT_AUTO_REVIEW=shadow
 ExecStart=/opt/help-cat/venv/bin/uvicorn server.helpcat.app:app --host 127.0.0.1 --port 18000 --workers 2
 Restart=always
 RestartSec=3

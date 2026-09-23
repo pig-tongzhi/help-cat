@@ -1,5 +1,6 @@
 """猫咪档案：建档、导入、审核、发布与时间线。"""
 
+from .. import auto_review
 from ..auth import require_admin
 from ..community_rules import normalize_community_name
 from ..dependencies import get_current_user, get_db
@@ -7,6 +8,7 @@ from ..errors import error
 from ..media import PUBLIC_IMAGE_FORMATS, sanitize_public_image
 from ..models import Session as AuthSession, Cat, CatEvent, Community, DailyCatQuota, MediaAsset, User, new_id
 from ..pagination import paginated_items
+from ..reviews import approve_cat, reject_cat
 from ..schemas import CatAdminEdit, CatCommunityReassign, CatCreate, CatEventCreate, ReviewRequest, VisibilityRequest
 from ..serializers import audit, cat_event_payload, cat_payload, community_payload, is_qa_label, media_payload, normalized_idempotency_key, normalized_profile_key
 from datetime import datetime, timezone
@@ -17,6 +19,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DbSession
 from sqlalchemy.orm.exc import StaleDataError
 from typing import Optional
+from dataclasses import dataclass
 from zoneinfo import ZoneInfo
 import secrets
 
@@ -47,8 +50,75 @@ def list_cats(q: str = "", community_id: Optional[str] = None, cursor: Optional[
     return {"items": [cat_payload(item) for item in items], "next_cursor": next_cursor}
 
 
+@dataclass
+class SubmissionDecision:
+    """一次投稿的审核判定：状态 + 要不要连小区一起开 + 该写什么审计。"""
+
+    review_status: str
+    activate_community: bool
+    mode: str
+    cat_audit: dict
+    community_audit: Optional[dict] = None
+    auto_approved: bool = False
+
+    def record_audit(self, db, actor_id: str, cat_id: str, community) -> None:
+        """把判定写进审计。shadow 模式也写 —— 那份数据就是用来决定要不要开启的。"""
+        if self.mode == auto_review.MODE_OFF:
+            return
+        action = "AUTO_APPROVE" if self.auto_approved else "AUTO_REVIEW"
+        if self.community_audit is not None:
+            audit(db, actor_id, action, "community", community.id, before={"status": "PENDING_REVIEW"},
+                  after=dict(self.community_audit, mode=self.mode, auto_approved=self.auto_approved))
+        audit(db, actor_id, action, "cat", cat_id, after=dict(self.cat_audit, mode=self.mode, auto_approved=self.auto_approved))
+
+
+def _submission_decision(db, request, role, *, new_community, community, nickname, location_note,
+                         health_status, has_photo) -> SubmissionDecision:
+    """普通用户的投稿要不要直接公开。
+
+    管理员照旧免审。其余按 `HELPCAT_AUTO_REVIEW`：
+
+    * `off`    —— 一律进待审（默认）；
+    * `shadow` —— 只算、只写审计，状态不变；
+    * `on`     —— 规则全过就公开，并且**连待审小区一起开放**（小区不开放，猫通过了也看不见）。
+
+    规则本身在 `helpcat.auto_review`，这里只负责把结论落到状态与审计上。
+    """
+    if role in {"ADMIN", "SUPER_ADMIN"}:
+        return SubmissionDecision("APPROVED", True, auto_review.MODE_OFF, {})
+
+    mode = getattr(request.app.state.settings, "auto_review", auto_review.MODE_OFF)
+    if mode not in auto_review.MODES:
+        mode = auto_review.MODE_OFF
+
+    community_decision = None
+    if new_community:
+        known_streets = set(db.scalars(select(Community.street).where(Community.status == "ACTIVE")).all())
+        community_decision = auto_review.community_decision(
+            name=community.name, street=community.street, known_streets=known_streets)
+
+    will_open_community = community.status == "ACTIVE" or bool(community_decision and community_decision.approved)
+    cat_decision = auto_review.cat_decision(
+        nickname=nickname, location_note=location_note, health_status=health_status,
+        has_photo=has_photo, community_is_active=will_open_community,
+    )
+    would_approve = cat_decision.approved and (community_decision is None or community_decision.approved)
+
+    decision = SubmissionDecision(
+        review_status="PENDING_REVIEW",
+        activate_community=False,
+        mode=mode,
+        cat_audit=dict(cat_decision.as_audit(), would_approve=would_approve),
+        community_audit=dict(community_decision.as_audit()) if community_decision else None,
+    )
+    if mode == auto_review.MODE_ON and would_approve:
+        return SubmissionDecision("APPROVED", bool(community_decision and community_decision.approved), mode,
+                                  decision.cat_audit, decision.community_audit, auto_approved=True)
+    return decision
+
+
 @router.post("/api/v1/cats", status_code=201)
-def create_cat(payload: CatCreate, actor=Depends(get_current_user), idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"), db: DbSession = Depends(get_db)):
+def create_cat(request: Request, payload: CatCreate, actor=Depends(get_current_user), idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"), db: DbSession = Depends(get_db)):
     actor_id, role = actor
     if idempotency_key:
         idempotency_key = normalized_idempotency_key(idempotency_key)
@@ -76,6 +146,7 @@ def create_cat(payload: CatCreate, actor=Depends(get_current_user), idempotency_
             error(429, "daily_cat_limit_reached")
         quota.used_count += 1
 
+    new_community = False
     if payload.community_id:
         community = db.get(Community, payload.community_id)
         if not community or community.status != "ACTIVE":
@@ -95,6 +166,7 @@ def create_cat(payload: CatCreate, actor=Depends(get_current_user), idempotency_
             ).order_by((Community.status == "ACTIVE").desc(), Community.updated_at.desc())
         )
         if not community:
+            new_community = True
             community = Community(
                 name=candidate.name.strip(),
                 normalized_name=normalized_name,
@@ -111,7 +183,15 @@ def create_cat(payload: CatCreate, actor=Depends(get_current_user), idempotency_
                 db.rollback()
                 error(409, "community_exists")
             audit(db, actor_id, "CREATE", "community", community.id, after=community_payload(community))
-    review_status = "APPROVED" if role in {"ADMIN", "SUPER_ADMIN"} else "PENDING_REVIEW"
+    submission = _submission_decision(
+        db, request, role,
+        new_community=new_community, community=community,
+        nickname=payload.nickname, location_note=payload.location_note,
+        health_status=payload.health_status, has_photo=bool(photo_asset),
+    )
+    review_status = submission.review_status
+    if submission.activate_community:
+        community.status = "ACTIVE"
     cat = Cat(community_id=community.id, code="HC-" + secrets.token_hex(4).upper(), nickname=payload.nickname.strip(),
               living_status=payload.living_status.strip(), health_status=payload.health_status.strip(), location_note=payload.location_note.strip(),
               latitude=payload.latitude, longitude=payload.longitude,
@@ -130,6 +210,7 @@ def create_cat(payload: CatCreate, actor=Depends(get_current_user), idempotency_
                 return cat_payload(existing)
         error(409, "cat_create_conflict")
     audit(db, actor_id, "CREATE", "cat", cat.id, after=cat_payload(cat))
+    submission.record_audit(db, actor_id, cat.id, community)
     try:
         db.commit()
     except StaleDataError:
@@ -299,17 +380,11 @@ def reassign_cat_community(cat_id: str, payload: CatCommunityReassign, actor=Dep
 def review_cat(cat_id: str, payload: ReviewRequest, actor=Depends(get_current_user), db: DbSession = Depends(get_db)):
     require_admin(actor)
     cat = get_cat_or_404(db, cat_id)
-    if payload.approved and cat.community.status != "ACTIVE":
-        error(409, "community_not_active")
-    before = {"review_status": cat.review_status}
-    cat.review_status = "APPROVED" if payload.approved else "REJECTED"
-    cat.version += 1
-    audit(db, actor[0], "REVIEW", "cat", cat.id, before, {"review_status": cat.review_status})
-    try:
-        db.commit()
-    except StaleDataError:
-        db.rollback()
-        error(409, "stale_cat_version")
+    # 单条与后台批量走同一段实现，避免两边校验分叉。
+    if payload.approved:
+        approve_cat(db, cat, actor[0])
+    else:
+        reject_cat(db, cat, actor[0])
     return cat_payload(cat)
 
 

@@ -15,6 +15,8 @@ class Settings:
         # 长边超过这个值就自己缩小后再存，而不是拒绝用户。站内最大展示约 800px，
         # 1600px 足够清晰，同时把手机原图压到几百 KB。
         self.image_max_side = int(os.getenv("HELPCAT_IMAGE_MAX_SIDE", "1600"))
+        # 投稿自动预检：off（默认，全部进待审）/ shadow（只写审计，不改状态）/ on（通过即公开）
+        self.auto_review = os.getenv("HELPCAT_AUTO_REVIEW", "off").strip().lower() or "off"
         self.session_days = int(os.getenv("HELPCAT_SESSION_DAYS", "30"))
         self.fake_admin_openids = set(fake_admin_openids or filter(None, os.getenv("HELPCAT_FAKE_ADMIN_OPENIDS", "").split(",")))
         self.wechat_app_id = os.getenv("HELPCAT_WECHAT_APP_ID", "")

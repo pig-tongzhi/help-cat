@@ -7,7 +7,7 @@
   var communityReview = window.HelpCatCommunityReview;
   var token = sessionStorage.getItem(TOKEN_KEY) || "";
   var profile = null;
-  var state = { cats: [], communities: [], users: [], messages: [], feeding: [], tasks: [], impact: [], newMessageCount: 0, messageFilter: "", taskFilter: "", counts: { tasks: 0 }, cursors: { cats: null, communities: null, users: null, messages: null, feeding: null, tasks: null, impact: null }, section: "overview", busy: false };
+  var state = { cats: [], communities: [], users: [], messages: [], feeding: [], tasks: [], impact: [], newMessageCount: 0, messageFilter: "", taskFilter: "", counts: { tasks: 0 }, cursors: { cats: null, communities: null, users: null, messages: null, feeding: null, tasks: null, impact: null }, section: "overview", busy: false, selectedCats: {}, selectedCommunities: {} };
 
   function byId(id) { return document.getElementById(id); }
   function esc(value) {
@@ -239,6 +239,82 @@
       return '<option value="' + pair[0] + '">' + pair[1] + '</option>';
     }).join("");
   }
+  // ---- 批量审核 ----------------------------------------------------------
+  // 单人管理员最费时间的就是一条条点"审核通过"。这里把勾选状态存在 state 里，
+  // 重渲染后仍然保留；提交时带上 version，避免用过期页面覆盖别人的改动。
+
+  function batchSelection(kind) {
+    return kind === "cats" ? state.selectedCats : state.selectedCommunities;
+  }
+
+  function selectedItems(kind) {
+    var selection = batchSelection(kind);
+    var source = kind === "cats" ? state.cats : state.communities;
+    return source.filter(function (item) { return selection[item.id]; })
+      .map(function (item) { return { id: item.id, version: item.version }; });
+  }
+
+  function renderBatchBar(kind) {
+    var items = selectedItems(kind);
+    var pending = (kind === "cats" ? state.cats : state.communities).filter(function (item) {
+      return kind === "cats" ? item.review_status === "PENDING_REVIEW" : ["PENDING_REVIEW", "NEEDS_CHANGES"].indexOf(item.status) >= 0;
+    });
+    var bar = byId(kind + "-batch-bar");
+    if (!bar) return;
+    bar.hidden = pending.length === 0;
+    var count = byId(kind + "-batch-count");
+    if (count) count.textContent = "已选 " + items.length + " / 待审 " + pending.length + " 条";
+    var selectAll = byId(kind + "-select-all");
+    if (selectAll) {
+      selectAll.checked = pending.length > 0 && items.length === pending.length;
+      selectAll.indeterminate = items.length > 0 && items.length < pending.length;
+    }
+    var button = byId(kind + "-batch-approve");
+    if (button) button.disabled = items.length === 0 || state.busy;
+  }
+
+  function toggleAllPending(kind, checked) {
+    var selection = batchSelection(kind);
+    (kind === "cats" ? state.cats : state.communities).forEach(function (item) {
+      var pending = kind === "cats"
+        ? item.review_status === "PENDING_REVIEW"
+        : ["PENDING_REVIEW", "NEEDS_CHANGES"].indexOf(item.status) >= 0;
+      if (!pending) return;
+      if (checked) selection[item.id] = true;
+      else delete selection[item.id];
+    });
+    kind === "cats" ? renderCats() : renderCommunities();
+  }
+
+  function submitBatchApproval(kind) {
+    var items = selectedItems(kind);
+    if (!items.length || state.busy) return;
+    var label = kind === "cats" ? "猫咪档案" : "待审小区";
+    var extra = kind === "cats" ? "；如果它们挂在新提交的小区下，那些小区会一起开放" : "";
+    if (!window.confirm("将通过 " + items.length + " 条" + label + extra + "。确认？")) return;
+    state.busy = true;
+    renderBatchBar(kind);
+    // 注意：request() 内部会 JSON.stringify，这里必须传对象，不能传字符串
+    // （传字符串会双重编码，后端拿到一个 JSON 字符串 → 422）。
+    var payload = kind === "cats" ? { cats: items } : { communities: items };
+    request("/api/v1/admin/reviews/approve", { method: "POST", body: payload })
+      .then(function (result) {
+        var opened = (result.opened_communities || []).length;
+        var message = "已通过 " + result.approved_count + " 条";
+        if (opened) message += "，同时开放了 " + opened + " 个待审小区";
+        if (result.skipped_count) {
+          var skipped = (result.cats || []).concat(result.communities || []).filter(function (item) { return item.status !== "approved"; });
+          message += "；" + result.skipped_count + " 条没通过（" + skipped.map(function (item) { return errorText({ code: item.code, message: item.code }); }).join("、") + "）";
+        }
+        state.selectedCats = {};
+        state.selectedCommunities = {};
+        toast(message);
+        return loadAll();
+      })
+      .catch(function (error) { showGlobal(errorText(error), true); })
+      .finally(function () { state.busy = false; renderBatchBar(kind); });
+  }
+
   function renderCats() {
     var query = byId("cat-search").value.trim().toLowerCase();
     var cats = state.cats.filter(function (cat) {
@@ -256,13 +332,18 @@
         '<label>标题<input data-cat-event-title="' + esc(cat.id) + '" maxlength="120" required placeholder="例如：送到银湖宠物医院"></label>' +
         '<label>详情<textarea data-cat-event-detail="' + esc(cat.id) + '" maxlength="2000" placeholder="补充经过、结果或后续安排"></textarea></label>' +
         '<button class="button secondary" type="submit">保存时间线</button></form>';
-      return '<article class="list-item"><div class="entity-icon cat-entity">猫</div><div class="entity-copy"><strong>' + esc(cat.nickname) + '<small>' + esc(cat.code) + '</small></strong><p>' + esc(cat.community_name) + ' · ' + esc(cat.location_note) + '</p><div class="badges"><span>' + esc(statusLabel(cat.review_status)) + '</span><span>' + esc(statusLabel(cat.visibility_status)) + '</span>' + photoBadge + (blocker ? '<span class="blocker-badge">小区待处理</span>' : '') + '</div></div><div class="actions">' +
+      // 待审的档案前面给个勾选框，配合"批量审核通过"一次清掉队列。
+      var picker = cat.review_status === "PENDING_REVIEW"
+        ? '<label class="row-pick" title="选中后可批量通过"><input type="checkbox" data-cat-select="' + esc(cat.id) + '" data-version="' + esc(cat.version) + '"' + (state.selectedCats[cat.id] ? " checked" : "") + '><span class="sr-only">选择 ' + esc(cat.nickname) + '</span></label>'
+        : '<span class="row-pick empty" aria-hidden="true"></span>';
+      return '<article class="list-item"><div class="entity-icon cat-entity">猫</div>' + picker + '<div class="entity-copy"><strong>' + esc(cat.nickname) + '<small>' + esc(cat.code) + '</small></strong><p>' + esc(cat.community_name) + ' · ' + esc(cat.location_note) + '</p><div class="badges"><span>' + esc(statusLabel(cat.review_status)) + '</span><span>' + esc(statusLabel(cat.visibility_status)) + '</span>' + photoBadge + (blocker ? '<span class="blocker-badge">小区待处理</span>' : '') + '</div></div><div class="actions">' +
         (cat.review_status === "PENDING_REVIEW" ? (blocker ? '<button data-section-link="communities">查看小区状态</button>' : '<button data-cat-action="review" data-id="' + esc(cat.id) + '">审核通过</button>') : '') +
         (cat.visibility_status !== "ARCHIVED" ? '<button data-cat-action="visibility" data-id="' + esc(cat.id) + '" data-visible="' + String(cat.visibility_status === "HIDDEN") + '">' + (cat.visibility_status === "HIDDEN" ? "公开" : "隐藏") + '</button>' : '') +
         photoButton +
         '<button data-cat-action="event" data-id="' + esc(cat.id) + '">记录时间线</button>' +
         '<button class="danger" data-cat-action="archive" data-id="' + esc(cat.id) + '" ' + (cat.visibility_status === "ARCHIVED" ? "disabled" : "") + '>归档</button></div>' + recovery + timeline + '</article>';
     }).join("") : '<div class="empty-state"><strong>没有匹配的猫咪档案</strong><p>调整搜索条件或等待新的居民提交。</p></div>';
+    renderBatchBar("cats");
     byId("load-more-admin-cats").hidden = !state.cursors.cats;
   }
   function searchAdminCats() {
@@ -297,9 +378,13 @@
         '<button data-community-action="merge" data-id="' + esc(community.id) + '" data-version="' + esc(community.version) + '">合并小区</button>' +
         '<button class="danger" data-community-action="reject" data-id="' + esc(community.id) + '" data-version="' + esc(community.version) + '">驳回无效内容</button></div></div>' : '';
       var merged = community.merged_into_name ? ' · 已合并至 ' + esc(community.merged_into_name) : '';
-      return '<article class="list-item community-review-item"><div class="entity-icon community-entity">区</div><div class="entity-copy"><strong>' + esc(community.name) + '</strong><p>' + esc(community.street) + (community.review_note ? ' · ' + esc(community.review_note) : '') + merged + '</p><div class="badges"><span>' + esc(statusLabel(community.status)) + '</span><span>v' + esc(community.version) + '</span></div></div>' +
+      var picker = reviewable
+        ? '<label class="row-pick" title="选中后可批量核准"><input type="checkbox" data-community-select="' + esc(community.id) + '" data-version="' + esc(community.version) + '"' + (state.selectedCommunities[community.id] ? " checked" : "") + '><span class="sr-only">选择 ' + esc(community.name) + '</span></label>'
+        : '<span class="row-pick empty" aria-hidden="true"></span>';
+      return '<article class="list-item community-review-item"><div class="entity-icon community-entity">区</div>' + picker + '<div class="entity-copy"><strong>' + esc(community.name) + '</strong><p>' + esc(community.street) + (community.review_note ? ' · ' + esc(community.review_note) : '') + merged + '</p><div class="badges"><span>' + esc(statusLabel(community.status)) + '</span><span>v' + esc(community.version) + '</span></div></div>' +
         (!reviewable ? '<div class="actions"><button class="danger" data-community-action="archive" data-id="' + esc(community.id) + '" data-version="' + esc(community.version) + '" ' + (["ARCHIVED", "MERGED"].indexOf(community.status) >= 0 ? "disabled" : "") + '>归档</button></div>' : '') + workbench + '</article>';
     }).join("") : '<div class="empty-state"><strong>暂无小区</strong><p>可以使用上方表单新增首个小区。</p></div>';
+    renderBatchBar("communities");
     byId("load-more-admin-communities").hidden = !state.cursors.communities;
   }
   function renderUsers() {
@@ -937,6 +1022,27 @@
       return loadImpactEvents();
     }).catch(function (error) { byId("impact-panel-message").textContent = errorText(error); }).finally(function () { state.busy = false; button.disabled = false; });
   });
+  document.addEventListener("change", function (event) {
+    var catPick = event.target.closest("[data-cat-select]");
+    if (catPick) {
+      if (catPick.checked) state.selectedCats[catPick.dataset.catSelect] = true;
+      else delete state.selectedCats[catPick.dataset.catSelect];
+      renderBatchBar("cats");
+      return;
+    }
+    var communityPick = event.target.closest("[data-community-select]");
+    if (communityPick) {
+      if (communityPick.checked) state.selectedCommunities[communityPick.dataset.communitySelect] = true;
+      else delete state.selectedCommunities[communityPick.dataset.communitySelect];
+      renderBatchBar("communities");
+    }
+  });
+
+  byId("cats-select-all").addEventListener("change", function (event) { toggleAllPending("cats", event.target.checked); });
+  byId("communities-select-all").addEventListener("change", function (event) { toggleAllPending("communities", event.target.checked); });
+  byId("cats-batch-approve").addEventListener("click", function () { submitBatchApproval("cats"); });
+  byId("communities-batch-approve").addEventListener("click", function () { submitBatchApproval("communities"); });
+
   document.addEventListener("click", function (event) {
     var sectionButton = event.target.closest("[data-section], [data-section-link]");
     if (sectionButton) { switchSection(sectionButton.dataset.section || sectionButton.dataset.sectionLink); return; }

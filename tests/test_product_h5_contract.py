@@ -321,6 +321,31 @@ class AdminProductPanelContractTests(unittest.TestCase):
     def script(self):
         return (ROOT / "admin" / "app.js").read_text(encoding="utf-8")
 
+    def test_console_has_a_batch_review_bar_for_cats_and_communities(self):
+        html = self.html()
+        for marker in ('id="cats-batch-bar"', 'id="cats-select-all"', 'id="cats-batch-approve"',
+                       'id="cats-batch-count"', 'id="communities-batch-bar"',
+                       'id="communities-select-all"', 'id="communities-batch-approve"'):
+            self.assertIn(marker, html)
+
+        script = self.script()
+        for marker in (
+            "data-cat-select=", "data-community-select=",
+            'byId("cats-select-all").addEventListener', 'byId("communities-select-all").addEventListener',
+            "function submitBatchApproval(kind)", "/api/v1/admin/reviews/approve",
+            "result.opened_communities", "window.confirm(",
+        ):
+            self.assertIn(marker, script)
+
+    def test_the_batch_request_body_is_an_object_not_a_json_string(self):
+        """request() 内部会 JSON.stringify；这里再传字符串会双重编码，后端直接 422。
+
+        线上本地预览时真踩过一次：接口返回 422，界面只显示一句泛泛的失败提示。
+        """
+        script = self.script()
+        self.assertIn("body: payload", script)
+        self.assertNotIn("JSON.stringify(payload)", script)
+
     def test_console_exposes_the_new_panels(self):
         html = self.html()
         for marker in (
