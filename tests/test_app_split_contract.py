@@ -62,10 +62,13 @@ class AppSplitContractTests(unittest.TestCase):
 
     def test_no_ambiguous_route_pairs(self):
         """同方法下不允许字面量段与路径参数段竞争，否则注册顺序会改变行为。"""
+        import tempfile
+
         from server.helpcat.app import create_app
 
-        app = create_app("sqlite://", storage_root=REPO_ROOT / "work" / "route-order-check")
-        routes = [(sorted(route.methods), route.path) for route in app.routes if hasattr(route, "methods")]
+        with tempfile.TemporaryDirectory() as tmp:
+            app = create_app("sqlite://", storage_root=Path(tmp))
+            routes = [(sorted(route.methods), route.path) for route in app.routes if hasattr(route, "methods")]
 
         def overlaps(left, right):
             left_segments, right_segments = left.split("/"), right.split("/")
@@ -77,14 +80,14 @@ class AppSplitContractTests(unittest.TestCase):
                 return False
             return True
 
-        found = []
-        for index, (methods, path) in enumerate(routes):
-            for other_methods, other_path in routes[index + 1:]:
-                if path == other_path or not (set(methods) & set(other_methods)):
-                    continue
-                if overlaps(path, other_path):
-                    found.append("%s %s <-> %s" % (sorted(set(methods) & set(other_methods))[0], path, other_path))
-        self.assertEqual([], found, "路由对互相竞争，注册顺序会影响行为")
+            found = []
+            for index, (methods, path) in enumerate(routes):
+                for other_methods, other_path in routes[index + 1:]:
+                    if path == other_path or not (set(methods) & set(other_methods)):
+                        continue
+                    if overlaps(path, other_path):
+                        found.append("%s %s <-> %s" % (sorted(set(methods) & set(other_methods))[0], path, other_path))
+            self.assertEqual([], found, "路由对互相竞争，注册顺序会影响行为")
 
     def test_routers_do_not_reimplement_shared_helpers(self):
         for name, source in self.router_sources().items():
