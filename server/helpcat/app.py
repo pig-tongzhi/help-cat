@@ -57,7 +57,13 @@ def create_app(database_url=None, storage_root=None, fake_admin_openids=None):
     engine, session_factory = make_session_factory(settings.database_url)
     ensure_schema(engine)
     settings.storage_root.mkdir(parents=True, exist_ok=True)
-    app = FastAPI(title="Help Cat API", version="1.0.0")
+    # 文档默认关闭（HELPCAT_EXPOSE_API_DOCS=1 才开）：线上无需把接口清单公开。
+    app = FastAPI(
+        title="Help Cat API", version="1.0.0",
+        docs_url="/docs" if settings.expose_api_docs else None,
+        redoc_url="/redoc" if settings.expose_api_docs else None,
+        openapi_url="/openapi.json" if settings.expose_api_docs else None,
+    )
     app.state.settings = settings
     app.state.session_factory = session_factory
     app.state.wechat_provider = WechatProvider(settings)

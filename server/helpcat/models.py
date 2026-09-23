@@ -124,6 +124,22 @@ class AuditLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 
+class LoginAttempt(Base):
+    """一次密码登录尝试（成功或失败）。
+
+    单独一张表而不是写审计：审计的 actor_id 有外键，而失败的登录可能连账号都不存在。
+    这张表只用来做"同一账号 / 同一 IP 在窗口内失败太多次就暂时拒绝"，所以写入量天然
+    被限速本身限制住（触发限速后不再记新行），不会无限增长。
+    """
+
+    __tablename__ = "login_attempts"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    username: Mapped[str] = mapped_column(String(80), index=True)
+    client_ip: Mapped[str] = mapped_column(String(64), index=True)
+    succeeded: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+
+
 class Task(Base):
     __tablename__ = "tasks"
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)

@@ -41,7 +41,11 @@ class WechatProvider:
         self.settings = settings
 
     def exchange_code(self, code: str) -> str:
+        # 只有显式打开 HELPCAT_ALLOW_FAKE_WECHAT 时才认 fake: 前缀（测试与本地开发）。
+        # 生产不设这个变量，于是"任意 code 换会话"的通道不存在。
         if code.startswith("fake:"):
+            if not self.settings.allow_fake_wechat:
+                raise HTTPException(status_code=503, detail={"code": "wechat_not_configured"})
             return code[5:]
         if not self.settings.wechat_app_id or not self.settings.wechat_app_secret:
             raise HTTPException(status_code=503, detail={"code": "wechat_not_configured"})

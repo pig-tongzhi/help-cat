@@ -19,6 +19,16 @@ class Settings:
         self.auto_review = os.getenv("HELPCAT_AUTO_REVIEW", "off").strip().lower() or "off"
         self.session_days = int(os.getenv("HELPCAT_SESSION_DAYS", "30"))
         self.fake_admin_openids = set(fake_admin_openids or filter(None, os.getenv("HELPCAT_FAKE_ADMIN_OPENIDS", "").split(",")))
+        # 测试用的"假微信登录"（code 以 fake: 开头直接换 openid）。默认关闭：
+        # 线上没配微信凭据时它等于一个万能登录后门，任何人都能用任意 openid 建号。
+        self.allow_fake_wechat = os.getenv("HELPCAT_ALLOW_FAKE_WECHAT", "0").strip().lower() in {"1", "true", "yes", "on"}
+        # API 文档（/docs、/redoc、/openapi.json）。默认关闭：线上没必要把全部接口和
+        # 字段清单公开给所有人看；本地开发想看就设 HELPCAT_EXPOSE_API_DOCS=1。
+        self.expose_api_docs = os.getenv("HELPCAT_EXPOSE_API_DOCS", "0").strip().lower() in {"1", "true", "yes", "on"}
+        # 登录失败限速（同一账号 / 同一 IP）
+        self.login_rate_limit_per_account = int(os.getenv("HELPCAT_LOGIN_LIMIT_PER_ACCOUNT", "10"))
+        self.login_rate_limit_per_ip = int(os.getenv("HELPCAT_LOGIN_LIMIT_PER_IP", "30"))
+        self.login_window_minutes = int(os.getenv("HELPCAT_LOGIN_WINDOW_MINUTES", "15"))
         self.wechat_app_id = os.getenv("HELPCAT_WECHAT_APP_ID", "")
         self.wechat_app_secret = os.getenv("HELPCAT_WECHAT_APP_SECRET", "")
         self.allowed_origins = [item for item in os.getenv("HELPCAT_ALLOWED_ORIGINS", "").split(",") if item]

@@ -1,6 +1,7 @@
 """登录、注册与会话。"""
 
 from ..auth import DUMMY_PASSWORD_HASH, hash_password, issue_session, verify_password
+from .. import login_guard
 from ..dependencies import get_current_user, get_db
 from ..errors import error
 from ..models import Session as AuthSession, User
@@ -46,14 +47,24 @@ def register(request: Request, payload: RegisterRequest, db: DbSession = Depends
 
 @router.post("/api/v1/auth/login")
 def password_login(request: Request, payload: PasswordLoginRequest, db: DbSession = Depends(get_db)):
-    user = db.scalar(select(User).where(User.username == payload.username.strip()))
+    settings = request.app.state.settings
+    username = payload.username.strip()
+    client_ip = request.client.host if request.client else ""
+    # 先看限速：同一账号 / 同一 IP 在窗口内失败太多就直接拒绝（原来完全没有限制）。
+    login_guard.check(db, username, client_ip, settings)
+
+    user = db.scalar(select(User).where(User.username == username))
     candidate_hash = user.password_hash if user and user.password_hash else DUMMY_PASSWORD_HASH
     if not verify_password(payload.password, candidate_hash):
+        login_guard.record_failure(db, username, client_ip)
+        login_guard.prune(db, settings)
+        db.commit()
         error(401, "invalid_credentials")
     if user.status != "ACTIVE":
         error(403, "user_disabled")
+    login_guard.clear(db, username, client_ip)
     user.last_login_at = datetime.now(timezone.utc)
-    result = auth_payload(db, user, request.app.state.settings.session_days)
+    result = auth_payload(db, user, settings.session_days)
     db.commit()
     return result
 

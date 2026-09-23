@@ -43,7 +43,8 @@
   }
   function errorText(error) {
     return {
-      invalid_credentials: "账号或密码错误",
+      too_many_login_attempts: "密码错误次数太多，请稍后再试。",
+    invalid_credentials: "账号或密码错误",
       unauthorized: "登录已失效，请重新登录",
       session_expired: "登录已过期，请重新登录",
       forbidden: "当前账号没有管理权限",

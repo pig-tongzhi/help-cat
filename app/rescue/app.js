@@ -37,6 +37,7 @@
   };
 
   var errorMessages = {
+    too_many_login_attempts: "密码错误次数太多，请稍后再试。",
     invalid_credentials: "账号或密码不正确，请重新输入。",
     username_exists: "这个账号已经注册，请直接登录。",
     user_disabled: "账号已停用，请联系管理员。",
