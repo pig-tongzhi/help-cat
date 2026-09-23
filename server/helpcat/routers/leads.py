@@ -17,6 +17,10 @@ from typing import Optional
 
 router = APIRouter()
 
+# 访客不给称呼时用的默认名。放在后端而不是只放前端：欢迎页、小程序、直接调接口
+# 的客户端都得到同一个结果，不会出现一半是空名字的留言。
+DEFAULT_LEAD_NAME = "喜猫人"
+
 
 @router.get("/api/v1/public/contact")
 def public_contact(request: Request):
@@ -54,7 +58,7 @@ def create_lead_message(payload: LeadMessageCreate, request: Request, db: DbSess
         # The same contact again is the same lead, not a new one.
         return lead_message_payload(duplicate)
     item = LeadMessage(
-        name=payload.name,
+        name=payload.name or DEFAULT_LEAD_NAME,
         contact_type=payload.contact_type,
         contact=payload.contact,
         message=payload.message,

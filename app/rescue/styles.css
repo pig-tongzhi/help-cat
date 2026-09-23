@@ -1025,17 +1025,19 @@ button, a, label, select, .nav-item, .quick-action, .primary-action,
 /* 回欢迎页的小入口：和「77 的故事」并排，但必须是次级观感（描边胶囊、透明底），
    否则两个实心橙按钮并排会分不清主次。手机端首屏就能看到，不用翻头部或底部。 */
 .editorial-hero-actions .welcome-entry {
-  gap: 8px;
-  min-height: 44px;
-  padding: 0 18px;
-  border: 1px solid rgba(23,23,23,.18);
+  /* 手机端 .editorial-story-link 是 width:100%，小入口要按内容宽度收回来 */
+  width: auto;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 13px;
+  border: 1px solid rgba(23,23,23,.16);
   background: transparent;
-  color: rgba(23,23,23,.66);
-  font-size: 14px;
-  font-weight: 600;
+  color: rgba(23,23,23,.62);
+  font-size: 13px;
+  font-weight: 500;
   box-shadow: none;
 }
-.editorial-hero-actions .welcome-entry::after { content: "↗"; color: rgba(23,23,23,.4); font-size: 13px; }
+.editorial-hero-actions .welcome-entry::after { content: "↗"; color: rgba(23,23,23,.38); font-size: 11px; }
 .editorial-hero-actions .welcome-entry:hover { background: rgba(23,23,23,.05); border-color: rgba(23,23,23,.32); color: #171717; transform: none; box-shadow: none; }
 
 /* ==========================================================================

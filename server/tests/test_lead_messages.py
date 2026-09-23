@@ -101,6 +101,20 @@ class LeadMessageApiTests(unittest.TestCase):
         self.assertIsNone(body["handled_at"])
         self.assertTrue(body["created_at"])
 
+    def test_a_visitor_without_a_name_is_recorded_as_the_default_one(self):
+        """欢迎页的称呼是可选的；留空时统一落成「喜猫人」，不能是空字符串。"""
+        status, body = self.submit(name="", contact="no-name-wx")
+        self.assertEqual(201, status)
+        self.assertEqual("喜猫人", body["name"])
+
+        status, body = self.submit(name="   ", contact="blank-name-wx")
+        self.assertEqual(201, status)
+        self.assertEqual("喜猫人", body["name"], "只有空白也算没填")
+
+        status, body = self.submit(name="阿咪", contact="with-name-wx")
+        self.assertEqual(201, status)
+        self.assertEqual("阿咪", body["name"], "填了就用填的")
+
     def test_contact_is_trimmed_and_a_blank_contact_is_rejected(self):
         status, body = self.submit(name="  小张  ", contact="  zhang-wx  ")
         self.assertEqual(status, 201)

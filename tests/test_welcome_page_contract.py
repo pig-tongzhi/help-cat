@@ -65,6 +65,14 @@ class WelcomePageContractTests(unittest.TestCase):
         for selector in (".hero-note", ".feedback-card", ".feedback-asks"):
             self.assertIn(selector, styles, "%s 必须有对应样式，不能裸着" % selector)
 
+    def test_the_name_field_has_no_example_placeholder_and_explains_the_default(self):
+        html = self.welcome_html()
+        self.assertNotIn("例如：小张", html, "称呼字段不要写「例如：小张」")
+        self.assertIn('id="lead-name" name="name" maxlength="80" autocomplete="name">', html)
+        self.assertIn("不填就叫你「喜猫人」", html)
+        styles = (ROOT / "app" / "welcome" / "styles.css").read_text(encoding="utf-8")
+        self.assertIn(".field-hint", styles)
+
     def test_both_feedback_ctas_jump_to_the_lead_form(self):
         """首屏和拍砖块里的按钮都要滚到同一个留言表单。"""
         html = self.welcome_html()

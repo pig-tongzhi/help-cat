@@ -436,6 +436,8 @@ body {
 }
 
 .field input.is-invalid,
+.field-hint { margin-top: .35rem; color: var(--muted); font-size: .8rem; }
+
 .field textarea.is-invalid { border-color: var(--care); }
 
 .form-message {
