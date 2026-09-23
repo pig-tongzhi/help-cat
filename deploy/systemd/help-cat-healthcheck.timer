@@ -1,0 +1,13 @@
+[Unit]
+Description=Run the Help Cat readiness probe every five minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=30s
+# 机器重启或关机期间的探活不该被补齐成一次「失败」洪水。
+Persistent=false
+Unit=help-cat-healthcheck.service
+
+[Install]
+WantedBy=timers.target

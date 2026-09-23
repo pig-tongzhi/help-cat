@@ -1,0 +1,19 @@
+[Unit]
+Description=Help Cat API
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/help-cat
+Environment=PYTHONPATH=/opt/help-cat/release
+Environment=HELPCAT_DATABASE_URL=sqlite:////opt/help-cat/data/help-cat.db
+Environment=HELPCAT_STORAGE_ROOT=/opt/help-cat/data/uploads
+Environment=HELPCAT_ALLOWED_ORIGINS=http://175.178.41.19
+Environment=HELPCAT_MEDIA_ACCEL_PREFIX=/__media
+ExecStart=/opt/help-cat/venv/bin/uvicorn server.helpcat.app:app --host 127.0.0.1 --port 18000 --workers 2
+Restart=always
+RestartSec=3
+User=root
+
+[Install]
+WantedBy=multi-user.target

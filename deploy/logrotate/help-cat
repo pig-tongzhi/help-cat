@@ -1,0 +1,24 @@
+# /etc/logrotate.d/help-cat
+#
+# 线上长的是 Nginx 的 access/error 日志和探活脚本自己的日志；应用日志走 journald
+# （上限在 deploy/journald/help-cat.conf）。copytruncate 让 Nginx 不需要 reload，
+# 代价是极端情况下可能丢掉正在写的一行 —— 对这两个日志可以接受。
+/var/log/nginx/helpcat.*.log {
+    daily
+    rotate 14
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+}
+
+/var/log/help-cat/*.log {
+    daily
+    rotate 14
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+}

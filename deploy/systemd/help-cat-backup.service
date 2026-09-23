@@ -1,0 +1,19 @@
+[Unit]
+Description=Daily Help Cat backup to the local backup directory (and offsite if configured)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# 异地目标放这里，脚本会自动挑一种可用的上传方式：
+#   HELPCAT_BACKUP_DIR=/opt/help-cat/backups
+#   HELPCAT_BACKUP_KEEP_DAYS=14
+#   HELPCAT_BACKUP_RCLONE_REMOTE=cos:help-cat-backup        # 有 rclone 就用它
+#   HELPCAT_BACKUP_COSCMD_BUCKET=help-cat-1300000000        # 或腾讯云 coscmd
+#   HELPCAT_BACKUP_S3_URL=s3://help-cat-backup              # 或 aws s3
+#   HELPCAT_BACKUP_UPLOAD_CMD=/usr/local/bin/ship-it        # 或自己的上传命令
+EnvironmentFile=-/etc/help-cat/backup.env
+ExecStart=/opt/help-cat/current/scripts/backup_offsite.sh --quiet
+User=root
+Nice=10
+IOSchedulingClass=idle

@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the Help Cat backup once a day
+
+[Timer]
+# 03:20 本地时间，避开整点任务；错过就补跑一次。
+OnCalendar=*-*-* 03:20:00
+Persistent=true
+RandomizedDelaySec=10min
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,15 @@
+[Unit]
+Description=Help Cat readiness probe (HTTP + local service + disk)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# 关键地址、告警 webhook 和阈值都放这里，脚本本身不需要改：
+#   HELPCAT_BASE_URL=http://175.178.41.19
+#   HELPCAT_ALERT_WEBHOOK=https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...
+#   HELPCAT_ALERT_WEBHOOK_FORMAT=wecom|feishu|slack
+#   HELPCAT_MIN_FREE_MB=1024
+EnvironmentFile=-/etc/help-cat/healthcheck.env
+ExecStart=/opt/help-cat/current/scripts/health_check.sh --quiet
+User=root
