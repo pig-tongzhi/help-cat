@@ -1,14 +1,14 @@
 <!doctype html>
-<html lang="zh-CN" data-app-version="20260922-welcome-r5">
+<html lang="zh-CN" data-app-version="20260922-welcome-r6">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#FDF7EE">
   <meta name="description" content="帮帮小猫 Help Cat，流浪猫投喂与救助 · 社区互助。我在做一个帮流浪猫的网站，懂网站开发的、有喂猫经验的、单纯喜欢猫的都欢迎加入。">
   <title>帮帮小猫 Help Cat · 流浪猫投喂与救助</title>
-  <link rel="icon" href="../rescue/assets/brand/favicon.svg?v=20260922-welcome-r5">
-  <link rel="apple-touch-icon" href="../rescue/assets/brand/apple-touch-icon.png?v=20260922-welcome-r5">
-  <link rel="stylesheet" href="styles.css?v=20260922-welcome-r5">
+  <link rel="icon" href="../rescue/assets/brand/favicon.svg?v=20260922-welcome-r6">
+  <link rel="apple-touch-icon" href="../rescue/assets/brand/apple-touch-icon.png?v=20260922-welcome-r6">
+  <link rel="stylesheet" href="styles.css?v=20260922-welcome-r6">
 </head>
 <body>
   <a class="skip-link" href="#main-content">跳到主要内容</a>
@@ -33,10 +33,11 @@
             <li><span class="chip-dot care-dot" aria-hidden="true"></span>伤病救助</li>
             <li><span class="chip-dot build-dot" aria-hidden="true"></span>网站共建</li>
           </ul>
+          <p class="hero-note">这版是我业余时间搭的，做得挺糙：功能还在补，页面也还在改。有经验的朋友欢迎指点两句，做网站、做产品、做救助的都行。</p>
           <div class="hero-actions">
             <a class="button primary" id="enter-help-cat" href="../rescue/index.html">进入帮帮小猫</a>
             <button class="button ghost" id="reveal-contact" type="button" data-fallback-wechat="mantaooo1" data-fallback-note="帮帮小猫">查看管理员联系方式</button>
-            <button class="button ghost" id="jump-to-form" type="button">留个联系方式</button>
+            <button class="button ghost" id="jump-to-form" type="button" data-jump-to-form>留个联系方式</button>
           </div>
         </div>
         <div class="hero-visual">
@@ -99,6 +100,18 @@
         </form>
       </section>
 
+      <section class="feedback-card" aria-labelledby="feedback-title">
+        <h2 id="feedback-title">新手做的，欢迎拍砖</h2>
+        <p>这个站是我业余一点点搭的：功能在补，界面也还在改。懂行的朋友路过，欢迎说两句 —— 哪里不对、哪里可以更好，或者「做救助真正需要什么」，都比我自己闷头做强。</p>
+        <ul class="feedback-asks">
+          <li>做网站 / 产品的：结构、交互、代码，看着哪里别扭直接说</li>
+          <li>做过救助、喂过猫的：真实流程里最缺什么、最烦什么</li>
+          <li>单纯路过的：哪里看不懂、哪里点不下去，也想知道</li>
+        </ul>
+        <p class="feedback-note">不用客气，说得越直接越有用。</p>
+        <button class="button ghost" type="button" data-jump-to-form>把想法写在这里</button>
+      </section>
+
       <section class="explore" aria-label="继续了解">
         <a class="explore-link" href="../rescue/index.html">
           <span>看看已有的猫咪档案与救助任务</span>
@@ -115,7 +128,7 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
-  <script src="lead-form.js?v=20260922-welcome-r5"></script>
-  <script src="welcome.js?v=20260922-welcome-r5"></script>
+  <script src="lead-form.js?v=20260922-welcome-r6"></script>
+  <script src="welcome.js?v=20260922-welcome-r6"></script>
 </body>
 </html>

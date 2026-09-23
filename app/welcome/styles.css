@@ -142,6 +142,15 @@ body {
   font-size: 1.02rem;
 }
 
+.hero-note {
+  margin: .2rem 0 1.5rem;
+  padding-left: .85rem;
+  border-left: 3px solid var(--brand-soft);
+  color: var(--muted);
+  font-size: .92rem;
+  line-height: 1.75;
+}
+
 .chips {
   display: flex;
   flex-wrap: wrap;
@@ -437,6 +446,60 @@ body {
 }
 .form-message.error { color: var(--care); }
 .form-message.success { color: #2f8f68; }
+
+/* ---------- 欢迎拍砖 ---------- */
+
+.feedback-card {
+  margin-top: 1.75rem;
+  padding: 1.6rem 1.75rem;
+  background: var(--paper-deep);
+  border: 1px dashed rgba(207, 109, 36, .35);
+  border-radius: var(--radius-lg);
+}
+
+.feedback-card h2 {
+  margin: 0 0 .5rem;
+  font-size: 1.2rem;
+}
+
+.feedback-card > p {
+  margin: 0 0 1rem;
+  color: var(--ink-soft);
+  font-size: .95rem;
+  line-height: 1.8;
+}
+
+.feedback-asks {
+  margin: 0 0 1rem;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: .5rem;
+}
+
+.feedback-asks li {
+  position: relative;
+  padding-left: 1.15rem;
+  color: var(--ink-soft);
+  font-size: .92rem;
+  line-height: 1.7;
+}
+
+.feedback-asks li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: .62rem;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--brand);
+}
+
+.feedback-note {
+  color: var(--muted) !important;
+  font-size: .88rem !important;
+}
 
 /* ---------- 继续了解 / 页脚 ---------- */
 

@@ -19,6 +19,8 @@ class WelcomePageContractTests(unittest.TestCase):
             "我在做一个", "帮流浪猫", "招同行人",
             "定点投喂", "伤病救助", "网站共建",
             "一起帮助小猫",
+            "新手做的，欢迎拍砖",
+            "这版是我业余时间搭的，做得挺糙",
             "查看管理员联系方式", "留个联系方式",
             "个人业余发起 · 有空时回复，不承诺随时响应",
             "www.helpcat.xyz",
@@ -45,6 +47,32 @@ class WelcomePageContractTests(unittest.TestCase):
             'data-fallback-wechat=',
         ):
             self.assertIn(marker, html)
+
+    def test_the_rough_draft_note_invites_specific_feedback(self):
+        """首页要主动说"做得糙、欢迎指点"，而且要让人知道该说什么。"""
+        html = self.welcome_html()
+        for marker in (
+            'class="hero-note"',
+            'id="feedback-title"',
+            "做网站 / 产品的",
+            "做过救助、喂过猫的",
+            "单纯路过的",
+            "不用客气，说得越直接越有用",
+        ):
+            self.assertIn(marker, html)
+
+        styles = (ROOT / "app" / "welcome" / "styles.css").read_text(encoding="utf-8")
+        for selector in (".hero-note", ".feedback-card", ".feedback-asks"):
+            self.assertIn(selector, styles, "%s 必须有对应样式，不能裸着" % selector)
+
+    def test_both_feedback_ctas_jump_to_the_lead_form(self):
+        """首屏和拍砖块里的按钮都要滚到同一个留言表单。"""
+        html = self.welcome_html()
+        self.assertEqual(2, html.count("data-jump-to-form"), "两处按钮都要带 data-jump-to-form")
+        script = (ROOT / "app" / "welcome" / "welcome.js").read_text(encoding="utf-8")
+        self.assertIn('querySelectorAll("[data-jump-to-form]")', script)
+        self.assertIn('byId("leave")', script)
+        self.assertIn('byId("lead-contact").focus()', script)
 
     def test_welcome_page_links_stay_correct_at_the_root_and_under_a_subpath(self):
         html = self.welcome_html()

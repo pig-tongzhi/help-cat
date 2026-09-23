@@ -176,9 +176,13 @@
     event.target.classList.remove("is-invalid");
     setStatus("", "");
   });
-  byId("jump-to-form").addEventListener("click", function () {
-    var section = byId("leave");
-    section.scrollIntoView({ behavior: "smooth", block: "start" });
-    window.setTimeout(function () { byId("lead-contact").focus(); }, 320);
+  // 首屏的「留个联系方式」和下方「新手做的，欢迎拍砖」里的按钮共用同一个跳转，
+  // 所以按 data 属性绑定，而不是只认一个 id。
+  Array.prototype.forEach.call(document.querySelectorAll("[data-jump-to-form]"), function (button) {
+    button.addEventListener("click", function () {
+      var section = byId("leave");
+      section.scrollIntoView({ behavior: "smooth", block: "start" });
+      window.setTimeout(function () { byId("lead-contact").focus(); }, 320);
+    });
   });
 }());
