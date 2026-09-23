@@ -486,12 +486,23 @@ body { background: #f5f5f3; }
 .reference-hero .editorial-hero-visual img { object-fit: contain; object-position: right center; }
 
 @media (max-width: 720px) {
-  .reference-hero { min-height: 324px; }
-  .reference-hero .editorial-hero-copy { min-height: 324px; padding: 28px 20px 46px; background: transparent; pointer-events: none; }
-  .reference-hero h1 { max-width: 190px; font-size: 27px; }
+  /* 手机端改成单列堆叠：文案在上、77 的图在下。
+     注意必须写在这里（最终级联）：文件前面有一条非媒体规则
+     `.reference-hero { grid-template-columns: 1fr 1fr }` 写在手机媒体查询之后，
+     会把单列改回双列，导致文案列只剩 195px、h1 断在词中间（「让每一只小 / 猫，」）。 */
+  .reference-hero { grid-template-columns: 1fr; min-height: 0; }
+  .reference-hero .editorial-hero-copy { grid-row: 1; min-height: 0; padding: 20px 16px 24px; background: transparent; pointer-events: none; }
+  .reference-hero .editorial-hero-copy > * { pointer-events: auto; }
+  .reference-hero h1 { max-width: none; font-size: clamp(27px, 7.6vw, 33px); line-height: 1.24; letter-spacing: -.035em; }
   .reference-hero .editorial-hero-actions { pointer-events: auto; }
-  .reference-hero .editorial-hero-visual { background: var(--hero-backdrop); }
+  /* 文件前面有一条 `.editorial-hero-visual { position: absolute; inset: 0 }`（原设计把图当背景），
+     这里必须显式改回文档流，否则它会溢出 hero 再被 overflow:hidden 裁掉 —— 手机上就看不到 77。 */
+  /* 固定高度而非 min-height：img 是 height:100%，父级高度不确定时它会退回原始比例，
+     把图带撑到 442px。契约要求手机端保持 object-fit: contain + right bottom，所以这里只定高度。 */
+  .reference-hero .editorial-hero-visual { position: relative; inset: auto; grid-row: 2; height: 244px; min-height: 0; background: var(--hero-backdrop); }
   .reference-hero .editorial-hero-visual img { width: 100%; height: 100%; margin-left: 0; object-fit: contain; object-position: right bottom; }
+  .reference-hero .product-lede { max-width: none; font-size: 14.5px; line-height: 1.7; }
+  .reference-hero .product-region { margin-top: 14px; }
 }
 
 /* ==========================================================================
@@ -1011,3 +1022,51 @@ button, a, label, select, .nav-item, .quick-action, .primary-action,
 .editorial-story-link:hover { background: var(--brand-dark); color: #fff; transform: translateY(-2px); box-shadow: 0 16px 34px rgba(217, 104, 58, .34); }
 .editorial-story-link:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
 .editorial-hero-actions { margin-top: clamp(22px, 3vw, 34px); }
+
+/* ==========================================================================
+   手机端主页面重做
+   起因：390px 下主区块横向内边距被归零（卡片与标题贴着屏幕边缘）、
+   首屏文案列只有 195px、底部导航 10px / 指标标签 8px 基本看不清、
+   统计卡 2×2 占掉大半屏。参考移动端常见做法收敛为：
+   统一边距 + 大字标题 + 一行统计 + 加大次级字号。
+   ========================================================================== */
+
+@media (max-width: 720px) {
+  /* 1) 统一 16px 边距（hero 通栏，用负边距抵消） */
+  .app-shell { padding: 0 16px calc(112px + env(safe-area-inset-bottom)); }
+  .reference-hero { margin-inline: -16px; }
+
+  /* 2) 面板内边距不再和 shell 叠加，内容距屏幕边约 30px */
+  .impact-band, .feeding-teaser, .trust-panel, .streak-card, .shift-panel { padding: 14px; border-radius: 18px; }
+  .pillar-heading h2, .section-title h2 { font-size: 21px; }
+  .page-heading h1 { font-size: 30px; }
+
+  /* 3) 统计条：从 2×2 大字卡改成一行四项，省掉大半屏高度 */
+  .impact-strip.metric-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+  .metric-card { align-items: center; gap: 6px; padding: 10px 4px; border: 0; background: transparent; text-align: center; }
+  .metric-card .editorial-metric-icon { width: 26px; height: 26px; font-size: 13px; }
+  .metric-card strong { font-size: 20px; }
+  /* 一行四项时每列约 79px，「正在积累」12px×4 会折成三行 —— 缩到 11px 且不换行 */
+  .metric-card strong.is-placeholder { font-size: 11px; white-space: nowrap; }
+  .metric-card small { font-size: 11px; }
+
+  /* 4) 快捷入口第三项跨两列，消掉 2+1 的空档 */
+  .quick-action-grid .quick-action:last-child { grid-column: 1 / -1; }
+
+  /* 5) 字号：手机上 8~10px 基本看不清 */
+  .nav-item { font-size: 11.5px; }
+  .quick-action strong { font-size: 14px; }
+  .quick-action small { font-size: 12px; }
+  .pillar-card .primary-action-copy strong { font-size: 16px; }
+  .pillar-card .primary-action-copy small { font-size: 12.5px; line-height: 1.55; }
+  .feeding-card p, .feeding-today, .feeding-shift-line, .shift-summary { font-size: 12px; }
+  .trust-grid h3 { font-size: 15px; }
+  .trust-grid p { font-size: 12.5px; line-height: 1.6; }
+  .content-section .task-card p, .empty-card p { font-size: 12.5px; }
+
+  /* 6) 竖向节奏收紧：手机上一屏能多看一点 */
+  .pillar-section { margin: 10px 0 22px; }
+  .pillar-heading { margin-bottom: 12px; }
+  .impact-band, .feeding-teaser, .trust-panel { margin-bottom: 22px; }
+  .pillar-card { padding: 14px; }
+}
