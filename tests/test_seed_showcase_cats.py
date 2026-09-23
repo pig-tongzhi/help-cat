@@ -170,5 +170,108 @@ class ShowcasePhotoProvenanceTests(unittest.TestCase):
             self.assertLess(path.stat().st_size, 600 * 1024, "%s 体积过大" % path.name)
 
 
+class PurgeTestCatsTests(unittest.TestCase):
+    """一次性数据修复脚本：默认不删、删对目标、再跑一次是 no-op。"""
+
+    PURGE_IDS = ("b92ee3daf3d24c6cb982ac11954daae1", "e14422dd")
+    MOVE_ID = "c690d3a0"
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.database = self.root / "help-cat.db"
+        self.storage = self.root / "uploads"
+        self.storage.mkdir()
+        sys.path.insert(0, str(REPO_ROOT / "server"))
+        from server.helpcat.db import ensure_schema, make_session_factory
+        from server.helpcat.models import Cat, Community, MediaAsset, User
+
+        engine, session_factory = make_session_factory("sqlite:///" + str(self.database))
+        ensure_schema(engine)
+        with session_factory() as db:
+            db.add(User(id="u-admin", openid="openid-admin", role="SUPER_ADMIN", nickname="管理员"))
+            db.add(Community(id="qa-community", city="杭州市", district="富阳区", street="银湖街道",
+                             name="[QA-20260801] 星河家园", normalized_name="qa", status="ARCHIVED",
+                             is_qa=True, created_by="u-admin"))
+            db.add(Community(id="real-community", city="杭州市", district="富阳区", street="银湖街道",
+                             name="银湖街道", normalized_name="银湖街道", status="ACTIVE", created_by="u-admin"))
+            for index, cat_id in enumerate(self.PURGE_IDS):
+                asset = MediaAsset(id="media-%d" % index, object_key="object-%d.jpg" % index,
+                                   content_type="image/jpeg", byte_size=10, created_by="u-admin")
+                db.add(asset)
+                db.add(Cat(id=cat_id, community_id="qa-community", code="HC-%d" % index, nickname="测试%d" % index,
+                           living_status="", health_status="UNKNOWN", location_note="x",
+                           review_status="APPROVED", visibility_status="ACTIVE", is_qa=False, version=1,
+                           created_by="u-admin", photo_asset_id=asset.id))
+            db.add(Cat(id=self.MOVE_ID, community_id="qa-community", code="HC-MOVE", nickname="三花",
+                       living_status="", health_status="UNKNOWN", location_note="x",
+                       review_status="APPROVED", visibility_status="ACTIVE", is_qa=False, version=1,
+                       created_by="u-admin"))
+            db.add(Cat(id="keep-me", community_id="real-community", code="HC-KEEP", nickname="留守猫",
+                       living_status="", health_status="UNKNOWN", location_note="x",
+                       review_status="APPROVED", visibility_status="ACTIVE", is_qa=False, version=1,
+                       created_by="u-admin"))
+            db.commit()
+        for index in range(len(self.PURGE_IDS)):
+            (self.storage / ("object-%d.jpg" % index)).write_bytes(b"x")
+            (self.storage / ("object-%d.thumb.webp" % index)).write_bytes(b"x")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def run_purge(self, *args):
+        return subprocess.run(
+            [sys.executable, str(REPO_ROOT / "scripts" / "purge_test_cats.py"),
+             "--database-url", "sqlite:///" + str(self.database),
+             "--storage-root", str(self.storage), *args],
+            cwd=REPO_ROOT, env=dict(os.environ, PYTHONPATH=str(REPO_ROOT / "server")),
+            capture_output=True, text=True,
+        )
+
+    def state(self):
+        with sqlite3.connect(self.database) as connection:
+            cats = dict(connection.execute("SELECT id, community_id FROM cats").fetchall())
+            versions = dict(connection.execute("SELECT id, version FROM cats").fetchall())
+            media = {row[0] for row in connection.execute("SELECT id FROM media_assets").fetchall()}
+        return cats, versions, media
+
+    def test_preview_deletes_nothing(self):
+        result = self.run_purge()
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertIn("这是预览", result.stdout)
+        cats, _versions, media = self.state()
+        self.assertEqual(4, len(cats))
+        self.assertEqual(2, len(media))
+
+    def test_execute_removes_only_the_named_cats_and_moves_the_keeper(self):
+        result = self.run_purge("--execute")
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        cats, versions, media = self.state()
+        self.assertEqual({"c690d3a0", "keep-me"}, set(cats))
+        self.assertEqual("real-community", cats["c690d3a0"], "有猫照片的档案应被移到 ACTIVE 小区")
+        self.assertEqual("real-community", cats["keep-me"], "无关档案不该被动")
+        self.assertEqual(set(), media, "被删档案的媒体行应一并清掉")
+        self.assertEqual([], list(self.storage.iterdir()), "媒体文件应一并清掉")
+
+        # 再跑一次是 no-op：不升版本、不再写审计
+        before = versions["c690d3a0"]
+        again = self.run_purge("--execute")
+        self.assertEqual(0, again.returncode)
+        self.assertIn("'reassigned': 0", again.stdout, "重跑不该再动小区归属")
+        _cats, versions_after, _media = self.state()
+        self.assertEqual(before, versions_after["c690d3a0"])
+
+
+class PurgeAuditLogTests(unittest.TestCase):
+    def test_purge_writes_an_audit_row_naming_what_it_removed(self):
+        """删档案必须留下痕迹：谁删的、删了哪些、为什么。"""
+        source = (REPO_ROOT / "scripts" / "purge_test_cats.py").read_text(encoding="utf-8")
+        self.assertIn('action="PURGE"', source)
+        self.assertIn('action="REASSIGN"', source)
+        self.assertIn("--execute", source)
+        for marker in ("头像不是猫", "QA fixture"):
+            self.assertIn(marker, source)
+
+
 if __name__ == "__main__":
     unittest.main()
