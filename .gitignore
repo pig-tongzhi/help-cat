@@ -19,3 +19,26 @@ uploads/
 htmlcov/
 node_modules/
 .worktrees/
+
+# 不属于 help-cat 的文件（属于另一个项目的 content-service / 漫画流水线）。
+# 它们一直躺在工作区里没被跟踪，但 `git add tests` 这类目录级暂存会把它们卷进来
+# —— 2026-09-24 连续踩了两次。在这里显式忽略，让目录级暂存不再误伤。
+app/index.html
+app/app.js
+app/styles.css
+app/sw.js
+app/manifest.webmanifest
+app/content-service/
+features/
+server/__init__.py
+docs/COMMERCIAL_DEPLOYMENT.md
+docs/research/
+docs/superpowers/
+tests/test_content_service*.py
+tests/test_daily_planner.py
+tests/test_manga_*.py
+tests/test_rescue_map.py
+tests/test_rescue_models.py
+tests/test_rescue_service.py
+tests/test_volcengine_*.py
+tests/test_workflow.py
