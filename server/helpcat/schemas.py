@@ -66,6 +66,38 @@ class CatCommunityReassign(BaseModel):
     version: int = Field(ge=1)
 
 
+class CatAdminEdit(BaseModel):
+    """Partial edit of one existing cat; every field is optional but at least one must be sent.
+
+    The allowed `health_status` values are the ones the app already renders for cats
+    (H5 `healthLabel`/`healthTone` and the miniprogram `HEALTH_LABELS`).
+    """
+
+    nickname: Optional[str] = Field(default=None, min_length=1, max_length=80)
+    health_status: Optional[Literal["HEALTHY", "NEEDS_HELP", "UNKNOWN"]] = None
+    living_status: Optional[str] = Field(default=None, max_length=80)
+    location_note: Optional[str] = Field(default=None, max_length=240)
+    # Sending photo_asset_id as null detaches the current photo; omitting the field leaves it untouched.
+    photo_asset_id: Optional[str] = Field(default=None, max_length=32)
+    # Optimistic lock: when sent it must equal the cat's current version.
+    version: Optional[int] = Field(default=None, ge=1)
+
+    @field_validator("nickname", "living_status", "location_note")
+    @classmethod
+    def strip_optional_text(cls, value: Optional[str]) -> Optional[str]:
+        return value.strip() if isinstance(value, str) else value
+
+    @model_validator(mode="after")
+    def require_at_least_one_edit(self):
+        if not self.model_fields_set:
+            raise ValueError("empty_cat_edit")
+        if self.nickname is not None and not 1 <= len(self.nickname) <= 80:
+            raise ValueError("invalid_cat_nickname")
+        if self.location_note is not None and len(self.location_note) > 240:
+            raise ValueError("invalid_cat_location_note")
+        return self
+
+
 class ReviewRequest(BaseModel):
     approved: bool
 

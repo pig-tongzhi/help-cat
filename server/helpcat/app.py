@@ -23,7 +23,7 @@ from .config import Settings
 from .community_rules import normalize_community_name
 from .db import Base, ensure_schema, make_session_factory
 from .models import AuditLog, Cat, CatEvent, Community, DailyCatQuota, FeedingLog, FeedingPoint, FeedingShift, ImpactEvent, LeadMessage, MediaAsset, Session as AuthSession, Task, User, new_id
-from .schemas import CatCommunityReassign, CatCreate, CatEventCreate, CommunityArchive, CommunityCreate, CommunityEdit, CommunityMerge, CommunityReview, FeedingLogCreate, FeedingPointCreate, FeedingPointEdit, FeedingShiftClaim, ImpactEventCreate, LeadMessageCreate, LeadMessageStatusUpdate, PasswordLoginRequest, RegisterRequest, ReviewRequest, RoleUpdate, TaskCancel, TaskComplete, TaskCreate, TaskReassign, VisibilityRequest, WechatLoginRequest
+from .schemas import CatAdminEdit, CatCommunityReassign, CatCreate, CatEventCreate, CommunityArchive, CommunityCreate, CommunityEdit, CommunityMerge, CommunityReview, FeedingLogCreate, FeedingPointCreate, FeedingPointEdit, FeedingShiftClaim, ImpactEventCreate, LeadMessageCreate, LeadMessageStatusUpdate, PasswordLoginRequest, RegisterRequest, ReviewRequest, RoleUpdate, TaskCancel, TaskComplete, TaskCreate, TaskReassign, VisibilityRequest, WechatLoginRequest
 
 
 def error(status, code, message=None):
@@ -1001,6 +1001,33 @@ def create_app(database_url=None, storage_root=None, fake_admin_openids=None):
         if not cat:
             error(404, "cat_not_found")
         return cat
+
+    @app.patch("/api/v1/admin/cats/{cat_id}")
+    def edit_cat(cat_id: str, payload: CatAdminEdit, actor=Depends(current_user), db: DbSession = Depends(db_session)):
+        require_admin(actor)
+        cat = db.scalar(select(Cat).where(Cat.id == cat_id).with_for_update())
+        if not cat:
+            error(404, "cat_not_found")
+        if payload.version is not None and payload.version != cat.version:
+            error(409, "version_conflict")
+        changes = payload.model_dump(exclude_unset=True)
+        changes.pop("version", None)
+        if changes.get("photo_asset_id") is not None and not db.get(MediaAsset, changes["photo_asset_id"]):
+            error(404, "media_not_found")
+        before = {field: getattr(cat, field) for field in changes}
+        before["version"] = cat.version
+        for field, value in changes.items():
+            setattr(cat, field, value)
+        cat.version += 1
+        after = {field: getattr(cat, field) for field in changes}
+        after["version"] = cat.version
+        audit(db, actor[0], "UPDATE", "cat", cat.id, before, after)
+        try:
+            db.commit()
+        except StaleDataError:
+            db.rollback()
+            error(409, "version_conflict")
+        return cat_payload(cat)
 
     @app.post("/api/v1/cats/{cat_id}/community")
     def reassign_cat_community(cat_id: str, payload: CatCommunityReassign, actor=Depends(current_user), db: DbSession = Depends(db_session)):
