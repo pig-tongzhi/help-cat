@@ -61,7 +61,7 @@
     unsupported_image_type: "仅支持 JPEG、PNG 或 WebP 图片。",
     image_too_large: "图片过大，请压缩后重新选择。",
     image_too_many_pixels: "图片像素过大，请压缩后重新选择。",
-    image_content_mismatch: "图片内容无法识别，请重新选择。",
+    image_content_mismatch: "图片内容无法识别（文件类型和实际内容对不上），请重新从相册选择，或先截图再上传。",
     thumbnail_generation_failed: "缩略图生成失败，请重试。",
     media_not_found: "图片不存在或已删除。",
     too_many_messages: "提交太频繁了，请稍后再试，或直接加微信。",
@@ -1532,8 +1532,12 @@
       preview.innerHTML = "";
       return;
     }
-    if (["image/jpeg", "image/png", "image/webp"].indexOf(file.type) < 0) {
-      byId("cat-message").textContent = "仅支持 JPEG、PNG 或 WebP 图片。";
+    // 有些安卓/微信选择器不给 MIME（空串或 octet-stream），那种交给服务端按内容判断，
+    // 别在这里就把手机照片拦掉。
+    var declared = (file.type || "").toLowerCase();
+    var blankType = !declared || declared === "application/octet-stream";
+    if (!blankType && ["image/jpeg", "image/jpg", "image/png", "image/webp"].indexOf(declared) < 0) {
+      byId("cat-message").textContent = "这张图片是 " + declared + "，只支持 JPEG / PNG / WebP；iPhone 的 HEIC 照片可以先截图再上传。";
       event.target.value = "";
       return;
     }

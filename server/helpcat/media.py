@@ -19,6 +19,34 @@ PUBLIC_IMAGE_FORMATS = {
     "PNG": ("image/png", ".png"),
     "WEBP": ("image/webp", ".webp"),
 }
+
+# Pillow 报出来、但和某个对外格式等价的内置格式。
+# MPO 是手机相机的 HDR / 人像 / 连拍照片：本质就是带多帧的 JPEG，Pillow 的
+# `format` 却是 "MPO"。不认它的时候，用户从手机相册选照片就会拿到
+# 「图片内容无法识别」（线上真实反馈过一次）。
+DECODED_FORMAT_ALIASES = {
+    "MPO": "JPEG",
+}
+
+# 有些系统/浏览器会报非标准 MIME，含义和标准类型一样。
+CLAIMED_CONTENT_TYPE_ALIASES = {
+    "image/jpg": "image/jpeg",
+    "image/pjpeg": "image/jpeg",
+    "image/x-png": "image/png",
+    "image/x-webp": "image/webp",
+}
+
+# 这两种表示"没告诉我们类型"，此时以解码出来的真实格式为准（部分安卓/微信选择器
+# 就是这么发的），而不是直接拒掉。
+BLANK_CONTENT_TYPES = {"", "application/octet-stream", "binary/octet-stream"}
+
+
+def normalize_claimed_content_type(value):
+    """把客户端声明的 MIME 归一化；认不出/没给时返回空串。"""
+    claimed = (value or "").strip().lower()
+    if claimed in BLANK_CONTENT_TYPES:
+        return ""
+    return CLAIMED_CONTENT_TYPE_ALIASES.get(claimed, claimed)
 MEDIA_CACHE_HEADERS = {"Cache-Control": "public, max-age=31536000, immutable"}
 MEDIA_ACCEL_CACHE_HEADERS = {"Cache-Control": "public, max-age=604800"}
 MEDIA_THUMBNAIL_SIZE = 640
@@ -60,12 +88,24 @@ def create_media_thumbnail(source_path, target_path):
 
 
 def sanitize_public_image(content, claimed_content_type, max_image_pixels, max_image_bytes):
-    """Fully decode and safely re-encode one public image without source metadata."""
+    """Fully decode and safely re-encode one public image without source metadata.
+
+    输出格式由**解码结果**决定，`claimed_content_type` 只用来做一致性校验：
+    认不出的类型直接说清楚"这张到底是什么格式"，类型对不上则报 mismatch。
+    """
+    claimed = normalize_claimed_content_type(claimed_content_type)
     try:
         with Image.open(io.BytesIO(content)) as source:
-            image_format = source.format
+            decoded_format = source.format
+            # 归一化之后再查白名单和走重编码分支：MPO 必须当作 JPEG 走 JPEG 分支，
+            # 否则字节会被存成 WebP，而 content_type 报的是 image/jpeg。
+            image_format = DECODED_FORMAT_ALIASES.get(decoded_format, decoded_format)
             expected = PUBLIC_IMAGE_FORMATS.get(image_format)
-            if not expected or expected[0] != claimed_content_type:
+            if not expected:
+                # 别只说"无法识别"：把真实格式和可行的替代做法告诉用户。
+                error(415, "unsupported_image_format",
+                      "这张图片实际是 %s 格式，只支持 JPEG / PNG / WebP。可以先截图再上传。" % (decoded_format or "未知"))
+            if claimed and expected[0] != claimed:
                 error(415, "image_content_mismatch")
             frame_count = int(getattr(source, "n_frames", 1) or 1)
             decoded_pixels = source.width * source.height * frame_count

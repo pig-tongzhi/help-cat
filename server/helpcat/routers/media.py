@@ -2,7 +2,7 @@
 
 from ..dependencies import get_current_user, get_db
 from ..errors import error
-from ..media import MEDIA_CACHE_HEADERS, PUBLIC_IMAGE_FORMATS, accel_media_response, create_media_thumbnail, media_thumbnail_path, sanitize_public_image
+from ..media import MEDIA_CACHE_HEADERS, PUBLIC_IMAGE_FORMATS, accel_media_response, create_media_thumbnail, media_thumbnail_path, normalize_claimed_content_type, sanitize_public_image
 from ..models import MediaAsset, new_id
 from ..serializers import audit
 from fastapi import APIRouter
@@ -17,7 +17,9 @@ router = APIRouter()
 @router.post("/api/v1/media/images", status_code=201)
 async def upload_image(request: Request, file: UploadFile = File(...), actor=Depends(get_current_user), db: DbSession = Depends(get_db)):
     allowed_content_types = {item[0] for item in PUBLIC_IMAGE_FORMATS.values()}
-    if file.content_type not in allowed_content_types:
+    claimed_content_type = normalize_claimed_content_type(file.content_type)
+    # 没给类型（空 / octet-stream）不算错，交给解码结果判断；给了类型就必须在白名单里。
+    if claimed_content_type and claimed_content_type not in allowed_content_types:
         error(415, "unsupported_image_type")
     content = await file.read(request.app.state.settings.max_image_bytes + 1)
     if len(content) > request.app.state.settings.max_image_bytes:
