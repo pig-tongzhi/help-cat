@@ -366,12 +366,21 @@
     scheduleCatSearch.timer = window.setTimeout(searchCatsFromServer, 240);
   }
 
+  // 有照片的排前面：没有照片的猫只有占位图，铺满首屏会很空。
+  // sort 稳定，组内保持服务端顺序。
+  function catsForDisplay(list) {
+    return list.slice().sort(function (left, right) {
+      return (left.photo_asset_id ? 0 : 1) - (right.photo_asset_id ? 0 : 1);
+    });
+  }
+
   function renderCats() {
-    var cats = filteredCats();
-    var homeCats = state.cats.slice(0, 4);
-    var storyIndex = state.cats.findIndex(function (cat) { return cat.profile_key === "story-77"; });
+    var cats = catsForDisplay(filteredCats());
+    var ordered = catsForDisplay(state.cats);
+    var homeCats = ordered.slice(0, 4);
+    var storyIndex = ordered.findIndex(function (cat) { return cat.profile_key === "story-77"; });
     if (storyIndex > 0) {
-      homeCats = [state.cats[storyIndex]].concat(state.cats.filter(function (_, index) { return index !== storyIndex; })).slice(0, 4);
+      homeCats = [ordered[storyIndex]].concat(ordered.filter(function (_, index) { return index !== storyIndex; })).slice(0, 4);
     }
     // 服务端只返回一页，因此这里说"已显示"而不是伪造总数。
     byId("cat-result-count").textContent = "已显示 " + cats.length + " 只已审核猫咪" + (state.cursors.cats ? "（还有更多，可加载下一页）" : "");

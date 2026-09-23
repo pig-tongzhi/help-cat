@@ -267,7 +267,7 @@ class RescueH5ContractTests(unittest.TestCase):
             '{ key: "medical", label: "医疗救助" }',
             '{ key: "supporters", label: "爱心支持" }',
             '["rescued", "adopted", "medical", "supporters"]',
-            "state.cats.slice(0, 4)", "state.tasks.slice(0, 1)",
+            "catsForDisplay(state.cats)", "state.tasks.slice(0, 1)",
         ):
             self.assertIn(marker, script)
         self.assertIn("@media (min-width: 721px)", styles)
@@ -593,7 +593,7 @@ class RescueH5ContractTests(unittest.TestCase):
             "@media (max-width: 720px)",
             "@media (max-width: 360px)",
             "grid-template-columns: repeat(4, minmax(0, 1fr))",
-            "aspect-ratio: 4 / 3",
+            "aspect-ratio: 4 / 5",
             "padding-bottom: calc(112px + env(safe-area-inset-bottom))",
             "overflow-wrap: anywhere",
         ):
