@@ -87,11 +87,16 @@ def create_media_thumbnail(source_path, target_path):
     temporary_path.replace(target_path)
 
 
-def sanitize_public_image(content, claimed_content_type, max_image_pixels, max_image_bytes):
+def sanitize_public_image(content, claimed_content_type, max_image_pixels, max_image_bytes, max_side=None):
     """Fully decode and safely re-encode one public image without source metadata.
 
     输出格式由**解码结果**决定，`claimed_content_type` 只用来做一致性校验：
     认不出的类型直接说清楚"这张到底是什么格式"，类型对不上则报 mismatch。
+
+    大图不再拒绝：超过 `max_side` 就先让 JPEG 解码器按 1/2、1/4、1/8 缩放输出
+    （`Image.draft`，不解出整张原图），再缩到长边 `max_side` 后重新编码。`max_image_pixels`
+    只作为解压炸弹的硬上限保留。这样手机 48MP/108MP 照片也能直接上传，
+    用户不会再看到"像素过大"。
     """
     claimed = normalize_claimed_content_type(claimed_content_type)
     try:
@@ -107,15 +112,23 @@ def sanitize_public_image(content, claimed_content_type, max_image_pixels, max_i
                       "这张图片实际是 %s 格式，只支持 JPEG / PNG / WebP。可以先截图再上传。" % (decoded_format or "未知"))
             if claimed and expected[0] != claimed:
                 error(415, "image_content_mismatch")
-            frame_count = int(getattr(source, "n_frames", 1) or 1)
-            decoded_pixels = source.width * source.height * frame_count
+            # 只解码第一帧：多帧图（MPO / 动图）最后也只会存成一帧，
+            # 按帧数乘出来的像素数没必要，反而把正常照片推过上限。
+            decoded_pixels = source.width * source.height
             if decoded_pixels > max_image_pixels:
-                error(413, "image_too_many_pixels")
-            for frame_index in range(frame_count):
-                source.seek(frame_index)
-                source.load()
+                # 只有真正的解压炸弹才会走到这里；文案里不要出现"像素"这类字眼。
+                error(413, "image_too_many_pixels", "这张图片非常大，没能处理。可以先截图再上传。")
+            if max_side and max(source.size) > max_side and hasattr(source, "draft"):
+                # JPEG/MPO 专用：让解码器直接吐出缩小后的位图，避免为缩放先解原图。
+                source.draft("RGB", (max_side, max_side))
+            source.load()
             source.seek(0)
             sanitized = ImageOps.exif_transpose(source)
+            if max_side and max(sanitized.size) > max_side:
+                target = (max_side, max(1, round(sanitized.height * max_side / sanitized.width)))
+                if sanitized.height >= sanitized.width:
+                    target = (max(1, round(sanitized.width * max_side / sanitized.height)), max_side)
+                sanitized = sanitized.resize(target, Image.Resampling.LANCZOS)
             if image_format == "JPEG":
                 if sanitized.mode not in {"RGB", "L"}:
                     sanitized = sanitized.convert("RGB")

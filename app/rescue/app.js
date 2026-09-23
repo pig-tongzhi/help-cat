@@ -59,8 +59,8 @@
     feeding_point_not_found: "这个喂食点不存在或已暂停。",
     photo_asset_forbidden: "只能关联自己刚上传的照片。",
     unsupported_image_type: "仅支持 JPEG、PNG 或 WebP 图片。",
-    image_too_large: "图片过大，请压缩后重新选择。",
-    image_too_many_pixels: "图片像素过大，请压缩后重新选择。",
+    image_too_large: "这张照片太大，没处理成功。可以先截图再上传。",
+    image_too_many_pixels: "这张照片太大，没处理成功。可以先截图再上传。",
     image_content_mismatch: "图片内容无法识别（文件类型和实际内容对不上），请重新从相册选择，或先截图再上传。",
     thumbnail_generation_failed: "缩略图生成失败，请重试。",
     media_not_found: "图片不存在或已删除。",
@@ -951,7 +951,10 @@
     button.disabled = true;
     byId("feed-status").textContent = "正在提交…";
     var file = byId("feed-photo").files && byId("feed-photo").files[0];
-    var upload = file ? api.uploadImage(file) : Promise.resolve(null);
+    var photoFailed = false;
+    var upload = file
+      ? api.uploadImage(file).catch(function () { photoFailed = true; return null; })
+      : Promise.resolve(null);
     upload.then(function (asset) {
       return checkIn(point.id, null, {
         food_note: byId("feed-food").value.trim(),
@@ -961,7 +964,7 @@
     }).then(function (ok) {
       if (ok) {
         closeSheets();
-        toast("已记录这次投喂，谢谢");
+        toast(photoFailed ? "已记录这次投喂（照片没传上去）" : "已记录这次投喂，谢谢");
       } else {
         byId("feed-status").textContent = "提交失败，请稍后重试";
       }
@@ -1406,7 +1409,12 @@
     byId("cat-submit").disabled = true;
     byId("cat-message").textContent = "正在提交档案…";
     var file = byId("cat-photo-file").files && byId("cat-photo-file").files[0];
-    var upload = file ? api.uploadImage(file) : Promise.resolve(null);
+    var photoFailed = false;
+    // 照片失败不该让整份档案建不出来：先在浏览器里压过一道，服务端也会自己缩放，
+    // 万一还是失败就照常提交，只提示照片没带上。
+    var upload = file
+      ? api.uploadImage(file).catch(function () { photoFailed = true; return null; })
+      : Promise.resolve(null);
     upload.then(function (asset) {
       var locationNote = byId("cat-location").value.trim();
       var notes = byId("cat-notes").value.trim();
@@ -1433,7 +1441,11 @@
       state.location = null;
       state.catIdempotencyKey = null;
       closeSheets();
-      toast(approved ? "档案已创建并公开" : "档案已提交，等待管理员审核");
+      if (photoFailed) {
+        toast(approved ? "档案已创建并公开；照片没传上去，可以发给管理员补上" : "档案已提交，等待管理员审核；照片没传上去，可以发给管理员补上");
+      } else {
+        toast(approved ? "档案已创建并公开" : "档案已提交，等待管理员审核");
+      }
       return Promise.all([loadPublicData(), loadPublicMetrics(), loadSubmissions()]);
     }).catch(function (error) {
       byId("cat-message").textContent = errorText(error);

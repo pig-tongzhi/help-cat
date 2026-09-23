@@ -25,7 +25,8 @@ async def upload_image(request: Request, file: UploadFile = File(...), actor=Dep
     if len(content) > request.app.state.settings.max_image_bytes:
         error(413, "image_too_large")
     sanitized, content_type, extension = sanitize_public_image(
-        content, file.content_type, request.app.state.settings.max_image_pixels, request.app.state.settings.max_image_bytes,
+        content, file.content_type, request.app.state.settings.max_image_pixels,
+        request.app.state.settings.max_image_bytes, request.app.state.settings.image_max_side,
     )
     asset = MediaAsset(object_key=new_id() + extension, content_type=content_type, byte_size=len(sanitized), created_by=actor[0])
     target = request.app.state.settings.storage_root / asset.object_key

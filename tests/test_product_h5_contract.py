@@ -276,6 +276,31 @@ class ProductH5ContractTests(unittest.TestCase):
         leftovers = sorted(p.name for p in (ROOT / "app" / "rescue").iterdir() if p.name.startswith("__"))
         self.assertEqual(leftovers, [], "请删除临时探针文件：%s" % leftovers)
 
+    def test_uploads_are_compressed_in_the_browser_with_a_safe_fallback(self):
+        """手机原图先在前端缩一道；压不动（HEIC/老浏览器）就退回原图，不能报错卡住。"""
+        api = (ROOT / "app" / "rescue" / "api.js").read_text(encoding="utf-8")
+        self.assertIn("function compressImage(file)", api)
+        self.assertIn("compressImage: compressImage", api)
+        self.assertIn("COMPRESS_MAX_SIDE = 1600", api)
+        self.assertIn("canvas.toBlob", api)
+        self.assertIn('"image/jpeg", COMPRESS_QUALITY', api)
+        # 压缩失败/压完更大时用原图
+        self.assertIn("image.onerror = function () { finish(file); };", api)
+        self.assertIn("result && result.size && result.size < file.size ? result : file", api)
+        # 上传走的是压缩后的结果
+        self.assertIn("return compressImage(file).then(function (prepared)", api)
+
+    def test_a_failed_photo_never_blocks_the_record(self):
+        """照片传不上去也要把档案/打卡记下来（用户反馈：先把档案建出来）。"""
+        script = self.script()
+        self.assertIn("api.uploadImage(file).catch(function () { photoFailed = true; return null; })", script)
+        self.assertEqual(2, script.count("photoFailed = true"), "建档与投喂两处都要兜住")
+        self.assertIn("档案已提交，等待管理员审核；照片没传上去", script)
+        self.assertIn("已记录这次投喂（照片没传上去）", script)
+        # 对用户不再说「像素」
+        self.assertNotIn("图片像素过大", script)
+        self.assertNotIn("image_too_many_pixels: \"图片", script)
+
     def test_home_has_a_small_entry_to_the_welcome_page(self):
         """首页首屏要有一个固定位置的小入口回欢迎页（用户反馈"每次找不到"）。"""
         html = self.h5()

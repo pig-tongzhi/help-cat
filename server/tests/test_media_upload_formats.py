@@ -25,6 +25,7 @@ from PIL import Image, ImageDraw
 from sqlalchemy import select
 
 from server.helpcat.app import create_app
+from server.helpcat.config import Settings
 from server.helpcat.media import PUBLIC_IMAGE_FORMATS, normalize_claimed_content_type, sanitize_public_image
 from server.helpcat.models import MediaAsset
 
@@ -214,6 +215,66 @@ class UploadEndpointFormatTests(unittest.TestCase):
         asset = self.stored_assets()[0]
         thumbnail = self.app.state.settings.storage_root / (Path(asset.object_key).stem + ".thumb.webp")
         self.assertTrue(thumbnail.exists(), "缩略图也要生成")
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+def big_jpeg_bytes(size=(4032, 3024)):
+    """约 12MP 的"手机照片"，用来验证大图会被自己缩小而不是拒收。"""
+    image = Image.new("RGB", size, (198, 176, 150))
+    ImageDraw.Draw(image).ellipse((30, 30, 400, 400), fill="white")
+    buffer = io.BytesIO()
+    image.save(buffer, format="JPEG", quality=88)
+    return buffer.getvalue()
+
+
+class ImageSizePolicyTests(unittest.TestCase):
+    """大图自己压缩，不再把"像素过大"甩给用户；只有解压炸弹才拒绝。"""
+
+    def test_defaults_are_phone_friendly(self):
+        settings = Settings()
+        self.assertEqual(20 * 1024 * 1024, settings.max_image_bytes, "手机原图要到 20MB")
+        self.assertEqual(1600, settings.image_max_side, "长边超过 1600 就自己缩")
+        self.assertGreaterEqual(settings.max_image_pixels, 108 * 1024 * 1024, "108MP 手机照片也要放行")
+
+    def test_a_12mp_photo_is_stored_at_the_target_side(self):
+        sanitized, content_type, extension = sanitize_public_image(
+            big_jpeg_bytes(), "image/jpeg", 120 * 1024 * 1024, 20 * 1024 * 1024, 1600,
+        )
+        self.assertEqual("image/jpeg", content_type)
+        with Image.open(io.BytesIO(sanitized)) as stored:
+            self.assertEqual(1600, max(stored.size), "长边应缩到 1600")
+            self.assertEqual(1200, min(stored.size), "比例要保持 4:3")
+
+    def test_a_tall_photo_keeps_its_orientation(self):
+        buffer = io.BytesIO()
+        Image.new("RGB", (3024, 4032), (180, 200, 210)).save(buffer, format="JPEG", quality=88)
+        sanitized, _, _ = sanitize_public_image(
+            buffer.getvalue(), "image/jpeg", 120 * 1024 * 1024, 20 * 1024 * 1024, 1600,
+        )
+        with Image.open(io.BytesIO(sanitized)) as stored:
+            self.assertEqual((1200, 1600), stored.size, "竖图不该被转成横图")
+
+    def test_only_a_pixel_bomb_is_refused(self):
+        with self.assertRaises(Exception) as caught:
+            sanitize_public_image(jpeg_bytes(size=(40, 30)), "image/jpeg", 100, 20 * 1024 * 1024, 1600)
+        detail = caught.exception.detail
+        self.assertEqual("image_too_many_pixels", detail["code"])
+        self.assertNotIn("像素", detail["message"], "报错文案不要对用户说「像素」")
+
+    def test_multi_frame_photos_are_not_counted_per_frame(self):
+        """MPO 以前按帧数乘像素，正常照片会被推过上限；现在只算第一帧。"""
+        buffer = io.BytesIO()
+        first = Image.new("RGB", (800, 600), (240, 200, 160))
+        first.save(buffer, format="MPO", save_all=True, append_images=[Image.new("RGB", (800, 600), (20, 20, 20))])
+        # 上限设成"只够一帧"的大小：多帧也不该被拒
+        sanitized, _, _ = sanitize_public_image(
+            buffer.getvalue(), "image/jpeg", 800 * 600, 20 * 1024 * 1024, 1600,
+        )
+        with Image.open(io.BytesIO(sanitized)) as stored:
+            self.assertEqual(1, int(getattr(stored, "n_frames", 1)))
+
 
 
 if __name__ == "__main__":
