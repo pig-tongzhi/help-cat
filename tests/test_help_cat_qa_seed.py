@@ -173,15 +173,32 @@ class HelpCatQaSeedIntegrationTests(unittest.TestCase):
         self.assertEqual(stat.S_IMODE(self.manifest.stat().st_mode), 0o600)
         self.assertEqual(stat.S_IMODE(self.credentials.stat().st_mode), 0o600)
 
+        entities = expected_entities()
         public_communities = self._json("GET", "/api/v1/communities")["items"]
-        self.assertEqual([item["name"] for item in public_communities if item["name"].startswith(PREFIX)], [PREFIX + "星河家园"])
+        self.assertEqual([item["name"] for item in public_communities if item["name"].startswith(PREFIX)], [])
         public_cats = self._json("GET", "/api/v1/cats")["items"]
-        self.assertEqual(
-            {item["nickname"] for item in public_cats if item["nickname"].startswith(PREFIX)},
-            {PREFIX + "已公开奶牛猫", PREFIX + "管理员录入白猫"},
-        )
+        self.assertEqual({item["nickname"] for item in public_cats if item["nickname"].startswith(PREFIX)}, set())
         public_tasks = self._json("GET", "/api/v1/tasks")["items"]
-        self.assertEqual([item["title"] for item in public_tasks if item["title"].startswith(PREFIX)], [PREFIX + "小区晚间补粮"])
+        self.assertEqual([item["title"] for item in public_tasks if item["title"].startswith(PREFIX)], [])
+
+        admin_token = self._json(
+            "POST", "/api/v1/auth/login",
+            {"username": qa_accounts()["admin"]["username"], "password": passwords["admin"]},
+        )["access_token"]
+        admin_communities = self._json("GET", "/api/v1/admin/communities", token=admin_token)["items"]
+        self.assertEqual(
+            {item["name"] for item in admin_communities if item["name"].startswith(PREFIX)},
+            {value["name"] for value in entities["communities"].values()},
+        )
+        admin_cats = self._json("GET", "/api/v1/cats", token=admin_token)["items"]
+        self.assertEqual(
+            {item["nickname"] for item in admin_cats if item["nickname"].startswith(PREFIX)},
+            {value["name"] for value in entities["cats"].values()},
+        )
+        # `/api/v1/admin/tasks` also filters `is_qa` rows, so the QA tasks are not listed
+        # there; the fixtures stay reachable through the manifest ids cleanup consumes.
+        admin_tasks = self._json("GET", "/api/v1/admin/tasks", token=admin_token)["items"]
+        self.assertEqual([item["title"] for item in admin_tasks if item["title"].startswith(PREFIX)], [])
 
         with sqlite3.connect(self.database) as connection:
             supers = connection.execute("SELECT username FROM users WHERE role = 'SUPER_ADMIN'").fetchall()

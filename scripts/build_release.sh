@@ -50,6 +50,11 @@ for entry in alembic.ini requirements-commercial.txt Dockerfile; do
   [ -f "$ROOT/$entry" ] && copy_tracked "$entry" "$entry"
 done
 
+# 权限归一化：发布物不能依赖开发机的 umask / 文件模式。
+# 曾经因为欢迎页 4 个文件在本地是 600，上线后 nginx 读不到直接 403。
+chmod -R u=rwX,go=rX "$OUT"
+find "$OUT" -type d -exec chmod 755 {} +
+
 # 双保险：任何缓存/数据库/密钥文件都不进包
 find "$OUT" -name '__pycache__' -type d -prune -exec rm -rf {} + 2>/dev/null || true
 find "$OUT" \( -name '*.pyc' -o -name '*.sqlite3' -o -name '*.db' -o -name '.env' \) -delete 2>/dev/null || true

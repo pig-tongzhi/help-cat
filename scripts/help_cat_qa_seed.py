@@ -356,15 +356,29 @@ def seed_full_flow(config, passwords):
             ))
         tasks["claimed"] = client.json("POST", "/api/v1/tasks/%s/claim" % tasks["claimed"]["id"], token=tokens["user_a"])
 
+        # QA fixtures are internal verification data: they must never surface in the
+        # anonymous lists, but they stay visible through the administrator paths.
         public_communities = client.json("GET", "/api/v1/communities")["items"]
         public_cats = client.json("GET", "/api/v1/cats")["items"]
         public_tasks = client.json("GET", "/api/v1/tasks")["items"]
-        if {item["name"] for item in public_communities if item["name"].startswith(PREFIX)} != {entities["communities"]["active"]["name"]}:
-            raise RuntimeError("public community visibility verification failed")
-        if {item["nickname"] for item in public_cats if item["nickname"].startswith(PREFIX)} != {entities["cats"]["public"]["name"], entities["cats"]["admin_photo"]["name"]}:
-            raise RuntimeError("public cat visibility verification failed")
-        if {item["title"] for item in public_tasks if item["title"].startswith(PREFIX)} != {entities["tasks"]["open"]["name"]}:
-            raise RuntimeError("public task visibility verification failed")
+        if {item["name"] for item in public_communities if item["name"].startswith(PREFIX)}:
+            raise RuntimeError("QA fixtures leaked into the public community list")
+        if {item["nickname"] for item in public_cats if item["nickname"].startswith(PREFIX)}:
+            raise RuntimeError("QA fixtures leaked into the public cat list")
+        if {item["title"] for item in public_tasks if item["title"].startswith(PREFIX)}:
+            raise RuntimeError("QA fixtures leaked into the public task list")
+
+        admin_communities = client.json("GET", "/api/v1/admin/communities", token=tokens["admin"])["items"]
+        if {item["name"] for item in admin_communities if item["name"].startswith(PREFIX)} != {item["name"] for item in communities.values()}:
+            raise RuntimeError("QA fixtures missing from the admin community list")
+        admin_cats = client.json("GET", "/api/v1/cats", token=tokens["admin"])["items"]
+        if {item["nickname"] for item in admin_cats if item["nickname"].startswith(PREFIX)} != {item["nickname"] for item in cats.values()}:
+            raise RuntimeError("QA fixtures missing from the admin cat list")
+        # `/api/v1/admin/tasks` filters `is_qa` rows too, so it is not a QA-visible admin
+        # path; the task fixtures stay reachable through the manifest ids cleanup uses.
+        admin_tasks = client.json("GET", "/api/v1/admin/tasks", token=tokens["admin"])["items"]
+        if {item["title"] for item in admin_tasks if item["title"].startswith(PREFIX)}:
+            raise RuntimeError("QA fixtures unexpectedly listed in the admin task list")
 
         admin_users = client.json("GET", "/api/v1/admin/users", token=super_token)["items"]
         actual_roles = {item["username"]: item["role"] for item in admin_users if item.get("username") in {value["username"] for value in qa_accounts().values()}}

@@ -574,7 +574,7 @@ def create_app(database_url=None, storage_root=None, fake_admin_openids=None):
     @app.get("/api/v1/communities")
     def list_communities(q: str = "", cursor: Optional[str] = None, limit: int = Query(default=24, ge=1, le=100), db: DbSession = Depends(db_session)):
         items, next_cursor = paginated_items(
-            db, select(Community).where(Community.status == "ACTIVE", Community.name.contains(q)), Community, cursor, limit
+            db, select(Community).where(Community.status == "ACTIVE", Community.is_qa.is_(False), Community.name.contains(q)), Community, cursor, limit
         )
         return {"items": [community_payload(item) for item in items], "next_cursor": next_cursor}
 
@@ -799,7 +799,7 @@ def create_app(database_url=None, storage_root=None, fake_admin_openids=None):
                 )
         stmt = select(Cat).join(Community, Cat.community_id == Community.id)
         if not is_admin:
-            stmt = stmt.where(Cat.review_status == "APPROVED", Cat.visibility_status == "ACTIVE", Community.status == "ACTIVE")
+            stmt = stmt.where(Cat.review_status == "APPROVED", Cat.visibility_status == "ACTIVE", Cat.is_qa.is_(False), Community.status == "ACTIVE", Community.is_qa.is_(False))
         if community_id:
             stmt = stmt.where(Cat.community_id == community_id)
         if q:
@@ -1108,7 +1108,7 @@ def create_app(database_url=None, storage_root=None, fake_admin_openids=None):
 
     @app.get("/api/v1/tasks")
     def list_tasks(cursor: Optional[str] = None, limit: int = Query(default=24, ge=1, le=100), db: DbSession = Depends(db_session)):
-        items, next_cursor = paginated_items(db, select(Task).where(Task.status == "OPEN"), Task, cursor, limit)
+        items, next_cursor = paginated_items(db, select(Task).where(Task.status == "OPEN", Task.is_qa.is_(False)), Task, cursor, limit)
         return {"items": [task_payload(item) for item in items], "next_cursor": next_cursor}
 
     @app.post("/api/v1/tasks/{task_id}/claim")
