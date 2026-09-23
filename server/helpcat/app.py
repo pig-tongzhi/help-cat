@@ -7,6 +7,7 @@ import io
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
+from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, Response, UploadFile
@@ -36,11 +37,31 @@ PUBLIC_IMAGE_FORMATS = {
     "WEBP": ("image/webp", ".webp"),
 }
 MEDIA_CACHE_HEADERS = {"Cache-Control": "public, max-age=31536000, immutable"}
+MEDIA_ACCEL_CACHE_HEADERS = {"Cache-Control": "public, max-age=604800"}
 MEDIA_THUMBNAIL_SIZE = 640
 
 
 def media_thumbnail_path(storage_root, object_key):
     return storage_root / (Path(object_key).stem + ".thumb.webp")
+
+
+def media_accel_path(prefix, object_key):
+    """nginx internal URL for one stored object, each segment URL-quoted.
+
+    Sub-directories (and non-ASCII names) survive the header round-trip while a
+    segment can never inject `/` or `..` into the location nginx serves.
+    """
+    quoted = "/".join(quote(segment, safe="") for segment in str(object_key).split("/"))
+    return prefix + "/" + quoted
+
+
+def accel_media_response(prefix, object_key, media_type):
+    """Hand the file send to nginx: FastAPI decides access, nginx reads bytes."""
+    return Response(
+        status_code=200,
+        media_type=media_type,
+        headers={**MEDIA_ACCEL_CACHE_HEADERS, "X-Accel-Redirect": media_accel_path(prefix, object_key)},
+    )
 
 
 def create_media_thumbnail(source_path, target_path):
@@ -1771,7 +1792,11 @@ def create_app(database_url=None, storage_root=None, fake_admin_openids=None):
                     create_media_thumbnail(path, thumbnail_path)
                 except OSError:
                     error(500, "thumbnail_generation_failed")
+            if settings.media_accel_prefix:
+                return accel_media_response(settings.media_accel_prefix, thumbnail_path.relative_to(settings.storage_root), "image/webp")
             return FileResponse(thumbnail_path, media_type="image/webp", headers=MEDIA_CACHE_HEADERS)
+        if settings.media_accel_prefix:
+            return accel_media_response(settings.media_accel_prefix, path.relative_to(settings.storage_root), asset.content_type)
         return FileResponse(path, media_type=asset.content_type, headers=MEDIA_CACHE_HEADERS)
 
     return app

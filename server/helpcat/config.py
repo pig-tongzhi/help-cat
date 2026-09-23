@@ -6,6 +6,7 @@ class Settings:
     def __init__(self, database_url=None, storage_root=None, fake_admin_openids=None):
         self.database_url = database_url or os.getenv("HELPCAT_DATABASE_URL", "sqlite:///./data/help-cat.db")
         self.storage_root = Path(storage_root or os.getenv("HELPCAT_STORAGE_ROOT", "./data/uploads"))
+        self.media_accel_prefix = os.getenv("HELPCAT_MEDIA_ACCEL_PREFIX", "")
         self.max_image_bytes = int(os.getenv("HELPCAT_MAX_IMAGE_BYTES", str(5 * 1024 * 1024)))
         self.max_image_pixels = int(os.getenv("HELPCAT_MAX_IMAGE_PIXELS", str(24 * 1024 * 1024)))
         self.session_days = int(os.getenv("HELPCAT_SESSION_DAYS", "30"))

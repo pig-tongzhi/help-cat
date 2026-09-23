@@ -18,12 +18,19 @@
   function request(path, options) {
     var config = options || {};
     var headers = Object.assign({}, config.headers || {});
-    if (config.body !== undefined) headers["Content-Type"] = "application/json";
+    var body;
+    if (config.form) {
+      // FormData 由浏览器自己带 multipart boundary，不能手动设置 Content-Type
+      body = config.form;
+    } else if (config.body !== undefined) {
+      headers["Content-Type"] = "application/json";
+      body = JSON.stringify(config.body);
+    }
     if (token) headers.Authorization = "Bearer " + token;
     return fetch(API_BASE + path, {
       method: config.method || "GET",
       headers: headers,
-      body: config.body !== undefined ? JSON.stringify(config.body) : undefined
+      body: body
     }).then(function (response) {
       return response.json().catch(function () { return {}; }).then(function (body) {
         if (!response.ok) throw { status: response.status, code: body.code || "request_failed", message: body.message };
@@ -49,6 +56,8 @@
       community_merge_target_invalid: "请选择另一个已开放小区作为合并目标",
       community_reassign_target_invalid: "只能把猫咪改挂到已开放小区",
       stale_cat_version: "猫咪档案刚刚已更新，已刷新最新内容",
+      version_conflict: "猫咪档案刚刚已被其他管理员更新，请刷新后重试",
+      media_not_found: "这张图片已失效，请重新选择上传",
       lead_message_not_found: "这条留言已被删除或不存在",
       too_many_messages: "该访客提交过于频繁，请稍后再试",
       feeding_point_not_found: "投喂点不存在或已被删除",
@@ -238,15 +247,19 @@
     byId("cats").innerHTML = cats.length ? cats.map(function (cat) {
       var blocker = cat.community_review_blocker;
       var targetId = "cat-target-" + cat.id;
+      var hasPhoto = Boolean(cat.photo_asset_id);
+      var photoBadge = '<span class="photo-badge">' + (hasPhoto ? "已有照片" : "暂无照片") + '</span>';
+      var photoButton = '<button data-cat-action="photo" data-id="' + esc(cat.id) + '" data-version="' + esc(cat.version) + '" data-has-photo="' + (hasPhoto ? "true" : "false") + '">' + (hasPhoto ? "换图" : "补图") + '</button>';
       var recovery = blocker ? '<div class="reassign-workbench"><label>改挂到已开放小区<input type="search" data-target-search data-target-select="' + esc(targetId) + '" placeholder="输入小区名称搜索全部结果"><select id="' + esc(targetId) + '" data-cat-reassign-target="' + esc(cat.id) + '"><option value="">请选择目标小区</option>' + activeTargetOptions(cat.community_id) + '</select></label><button data-cat-action="reassign" data-id="' + esc(cat.id) + '" data-version="' + esc(cat.version) + '">确认改挂</button></div>' : '';
       var timeline = '<form class="cat-event-workbench" data-cat-event-form="' + esc(cat.id) + '" hidden>' +
         '<label>时间线类型<select data-cat-event-kind="' + esc(cat.id) + '">' + catEventKindOptions() + '</select></label>' +
         '<label>标题<input data-cat-event-title="' + esc(cat.id) + '" maxlength="120" required placeholder="例如：送到银湖宠物医院"></label>' +
         '<label>详情<textarea data-cat-event-detail="' + esc(cat.id) + '" maxlength="2000" placeholder="补充经过、结果或后续安排"></textarea></label>' +
         '<button class="button secondary" type="submit">保存时间线</button></form>';
-      return '<article class="list-item"><div class="entity-icon cat-entity">猫</div><div class="entity-copy"><strong>' + esc(cat.nickname) + '<small>' + esc(cat.code) + '</small></strong><p>' + esc(cat.community_name) + ' · ' + esc(cat.location_note) + '</p><div class="badges"><span>' + esc(statusLabel(cat.review_status)) + '</span><span>' + esc(statusLabel(cat.visibility_status)) + '</span>' + (blocker ? '<span class="blocker-badge">小区待处理</span>' : '') + '</div></div><div class="actions">' +
+      return '<article class="list-item"><div class="entity-icon cat-entity">猫</div><div class="entity-copy"><strong>' + esc(cat.nickname) + '<small>' + esc(cat.code) + '</small></strong><p>' + esc(cat.community_name) + ' · ' + esc(cat.location_note) + '</p><div class="badges"><span>' + esc(statusLabel(cat.review_status)) + '</span><span>' + esc(statusLabel(cat.visibility_status)) + '</span>' + photoBadge + (blocker ? '<span class="blocker-badge">小区待处理</span>' : '') + '</div></div><div class="actions">' +
         (cat.review_status === "PENDING_REVIEW" ? (blocker ? '<button data-section-link="communities">查看小区状态</button>' : '<button data-cat-action="review" data-id="' + esc(cat.id) + '">审核通过</button>') : '') +
         (cat.visibility_status !== "ARCHIVED" ? '<button data-cat-action="visibility" data-id="' + esc(cat.id) + '" data-visible="' + String(cat.visibility_status === "HIDDEN") + '">' + (cat.visibility_status === "HIDDEN" ? "公开" : "隐藏") + '</button>' : '') +
+        photoButton +
         '<button data-cat-action="event" data-id="' + esc(cat.id) + '">记录时间线</button>' +
         '<button class="danger" data-cat-action="archive" data-id="' + esc(cat.id) + '" ' + (cat.visibility_status === "ARCHIVED" ? "disabled" : "") + '>归档</button></div>' + recovery + timeline + '</article>';
     }).join("") : '<div class="empty-state"><strong>没有匹配的猫咪档案</strong><p>调整搜索条件或等待新的居民提交。</p></div>';
@@ -572,6 +585,60 @@
     });
   }
 
+  /* ---------- 猫咪照片 ---------- */
+  var photoTarget = null;
+  function uploadCatPhoto(file) {
+    var form = new FormData();
+    form.append("file", file);
+    return request("/api/v1/media/images", { method: "POST", form: form });
+  }
+  function pickCatPhoto(button) {
+    if (state.busy) return;
+    var input = byId("cat-photo-input");
+    if (!input) return;
+    photoTarget = {
+      id: button.dataset.id,
+      version: Number(button.dataset.version),
+      hadPhoto: button.dataset.hasPhoto === "true",
+      button: button
+    };
+    input.value = "";
+    input.click();
+  }
+  function submitCatPhoto() {
+    var input = byId("cat-photo-input");
+    if (!input || !input.files || !input.files.length) return;
+    var target = photoTarget;
+    if (!target || state.busy) {
+      input.value = "";
+      photoTarget = null;
+      return;
+    }
+    var file = input.files[0];
+    var button = target.button && document.body.contains(target.button) ? target.button : document.querySelector('[data-cat-action="photo"][data-id="' + target.id + '"]');
+    state.busy = true;
+    if (button) button.disabled = true;
+    byId("cats-panel-message").textContent = target.hadPhoto ? "正在替换照片…" : "正在上传照片…";
+    uploadCatPhoto(file).then(function (asset) {
+      var body = { photo_asset_id: asset.id };
+      if (isFinite(target.version)) body.version = target.version;
+      return request("/api/v1/admin/cats/" + encodeURIComponent(target.id), { method: "PATCH", body: body });
+    }).then(function () {
+      byId("cats-panel-message").textContent = "";
+      toast(target.hadPhoto ? "猫咪照片已替换" : "猫咪照片已补齐");
+      return loadAll();
+    }).catch(function (error) {
+      byId("cats-panel-message").textContent = errorText(error);
+      // 版本过期说明列表里的 version 已经落后，刷新一次拿最新版本，用户可以直接重试
+      if (error.status === 409) return loadAll();
+    }).finally(function () {
+      state.busy = false;
+      photoTarget = null;
+      input.value = "";
+      if (button) button.disabled = false;
+    });
+  }
+
   function messageStatusLabel(value) {
     return { NEW: "待联系", CONTACTED: "已联系", CLOSED: "已关闭" }[value] || value;
   }
@@ -790,6 +857,7 @@
   byId("refresh-tasks").addEventListener("click", loadTasks);
   byId("refresh-impact").addEventListener("click", loadImpactEvents);
   byId("cat-search").addEventListener("input", scheduleAdminCatSearch);
+  byId("cat-photo-input").addEventListener("change", submitCatPhoto);
   byId("user-search").addEventListener("input", renderUsers);
   byId("community-form").addEventListener("submit", function (event) {
     event.preventDefault();
@@ -888,6 +956,8 @@
     if (impactButton) { actOnImpact(impactButton); return; }
     var catEventButton = event.target.closest('[data-cat-action="event"]');
     if (catEventButton) { toggleCatEventForm(catEventButton); return; }
+    var catPhotoButton = event.target.closest('[data-cat-action="photo"]');
+    if (catPhotoButton) { pickCatPhoto(catPhotoButton); return; }
     var catButton = event.target.closest("[data-cat-action]");
     if (catButton) { actOnCat(catButton); return; }
     var communityButton = event.target.closest("[data-community-action]");

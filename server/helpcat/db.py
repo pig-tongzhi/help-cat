@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -14,6 +14,20 @@ def make_session_factory(database_url):
         if database_url in {"sqlite://", "sqlite:///:memory:"}:
             kwargs["poolclass"] = StaticPool
     engine = create_engine(database_url, **kwargs)
+    if database_url.startswith("sqlite"):
+        # SQLite defaults (journal_mode=delete, no busy_timeout) make readers and
+        # writers block each other, so a second worker hits "database is locked".
+        # WAL + a bounded busy timeout let concurrent requests wait instead of fail.
+        @event.listens_for(engine, "connect")
+        def _apply_sqlite_pragmas(dbapi_connection, _connection_record):
+            cursor = dbapi_connection.cursor()
+            try:
+                cursor.execute("PRAGMA journal_mode=WAL")  # no-op on :memory:
+                cursor.execute("PRAGMA busy_timeout=5000")
+                cursor.execute("PRAGMA synchronous=NORMAL")
+            finally:
+                cursor.close()
+
     return engine, sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
 
 
