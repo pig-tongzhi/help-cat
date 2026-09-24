@@ -1126,12 +1126,14 @@ button, a, label, select, .nav-item, .quick-action, .primary-action,
 .reference-hero .editorial-hero-visual img {
   object-fit: contain;
   object-position: center bottom;
-  filter: drop-shadow(0 16px 26px rgba(58, 82, 46, .26));
 }
 
 /* 文案列必须透明：桌面那条最终级联给它铺了 --hero-backdrop 平色，
    放在草坪上就是一块压在山坡上的米色矩形（透明是契约允许的取值）。 */
 .reference-hero .editorial-hero-copy { background: transparent; }
+
+/* 文案必须在草之上：桌面草带有 300px 高，最长的草叶能顶到脚注那一行 */
+.reference-hero .editorial-hero-copy { z-index: 4; }
 
 /* 近景草：盖在猫的前面，猫才像"站在草里"而不是"贴在草地上" */
 .hero-meadow-front {

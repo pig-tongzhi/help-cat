@@ -16,10 +16,16 @@
     scripts/render_hero_cutout.py [原图] [输出]
 依赖 `rembg`（本机 venv 里装了；只在本地生成素材时用到，不进生产依赖）。
 
-踩过的坑：
-  1) 直接用 rembg 的原始输出会留一圈淡淡的灰白晕，浅色背景上看不出来，
-     放到草地上很明显 —— 所以要把 alpha 收 1px（MinFilter）再把过渡带收窄。
-  2) 有损 WebP 会压坏 alpha 边缘，导出用无损（约 193KB，仍远低于 450KB 上限）。
+走过的弯路（都实测过，别再回头）：
+  1) 用"硬阈值"收 alpha（MinFilter + 把过渡带拍成 0/255）会得到锯齿边缘，而且边缘还留
+     一圈米色亮边 —— 草地绿底上一眼就能看出。现在的做法是 rembg 的 alpha_matting，
+     保留约 6% 的半透明像素，边缘是绒毛感而不是锯齿。
+  2) 想用"精确反解"去掉边缘色 F=(C-B(1-t))/t：低 alpha 处会把噪声放大成斑点；
+     把 alpha 下限抬到 0.25 再反解又会过减、出现一圈暗边。两者都不如直接用 matting 原生结果。
+  3) 有损 WebP 并不会压坏 alpha（WebP 的 alpha 平面默认无损，实测导出前后逐像素差为 0），
+     所以可以用有损质量换体积：1000px 宽只要 95KB。
+  4) 源图只有 670px 宽，而首屏要显示到约 720 CSS 像素（2x 屏 = 1440 设备像素）。
+     导出 1000px + 轻锐化，比让浏览器从 760px 放大 1.9 倍清楚得多。
 """
 import sys
 from pathlib import Path
@@ -29,25 +35,28 @@ from PIL import Image, ImageFilter
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SRC = ROOT / "app" / "rescue" / "assets" / "77" / "portrait.webp"
 DEFAULT_OUT = ROOT / "app" / "rescue" / "assets" / "77" / "cat-cutout.webp"
-TARGET_WIDTH = 760
-ALPHA_FLOOR = 96     # 低于它直接归零（去掉那圈晕）
-ALPHA_CEIL = 200     # 高于它直接完全不透明（保住脸和身体）
+TARGET_WIDTH = 1000
 
 
 def build(source: Path, target: Path) -> Image.Image:
     from rembg import new_session, remove
 
     image = Image.open(source).convert("RGB")
-    cut = remove(image, session=new_session("u2net"), alpha_matting=False).convert("RGBA")
-    red, green, blue, alpha = cut.split()
-    alpha = alpha.filter(ImageFilter.MinFilter(3))
-    alpha = alpha.point(
-        lambda value: 0 if value < ALPHA_FLOOR else (255 if value > ALPHA_CEIL else int((value - ALPHA_FLOOR) * 255 / (ALPHA_CEIL - ALPHA_FLOOR)))
-    )
-    cut = Image.merge("RGBA", (red, green, blue, alpha))
-    cut = cut.resize((TARGET_WIDTH, round(cut.height * TARGET_WIDTH / cut.width)), Image.LANCZOS)
-    cut.save(target, "WEBP", lossless=True, method=6)
-    return cut
+    # alpha_matting 才是"绒毛感"的来源：它给出真正的半透明过渡带（约 6% 的像素），
+    # 而不是一条要么 0 要么 255 的硬边
+    cut = remove(
+        image,
+        session=new_session("u2net"),
+        alpha_matting=True,
+        alpha_matting_foreground_threshold=240,
+        alpha_matting_background_threshold=15,
+        alpha_matting_erode_size=12,
+    ).convert("RGBA")
+    big = cut.resize((TARGET_WIDTH, round(cut.height * TARGET_WIDTH / cut.width)), Image.LANCZOS)
+    rgb = big.convert("RGB").filter(ImageFilter.UnsharpMask(radius=1.4, percent=52, threshold=3))
+    big = Image.merge("RGBA", (*rgb.split(), big.getchannel("A")))
+    big.save(target, "WEBP", quality=92, method=6)
+    return big
 
 
 def verify(cut: Image.Image) -> None:
@@ -67,7 +76,10 @@ def verify(cut: Image.Image) -> None:
     assert left > 4 and width - right > 4, "主体贴住了左右边"
     assert (right - left) / width > 0.45, "主体太小"
     assert alpha.getpixel((width // 2, int(height * 0.42))) == 255, "脸中心不是完全不透明"
-    print(f"✓ {cut.size} 四边不透明 {opaque:.2%} 主体占比 {(right - left) / width:.0%} 顶留白 {top}px")
+    data = list(alpha.getdata())
+    semi = sum(1 for value in data if 0 < value < 255) / len(data)
+    print(f"✓ {cut.size} 四边不透明 {opaque:.2%} 主体占比 {(right - left) / width:.0%} "
+          f"顶留白 {top}px 半透明边缘 {semi:.1%}（这就是绒毛感，别把它压成 0）")
 
 
 def main() -> int:
