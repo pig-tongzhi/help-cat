@@ -46,8 +46,7 @@ class RescueH5ContractTests(unittest.TestCase):
     def test_77_public_media_is_sanitized_and_wired(self):
         asset_dir = ROOT / "app" / "rescue" / "assets" / "77"
         asset_names = (
-            "hero-desktop.webp",
-            "hero-mobile.webp",
+            "cat-cutout.webp",
             "rescue-day.webp",
             "grown-up.webp",
             "portrait.webp",
@@ -56,17 +55,11 @@ class RescueH5ContractTests(unittest.TestCase):
             path = asset_dir / name
             self.assertTrue(path.is_file(), f"{name} must exist")
             self.assertLess(path.stat().st_size, 450 * 1024, f"{name} must be below 450 KiB")
-        self.assertNotEqual(
-            hashlib.sha256((asset_dir / "hero-desktop.webp").read_bytes()).hexdigest(),
-            hashlib.sha256((asset_dir / "hero-mobile.webp").read_bytes()).hexdigest(),
-            "desktop and mobile heroes must use distinct responsive compositions",
-        )
 
         html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
-        for path in ("assets/77/hero-desktop.webp", "assets/77/hero-mobile.webp"):
-            self.assertIn(path, html)
+        self.assertIn("assets/77/cat-cutout.webp", html)
         self.assertIn(
-            '<img src="assets/77/hero-desktop.webp?v=20260923-product-r17" alt="77，一只白底黑斑的猫咪" width="960" height="720"',
+            '<img src="assets/77/cat-cutout.webp?v=20260923-product-r18" alt="77，一只白底黑斑的猫咪" width="760" height="851"',
             html,
         )
 
@@ -100,9 +93,9 @@ class RescueH5ContractTests(unittest.TestCase):
         page = (ROOT / "app/rescue/index.html").read_text()
         for marker in (
             '<meta name="theme-color" content="#F7F5F1">',
-            'rel="icon" href="assets/brand/favicon.svg?v=20260923-product-r17"',
-            'rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png?v=20260923-product-r17"',
-            'rel="manifest" href="manifest.webmanifest?v=20260923-product-r17"',
+            'rel="icon" href="assets/brand/favicon.svg?v=20260923-product-r18"',
+            'rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png?v=20260923-product-r18"',
+            'rel="manifest" href="manifest.webmanifest?v=20260923-product-r18"',
             'class="brand-logo brand-logo-77"',
         ):
             self.assertIn(marker, page)
@@ -116,7 +109,7 @@ class RescueH5ContractTests(unittest.TestCase):
     def test_brand_uses_one_77_master_across_all_surfaces(self):
         page = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
         manifest = json.loads((ROOT / "app" / "rescue" / "manifest.webmanifest").read_text(encoding="utf-8"))
-        version = "20260923-product-r17"
+        version = "20260923-product-r18"
         master = "assets/brand/helpcat-77-mark.svg?v=" + version
 
         self.assertRegex(
@@ -199,50 +192,53 @@ class RescueH5ContractTests(unittest.TestCase):
         # 契约真正要的是 contain —— 77 完整可见、不裁切，这条没变。
         self.assertRegex(image_rule.group("body"), r"object-position:\s*center\s+bottom")
 
-    def test_desktop_hero_is_square_composed_with_headroom(self):
-        """桌面 hero 素材必须是近方形构图：猫头占画面 45%~75%、头顶留白、
-        身体淡出而不是被硬切在底边。这三条是踩过坑之后的取景基线。"""
-        from PIL import ImageChops
+    def test_hero_cat_is_a_cutout_with_no_rectangle(self):
+        """首屏的猫必须是抠像（带 alpha）：四边若有一圈不透明像素，
+        就等于又把照片矩形贴回草坪上了。同时头顶要留白、脸要完全不透明。"""
+        image = Image.open(ROOT / "app" / "rescue" / "assets" / "77" / "cat-cutout.webp")
+        self.assertEqual("RGBA", image.mode, "抠像必须带 alpha 通道")
+        alpha = image.getchannel("A")
+        width, height = image.size
+        ring = []
+        for x in range(width):
+            ring += [alpha.getpixel((x, 0)), alpha.getpixel((x, height - 1))]
+        for y in range(height):
+            ring += [alpha.getpixel((0, y)), alpha.getpixel((width - 1, y))]
+        opaque = sum(1 for value in ring if value > 12)
+        self.assertLess(opaque / len(ring), 0.02, "四边必须基本透明，否则就是没抠干净")
 
-        image = Image.open(ROOT / "app" / "rescue" / "assets" / "77" / "hero-desktop.webp").convert("RGB")
-        ratio = image.width / image.height
-        self.assertGreater(ratio, 0.9, "桌面 hero 应为近方形构图，否则 contain 会留下大片空档")
-        self.assertLess(ratio, 1.1)
-        diff = ImageChops.difference(image, Image.new("RGB", image.size, (245, 241, 235))).convert("L")
-        bbox = diff.point(lambda value: 255 if value > 18 else 0).getbbox()
+        bbox = alpha.point(lambda value: 255 if value > 40 else 0).getbbox()
         self.assertIsNotNone(bbox)
         left, top, right, bottom = bbox
-        share = (right - left) / image.width
-        self.assertGreater(share, 0.45, "猫头不应占满画面（会被 contain 放大到糊）")
-        self.assertLess(share, 0.8, "猫头占比过大，构图会顶到边缘")
-        self.assertGreater(top, 20, "头顶要留出呼吸空间")
-        self.assertGreater(image.height - bottom, 20, "身体应淡出到背景，不能被硬切在底边")
+        self.assertGreater(top, 12, "头顶要留白，耳朵不能被画布切掉")
+        self.assertGreater(left, 4)
+        self.assertGreater(width - right, 4)
+        self.assertGreater((right - left) / width, 0.45, "主体占比太小会显得空")
+        # 半透明的猫看着像幽灵：脸中心必须完全不透明
+        self.assertEqual(255, alpha.getpixel((width // 2, int(height * 0.42))))
 
-    def test_hero_assets_have_warm_edges_without_black_strip_or_hard_seam(self):
-        target = (245, 241, 235)
-        for name in ("hero-desktop.webp", "hero-mobile.webp"):
-            image = Image.open(ROOT / "app" / "rescue" / "assets" / "77" / name).convert("RGB")
-            edges = []
-            for x in range(image.width):
-                edges.extend((image.getpixel((x, 0)), image.getpixel((x, image.height - 1))))
-            for y in range(image.height):
-                edges.extend((image.getpixel((0, y)), image.getpixel((image.width - 1, y))))
-            self.assertEqual(sum(max(pixel) < 18 for pixel in edges), 0, name + " must not contain near-black outer-edge pixels")
-            distances = sorted(sum(abs(channel - expected) for channel, expected in zip(pixel, target)) for pixel in edges)
-            background_p85 = distances[int(len(distances) * .85)]
-            self.assertLess(background_p85, 42, name + " background edges must converge to the warm hero token")
-
-        desktop = Image.open(ROOT / "app" / "rescue" / "assets" / "77" / "hero-desktop.webp").convert("RGB")
-        seam_x = desktop.width // 2
-        jumps = [sum(abs(a - b) for a, b in zip(desktop.getpixel((seam_x - 1, y)), desktop.getpixel((seam_x, y)))) for y in range(desktop.height)]
-        self.assertLess(sum(jumps) / len(jumps), 8, "desktop hero must not encode a hard center seam")
+    def test_home_hero_is_a_meadow_stage(self):
+        """草坪素材存在、被 CSS 引用，且近景草必须盖在猫前面（层级更高）。"""
+        scenery = ROOT / "app" / "rescue" / "assets" / "scenery"
+        for name in ("meadow-far.svg", "meadow-near.svg"):
+            path = scenery / name
+            self.assertTrue(path.is_file(), name + " 必须存在")
+            self.assertLess(path.stat().st_size, 300 * 1024, name + " 不该是巨无霸")
+        styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
+        self.assertIn('url("assets/scenery/meadow-far.svg")', styles)
+        self.assertIn('url("assets/scenery/meadow-near.svg")', styles)
+        html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
+        self.assertIn('class="hero-meadow-front" aria-hidden="true"', html)
+        self.assertIn('class="hero-atmosphere" aria-hidden="true"', html)
+        # 近景草要比照片列高一层，否则草跑到猫后面，"站在草里"就没了
+        self.assertIn("z-index: 3", all_rules(styles, ".hero-meadow-front"))
 
     def test_hero_is_a_clean_product_page_stage(self):
         """首屏走苹果产品页那套：近白底 + 巨大无衬线标题 + 一个强调色。
         背景里除了渐变和一层几乎看不见的暖光，不允许再有点阵/同心弧/彩色柔光。"""
         styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
         atmosphere = all_rules(styles, ".hero-atmosphere")
-        self.assertIn("linear-gradient(180deg, #FFFFFF", atmosphere)
+        self.assertIn('url("assets/scenery/meadow-far.svg")', atmosphere, "首屏底色是草坪")
         self.assertNotIn("repeating-radial-gradient", styles, "同心弧已经删掉了")
         self.assertNotIn("background-image: radial-gradient(rgba(23, 23, 23", styles, "点阵已经删掉了")
         # 标题换成系统无衬线（苹果页面是 SF / PingFang），并且不能被旧宽度上限折成碎片
@@ -252,16 +248,13 @@ class RescueH5ContractTests(unittest.TestCase):
         self.assertIn("letter-spacing: -.04em", h1)
         self.assertNotIn("Georgia", h1, "首屏标题不该再用衬线体")
 
-    def test_desktop_stage_fills_while_phone_keeps_77_whole(self):
-        """桌面舞台用 cover 铺满整列；手机必须仍是 contain（77 完整可见）。
-        这两条写反的话，要么桌面留出大片空档，要么手机上把 77 裁掉。"""
+    def test_hero_cat_is_never_cropped(self):
+        """猫是抠像：任何宽度下都必须 contain。裁掉耳朵比留白糟得多，
+        而且抠像一旦被 cover 裁切，草坪上就只剩半个猫头。"""
         styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
-        self.assertRegex(
-            styles,
-            r"@media \(min-width: 721px\) \{[^}]*\.reference-hero \.editorial-hero-visual img \{[^}]*object-fit: cover",
-        )
-        mobile = re.search(r"@media \(max-width: 720px\) \{(?P<body>.*?)\n\}", styles, re.S).group("body")
-        self.assertNotIn("object-fit: cover", mobile, "手机端不能把 77 裁掉")
+        rules = all_rules(styles, ".reference-hero .editorial-hero-visual img")
+        self.assertIn("object-fit: contain", rules)
+        self.assertNotIn("object-fit: cover", rules)
 
     def test_hero_footnote_carries_the_77_facts(self):
         """首屏那行脚注是 77 故事的既有事实（初见时间 / 名字由来），不允许另编一套。
@@ -276,18 +269,16 @@ class RescueH5ContractTests(unittest.TestCase):
         self.assertIn("hero-footnote", html[copy_start:copy_end], "脚注要在文案块内（跟着分层入场）")
         self.assertGreater(html.index("hero-footnote"), html.index("editorial-hero-actions"))
         # 首屏只保留两个装饰层，且都对读屏器隐身
-        self.assertEqual(2, len(re.findall(r'class="hero-(?:atmosphere|photo-wash)" aria-hidden="true"', html)))
+        self.assertEqual(2, len(re.findall(r'class="hero-(?:atmosphere|meadow-front)" aria-hidden="true"', html)))
 
-    def test_dark_data_band_keeps_its_numbers_readable(self):
-        """深色数据带：白字压在黑底上。数据条自己带着 #fff 底和描边，
-        只把卡片做成半透明的话白底会透出来 —— 白字压白条，数字直接看不见。"""
+    def test_data_band_stays_warm_and_light(self):
+        """数据带保持浅色暖调 —— 深色那版被否了（"黑色有点难看"）。
+        这条测试的作用就是别再把它做成深色。"""
         styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
         band = all_rules(styles, ".impact-band")
-        self.assertIn("background: #0B0B0C", band)
-        strip = all_rules(styles, ".impact-band .impact-strip")
-        self.assertIn("background: transparent", strip, "深色带里的数据条必须显式清掉自带白底")
-        strong = all_rules(styles, ".impact-band .metric-card strong")
-        self.assertIn("color: #FFFFFF", strong)
+        self.assertIn("linear-gradient(160deg, #FFFFFF", band, "数据带要回到原来那条暖色渐变")
+        self.assertNotIn("#0B0B0C", styles, "深色数据带的覆盖必须清干净")
+        self.assertNotIn("color: #FFFFFF", all_rules(styles, ".impact-band .metric-card strong"))
 
     def test_rescue_home_has_editorial_hero_and_story_entry(self):
         html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
@@ -543,7 +534,7 @@ class RescueH5ContractTests(unittest.TestCase):
         version_script = (ROOT / "app" / "rescue" / "version.js").read_text(encoding="utf-8")
         styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
         for marker in (
-            'data-app-version="20260923-product-r17"',
+            'data-app-version="20260923-product-r18"',
             'id="version-update"',
             'id="reload-version"',
         ):
@@ -554,7 +545,7 @@ class RescueH5ContractTests(unittest.TestCase):
             'fetchPage(path, { cache: "no-store" })',
             "if (!response.ok)",
             "if (match && match[1] !== current)",
-            'CURRENT_VERSION = "20260923-product-r17"',
+            'CURRENT_VERSION = "20260923-product-r18"',
             "current: CURRENT_VERSION",
         ):
             self.assertIn(marker, version_script)
@@ -572,7 +563,7 @@ class RescueH5ContractTests(unittest.TestCase):
 
     def test_rescue_assets_are_versioned_in_dependency_order(self):
         html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
-        version = "20260923-product-r17"
+        version = "20260923-product-r18"
         for asset in ("styles.css", "api.js", "community-form.js", "version.js", "story-77.js", "app.js"):
             self.assertIn(f'{asset}?v={version}', html)
         api_index = html.index(f'api.js?v={version}')
@@ -610,7 +601,7 @@ class RescueH5ContractTests(unittest.TestCase):
         self.assertIn('<button class="story-back" type="button"', story)
         self.assertIn('<button class="button primary" type="button" data-story-action="cats">', story)
         self.assertIn('<button class="button secondary" type="button" data-story-action="create-cat">', story)
-        self.assertIn('story-77.js?v=20260923-product-r17', html)
+        self.assertIn('story-77.js?v=20260923-product-r18', html)
 
     def test_primary_and_update_actions_meet_77_accessibility_contract(self):
         styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")

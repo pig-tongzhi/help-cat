@@ -1092,24 +1092,18 @@ button, a, label, select, .nav-item, .quick-action, .primary-action,
 }
 
 /* ==========================================================================
-   主页面首屏：Apple 产品页式改版（2026-09-24 第二轮）
+   主页面首屏：草坪舞台（2026-09-24 第三轮）
    位置要求：必须在 "Brand hero final cascade" 之后（要覆盖它），留在"动效层"之前。
-   背景契约同上一版：final cascade 之后凡是选择器里出现 .reference-hero /
+   背景契约不变：final cascade 之后凡是选择器里出现 .reference-hero /
    .editorial-hero-copy / .editorial-hero-visual 的规则，background 只允许
-   var(--hero-backdrop) 或 transparent、border 必须是 0，所以装饰仍然独立命名。
+   var(--hero-backdrop) 或 transparent、border 必须是 0，所以装饰独立命名。
 
-   设计口径（对着苹果发布页抄的是"克制"，不是抄元素）：
-   - 背景回到近白：一条极淡的竖向渐变 + 猫身后一团几乎看不见的暖光 + 底部一条发丝线。
-     上一版的点阵、同心弧、彩色柔光、宝丽来全部删掉 —— 那些是"加东西"，
-     苹果的高级感来自减法：大留白、巨大而收紧的标题、只留一个强调色。
-   - 标题换成 SF/PingFang 无衬线、字重 600、字距收到 -.04em、行高 1.05，
-     尺寸用 clamp 顶到 96px；说明文字放到 21px、灰 #6E6E73、行长压到 40 字符。
-   - CTA 只留两颗：实心橙胶囊 + 次级文字链，其余装饰一律不加。
-   - 首屏右下角一个"stage"：77 直接压在背景上（素材本身的边缘就是暖底色，
-     与渐变同族，所以不需要卡片、不需要描边），底部用遮罩淡出，身下一团接触阴影。
+   这一轮的取向换成"色彩丰富但不吵"：
+   - 底色是草坪：暖白天空 + 一团太阳光 + 远山（SVG），近景草叶与花再盖一层。
+   - 猫换成抠像（带 alpha），站在草里。没有照片矩形，也就不需要"融进底色"那套处理。
+   - 近景草 z-index 比猫高，草会压在猫的下半身前面 —— 这是"站在草里"的关键。
    ========================================================================== */
 
-/* 近白底 + 一点暖光。发丝线落在区块真正的底边（氛围层上下各留了 40px 余量）。 */
 .hero-atmosphere {
   position: absolute;
   top: -40px;
@@ -1119,40 +1113,39 @@ button, a, label, select, .nav-item, .quick-action, .primary-action,
   z-index: 0;
   pointer-events: none;
   background:
-    radial-gradient(56% 50% at 73% 58%, rgba(217, 104, 58, .08) 0%, rgba(217, 104, 58, 0) 74%),
-    linear-gradient(180deg, #FFFFFF 0%, #FBFAF8 42%, #F5F1EB 100%);
+    url("assets/scenery/meadow-far.svg") right bottom / cover no-repeat,
+    linear-gradient(180deg, #FFFDF9 0%, #FDF3E4 52%, #F7F9F5 100%);
 }
+.hero-atmosphere:before,
 .hero-atmosphere:after { content: none; }
-/* 首屏底部那条发丝线撤掉了：浅底上它是最扎眼的一条"分割线"，
-   苹果页面靠留白和渐变收边，不画线。 */
-.hero-atmosphere:before { content: none; }
 
-/* 照片列让出底色，氛围层才透得上来（transparent 是契约允许的取值） */
+/* 照片列完全让出底色（猫是抠像，没有照片矩形） */
 .reference-hero .editorial-hero-visual { background: transparent; }
 
-/* stage：底边淡出 + 左缘接回底色（桌面两栏之间不能有硬缝）。 */
-.reference-hero .editorial-hero-visual {
-  -webkit-mask-image: linear-gradient(180deg, #000 87%, transparent 100%);
-  mask-image: linear-gradient(180deg, #000 87%, transparent 100%);
+/* 猫像站在草地上：投影跟着 alpha 走，底部交给近景草盖住 */
+.reference-hero .editorial-hero-visual img {
+  object-fit: contain;
+  object-position: center bottom;
+  filter: drop-shadow(0 16px 26px rgba(58, 82, 46, .26));
 }
-@media (min-width: 721px) {
-  /* 桌面：图铺满整列，猫占满右侧"舞台"（素材是近方形，cover 的横向裁切在 10% 以内，
-     猫头只占画面中部 45%~80%，不会被裁到）。手机仍按契约用 contain 完整显示。 */
-  .reference-hero .editorial-hero-visual img { object-fit: cover; object-position: 58% center; }
-}
-.hero-photo-wash {
+
+/* 文案列必须透明：桌面那条最终级联给它铺了 --hero-backdrop 平色，
+   放在草坪上就是一块压在山坡上的米色矩形（透明是契约允许的取值）。 */
+.reference-hero .editorial-hero-copy { background: transparent; }
+
+/* 近景草：盖在猫的前面，猫才像"站在草里"而不是"贴在草地上" */
+.hero-meadow-front {
   position: absolute;
-  left: 50%;
-  top: 0;
-  width: 50%;
-  height: 100%;
-  z-index: 2;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  height: min(300px, 44%);
   pointer-events: none;
-  background:
-    radial-gradient(46% 7% at 50% 96%, rgba(120, 96, 72, .16) 0%, rgba(120, 96, 72, 0) 72%),
-    linear-gradient(90deg, #F7F6F3 0%, rgba(247, 246, 243, 0) 22%),
-    linear-gradient(180deg, rgba(255, 255, 255, .4) 0%, rgba(255, 255, 255, 0) 24%);
+  background: url("assets/scenery/meadow-near.svg") center bottom / cover no-repeat;
 }
+
+.reference-hero .editorial-hero-visual { background: transparent; }
 
 /* ---------- 版式：把首屏做成产品页的"标题区" ---------- */
 
@@ -1283,45 +1276,10 @@ button, a, label, select, .nav-item, .quick-action, .primary-action,
 .button.secondary { border: 0; background: #F5F5F7; }
 .button.secondary:hover { background: #ECECEF; }
 
-/* ---------- 深色数据带：一节亮一节暗的节奏，成果数字成为第二个重心 ---------- */
-
-.impact-band {
-  padding: clamp(28px, 4vw, 48px) clamp(20px, 3.4vw, 42px);
-  border: 0;
-  border-radius: 30px;
-  background: #0B0B0C;
-  box-shadow: 0 34px 80px rgba(11, 11, 12, .22);
-  color: #F5F5F7;
-}
-.impact-band .section-kicker { color: #F0A06A; }
-.impact-band-head h2 { color: #F5F5F7; font-size: clamp(22px, 3vw, 32px); letter-spacing: -.03em; }
-.impact-band-note { color: #A1A1A6; }
-/* 数据条自己还带着 #fff 底和上下描边（.impact-strip 那一层写的），
-   只把卡片做成半透明的话，白底会从卡片后面透出来 —— 白字压在白条上等于看不见。
-   这里必须把条本身也清掉。 */
-.impact-band .impact-strip { background: transparent; border: 0; }
-.impact-band .metric-card {
-  border: 1px solid rgba(255, 255, 255, .1);
-  border-radius: 20px;
-  background: rgba(255, 255, 255, .045);
-}
-.impact-band .metric-card strong { color: #FFFFFF; font-size: clamp(28px, 3.2vw, 42px); letter-spacing: -.03em; }
-.impact-band .metric-card small { color: #A1A1A6; }
-/* 图标本来是"淡桃底 + 橙字"的圆角方块，放到黑底上是一块发亮的光斑；
-   改成半透明白底 + 暖橙字，才像深色模式里的图标。 */
-.impact-band .editorial-metric-icon {
-  border: 1px solid rgba(255, 255, 255, .16);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, .08);
-  color: #F0A06A;
-}
-
 @media (max-width: 720px) {
-  /* 手机上照片改为满宽出血并居中取景：素材边缘就是暖底色，与近白渐变同族，
-     所以满宽压在背景上不会有硬缝（契约仍要求 contain + 完整可见，未改动）。
-     照片行给固定高度，底部再淡出，77 像是站在留白里而不是贴一张卡片。 */
-  .reference-hero { --hero-photo-h: 380px; }
-  /* 34px 在手机上偏小；9.4vw ≈ 37px 仍能让「让每一只小猫，」整行放下（约 259px < 358px） */
+  /* 手机：猫居中站在草里。草地高度按变量走，近景草压住猫的下半身。 */
+  .reference-hero { --hero-photo-h: 360px; }
+  /* 34px 偏小；9.4vw ≈ 37px 仍能让「让每一只小猫，」整行放下（约 259px < 358px） */
   .reference-hero h1 { font-size: clamp(36px, 9.4vw, 42px); }
   .product-lede { max-width: none; font-size: 15.5px; line-height: 1.62; }
   .reference-hero .editorial-hero-visual {
@@ -1331,20 +1289,7 @@ button, a, label, select, .nav-item, .quick-action, .primary-action,
     border-radius: 0;
     background: transparent;
   }
-  .hero-photo-wash {
-    left: 0;
-    right: 0;
-    top: auto;
-    width: auto;
-    bottom: 0;
-    height: var(--hero-photo-h);
-    background:
-      radial-gradient(52% 8% at 50% 97%, rgba(120, 96, 72, .16) 0%, rgba(120, 96, 72, 0) 74%),
-      linear-gradient(180deg, #FFFFFF 0%, rgba(255, 255, 255, 0) 26%);
-  }
-  /* 手机首屏不塞脚注以外的第二块内容，说明卡留在上一版的经验：绝对定位贴底会被悬浮按钮压住 */
-  .impact-band { padding: 24px 18px; border-radius: 24px; }
-  .impact-band .metric-card { border: 0; border-radius: 0; background: transparent; }
+  .hero-meadow-front { height: min(240px, 30%); }
 }
 
 /* ==========================================================================
