@@ -1147,6 +1147,11 @@ button, a, label, select, .nav-item, .quick-action, .primary-action,
   background: url("assets/scenery/meadow-near.svg") center bottom / cover no-repeat;
 }
 
+/* 悬浮按钮滚到数据带时让开（见 app.js 的 initFabClearance）：
+   它固定在右下角，会压住"医疗救助/爱心支持"两张卡的正文。 */
+.floating-action { transition: opacity 300ms cubic-bezier(.22, .61, .36, 1), transform 300ms cubic-bezier(.22, .61, .36, 1); }
+.is-fab-cleared .floating-action { opacity: 0; transform: translateY(12px); pointer-events: none; }
+
 .reference-hero .editorial-hero-visual { background: transparent; }
 
 /* ---------- 版式：把首屏做成产品页的"标题区" ---------- */
@@ -1279,20 +1284,97 @@ button, a, label, select, .nav-item, .quick-action, .primary-action,
 .button.secondary:hover { background: #ECECEF; }
 
 @media (max-width: 720px) {
-  /* 手机：猫居中站在草里。草地高度按变量走，近景草压住猫的下半身。 */
-  .reference-hero { --hero-photo-h: 360px; }
-  /* 34px 偏小；9.4vw ≈ 37px 仍能让「让每一只小猫，」整行放下（约 259px < 358px） */
+  /* 首屏一屏装下：视口高 − 顶栏 − 底部导航（含安全区）。
+     之前 hero 是 805px、可用只有 702px，草地和猫的胸口被底栏盖住大半；
+     360x640 的小屏上底栏从 572 就开始盖，几乎看不到猫。
+     现在文案行 auto、舞台吃掉剩下的 1fr，草地在可视区底部，猫完整站在草里。 */
+  .reference-hero {
+    height: calc(100vh - 142px - env(safe-area-inset-bottom, 0px));
+    height: calc(100svh - 142px - env(safe-area-inset-bottom, 0px));
+    /* 极短屏（360x640）兜底：公式值 498 会被这条顶住一点点，宁可草地被底栏压一点 */
+    min-height: 500px;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  /* 文案块的上下内边距按手机给：原来继承了桌面那条 clamp(32px,...)，四周各 32px */
+  .reference-hero .editorial-hero-copy { padding: 20px 16px 12px; }
   .reference-hero h1 { font-size: clamp(36px, 9.4vw, 42px); }
-  .product-lede { max-width: none; font-size: 15.5px; line-height: 1.62; }
+  .product-lede { max-width: none; margin-top: 12px; font-size: 15.5px; line-height: 1.62; }
+  .product-region { margin-top: 12px; }
+  /* 两颗 CTA 排成一行：原来主按钮占满一行 50px、次级链接又占一行 44px，白吃 46px。
+     更靠前的 390px 断点写过 width:100%，这里必须显式改回 auto。 */
+  /* max-width 必须解掉：更早的 390px 断点把它限成 220px，两颗按钮并排时
+     「77 的故事」会被挤到折行。 */
+  .editorial-hero-actions { flex-wrap: nowrap; align-items: center; gap: 0 16px; margin-top: 18px; max-width: none; }
+  .editorial-hero-actions > * { white-space: nowrap; }
+  /* :not(.welcome-entry) 很关键：「欢迎页」也带 .editorial-story-link 类，
+     不加限定会把次级入口一起变成实心橙胶囊（主次就分不清了）。
+     这样写还顺带让契约测试取到版式块里那条规则（它才有 background/radius）。 */
+  .editorial-hero-actions .editorial-story-link:not(.welcome-entry) {
+    flex: 1 1 auto;
+    width: auto;
+    min-height: 48px;
+    padding: 0 18px;
+    font-size: 15.5px;
+  }
+  .editorial-hero-actions .welcome-entry {
+    flex: 0 0 auto;
+    width: auto;
+    min-height: 44px;
+    background: transparent;
+    color: var(--brand-dark);
+  }
+  .hero-footnote { margin-top: 14px; font-size: 11.5px; }
+  /* 舞台 = 剩余空间；猫按 contain 完整显示，草盖住它的下半身 */
   .reference-hero .editorial-hero-visual {
-    grid-row: 3;
-    height: var(--hero-photo-h);
+    grid-row: 2;
+    height: auto;
+    min-height: 0;
     margin: 0;
     border-radius: 0;
     background: transparent;
   }
-  .hero-meadow-front { height: min(240px, 30%); }
+  .hero-meadow-front { height: min(190px, 30%); }
+
+  /* 手机端数据带改 2x2：4 列时每格只有 86px、标签 8px，而且会被悬浮按钮压住文字。
+     2x2 后数字更大、也不再被压到正文。 */
+  .impact-strip.metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .impact-strip .metric-card { min-height: 68px; }
+  .impact-strip .metric-card strong { font-size: 22px; }
+  .impact-strip .metric-card small { font-size: 11px; }
 }
+
+/* ---------- 去线：页面级的横线全部撤掉 ----------
+   浅底上 1px 灰线最显眼，也最"廉价"。苹果的做法是：不用线，用
+   ①毛玻璃 + 柔和阴影（顶栏/底栏）②淡填充块（卡片）③留白（区块之间）。 */
+.app-header {
+  border-bottom: 0;
+  background: rgba(251, 251, 253, .78);
+  -webkit-backdrop-filter: saturate(180%) blur(22px);
+  backdrop-filter: saturate(180%) blur(22px);
+}
+/* 滚动后只留一道极淡的投影做分界，不画线 */
+.is-scrolled .app-header { box-shadow: 0 1px 0 rgba(29, 29, 31, .05), 0 12px 32px rgba(29, 29, 31, .05); }
+.bottom-nav {
+  border-top: 0;
+  border-color: transparent;
+  background: rgba(255, 255, 255, .82);
+  -webkit-backdrop-filter: saturate(180%) blur(22px);
+  backdrop-filter: blur(22px);
+  box-shadow: 0 -10px 34px rgba(29, 29, 31, .08);
+}
+/* 卡片：描边换成淡填充。1px 灰框在近白底上像线框稿，淡块才有"内容"的实感 */
+.quick-action,
+.cat-card,
+.feeding-teaser,
+.trust-panel,
+.trust-grid article,
+.empty-state,
+.task-card {
+  border-color: transparent;
+  background: #F5F5F7;
+}
+.button.secondary { border: 0; background: #F5F5F7; }
+.button.secondary:hover { background: #ECECEF; }
 
 /* ==========================================================================
    动效层（2026-09-24）

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>方案 B · 深色（抠像）</title>
+<style>
+  :root { --brand: #D9683A; --warm: #F0A06A; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #0B0B0C; color: #F5F5F7;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Helvetica Neue", sans-serif; }
+  .stage { position: relative; overflow: hidden; min-height: 100vh;
+    background: radial-gradient(58% 48% at 66% 30%, rgba(240,160,106,.20), rgba(240,160,106,0) 70%),
+                linear-gradient(180deg, #191715 0%, #0B0B0C 62%); }
+  .copy { position: relative; z-index: 3; max-width: 720px; padding: clamp(40px, 4vw, 72px); }
+  .eyebrow { color: #A1A1A6; font-size: 12px; font-weight: 600; letter-spacing: .16em; }
+  h1 { margin: 0; font-size: clamp(36px, 4.4vw, 64px); font-weight: 600; line-height: 1.06; letter-spacing: -.04em; color: #F5F5F7; }
+  .lede { max-width: 38ch; margin: 20px 0 0; color: #A1A1A6; font-size: clamp(16px, 1.5vw, 21px); line-height: 1.5; }
+  .actions { display: flex; align-items: center; gap: 26px; margin-top: 32px; }
+  .pill { display: inline-flex; align-items: center; gap: 10px; min-height: 50px; padding: 0 28px; border: 0; border-radius: 999px;
+    background: var(--brand); color: #171717; font-size: 16px; font-weight: 600; box-shadow: 0 12px 34px rgba(217,104,58,.35); }
+  .link { color: var(--warm); font-size: 16px; text-decoration: none; }
+  .note { margin: 30px 0 0; color: #6E6E73; font-size: 12.5px; }
+  /* 抠像出来的 77 直接站在暗底上，没有照片矩形边界 */
+  .cat { position: absolute; z-index: 2; right: 3%; bottom: 0; width: min(52vw, 640px); pointer-events: none; }
+  .cat img { display: block; width: 100%; height: auto;
+    filter: drop-shadow(0 40px 60px rgba(0,0,0,.55)) drop-shadow(0 0 90px rgba(240,160,106,.18)); }
+  .label { position: fixed; left: 16px; bottom: 16px; z-index: 9; padding: 7px 13px; border-radius: 999px;
+    background: rgba(245,245,247,.92); color: #171717; font-size: 12px; }
+  @media (max-width: 720px) {
+    .stage { min-height: 0; padding-bottom: 0; }
+    .copy { max-width: none; padding: 40px 20px 0; }
+    .cat { position: relative; right: auto; bottom: auto; width: 86%; margin: -10px auto 0; }
+  }
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="copy">
+    <span class="eyebrow">招同行人</span>
+    <h1>让每一只小猫，<br>都被认真看见</h1>
+    <p class="lede">杭州富阳的社区流浪猫投喂与伤病救助。懂网站开发的、有喂猫经验的、单纯喜欢猫的，都欢迎加入。</p>
+    <div class="actions"><button class="pill">77 的故事 →</button><a class="link" href="#">欢迎页 ›</a></div>
+    <p class="note">初见 77 · 2025 年 6 月 2 日，名字来自农历五月初七</p>
+  </div>
+  <div class="cat"><img src="_lab-77-cutout.webp" alt="77"></div>
+</div>
+<div class="label">方案 B · 深色底 + 77 抠像（无照片边界）</div>
+</body>
+</html>

@@ -266,6 +266,27 @@
     });
   }
 
+  var fabObserver = null;
+
+  // 悬浮按钮让开数据带：手机上它固定在右下角，会压住"医疗救助/爱心支持"两张卡的正文。
+  // 视图每次重渲染都会换掉 DOM 节点（会话恢复后会重渲一次），所以要先断开上一轮的观察者，
+  // 否则盯着的是已经摘出文档的节点，永远等不到回调。
+  function initFabClearance() {
+    // 先查能力再碰 DOM：路由测试里的 document 只实现了 querySelectorAll，
+    // 而且这个函数会被 renderView 调用，写 querySelector 会直接把测试打挂。
+    if (!("IntersectionObserver" in window)) return;
+    var bands = document.querySelectorAll ? document.querySelectorAll(".impact-band") : [];
+    var band = bands && bands[0];
+    if (!band) return;
+    if (fabObserver) fabObserver.disconnect();
+    fabObserver = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        document.documentElement.classList.toggle("is-fab-cleared", entry.isIntersecting);
+      });
+    }, { threshold: 0.15 });
+    fabObserver.observe(band);
+  }
+
   function observeReveals(root) {
     if (!motion.observer || !root || !root.querySelectorAll) return;
     Array.prototype.forEach.call(
@@ -1332,6 +1353,7 @@
     if (state.view === "tasks") loadMyTasks();
     // 动效侧收尾：切换视图后补一次揭示，并把底部导航滑块移到新的选中项
     refreshMotionForView();
+    initFabClearance();
     settleVisibleMotion();
     syncNavIndicator();
   }
@@ -1921,6 +1943,7 @@
   renderStory();
   renderApp();
   initMotion();
+  initFabClearance();
   initHeaderMotion();
   syncNavIndicator();
   window.addEventListener("resize", function () { syncNavIndicator(); });
