@@ -416,6 +416,13 @@ class ProductH5ContractTests(unittest.TestCase):
         self.assertIn("remember: !!remember", script)
         self.assertIn('byId("login-remember").checked', script)
 
+    def test_admin_boot_asks_the_server_before_showing_login(self):
+        """后台也不能因为"本机没有令牌"就直接弹登录框：会话可能来自 HttpOnly Cookie。
+        （后台在 HTTPS、H5 在 HTTP 时是不同源，localStorage 不共享，只能靠 Cookie。）"""
+        script = (ROOT / "admin" / "app.js").read_text(encoding="utf-8")
+        self.assertNotIn("if (token) restoreSession()", script, "这一行会让人从主页进后台又要登录一次")
+        self.assertIn("restoreSession().then(function () { switchSection(state.section); })", script)
+
     def test_admin_console_lists_and_revokes_devices(self):
         """长期免登录必须有出口：后台要能列出登录中的设备并一键踢掉。"""
         html = (ROOT / "admin" / "index.html").read_text(encoding="utf-8")

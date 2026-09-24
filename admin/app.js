@@ -1190,6 +1190,9 @@
 
   var initialSection = window.location.hash.replace("#", "");
   if (["overview", "cats", "communities", "feeding", "tasks", "messages", "impact", "users"].indexOf(initialSection) >= 0) state.section = initialSection;
-  if (token) restoreSession().then(function () { switchSection(state.section); }).catch(function () {});
-  else showLogin("");
+  // 总是先问服务端，不要因为"本机没有令牌"就直接弹登录框：
+  // 会话也可能来自 HttpOnly Cookie（H5 登录后同一个 host 共享），
+  // 而且后台强制 HTTPS、H5 走 HTTP 时两者是**不同源**，localStorage 根本不共享。
+  // 这里和 app/rescue/api.js 的 restoreSession 是同一个坑，别再改回去。
+  restoreSession().then(function () { switchSection(state.section); }).catch(function () {});
 }());
