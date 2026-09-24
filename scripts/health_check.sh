@@ -85,6 +85,22 @@ check_status_200() {
   if [ "$code" = "200" ]; then pass "$label"; else fail "$label: HTTP $code ($url)"; fi
 }
 
+# 后台已经强制 HTTPS（管理员密码只能在加密链路里出现），所以：
+# 页面要能从 HTTPS 取到 200，同时 HTTP 必须 301 过去。
+check_admin_https() {
+  local base="$1"
+  local https_base
+  https_base="$(printf '%s' "$base" | sed 's#^http://#https://#')"
+  check_status_200 "${https_base}/help-cat/admin/" "后台 HTTPS 可访问"
+  local code
+  code="$(curl -sS --max-time "$TIMEOUT" -o /dev/null -w '%{http_code}' "${base}/help-cat/admin/" 2>/dev/null)"
+  if [ "$code" = "301" ] || [ "$code" = "302" ]; then
+    pass "后台 HTTP 会跳到 HTTPS"
+  else
+    fail "后台 HTTP 没有跳 HTTPS（HTTP ${code}）—— 管理员密码可能被明文传输"
+  fi
+}
+
 # 关键静态素材：发布漏打包一张图时，页面不会报错，只是"照片不显示" —— 线上真踩过
 # （换 77 故事第 6 章的照片时漏了一张未跟踪的 webp）。所以逐个探一遍，并要求
 # Content-Type 确实是图片/样式/脚本，而不是被 SPA 回退成的 index.html。
@@ -116,16 +132,54 @@ check_static_assets() {
   check_asset "$base$prefix/story-77.js" "$prefix 77故事脚本" "*javascript*"
 }
 
+# IP 证书用的是 Let's Encrypt 的 shortlived 配置，只有 6 天。续期一旦没跑起来，
+# 浏览器会直接拦下后台登录 —— 必须体检能提前发现，而不是等用户报错。
+# 用 openssl 的 -checkend 判断，避免在 macOS/Linux 上做日期差（两边的 date 不一样）。
+check_https_cert() {
+  local host="$1" label="$2" min_days="${3:-2}"
+  if ! command -v openssl >/dev/null 2>&1; then
+    say "· 跳过 ${label}（本机没有 openssl）"
+    return
+  fi
+  local pem
+  pem="$(echo | openssl s_client -connect "${host}:443" 2>/dev/null | openssl x509 2>/dev/null)"
+  if [ -z "$pem" ]; then
+    fail "$label: 443 上取不到证书（HTTPS 掉了？）"
+    return
+  fi
+  if printf '%s' "$pem" | openssl x509 -checkend $((min_days * 86400)) -noout >/dev/null 2>&1; then
+    pass "${label}（剩余超过 ${min_days} 天）"
+  else
+    fail "$label: 证书在 ${min_days} 天内过期，续期可能没跑起来"
+  fi
+}
+
+# 只跑 HTTP 的测试夹具专用（生产不要设）：跳过 HTTPS 相关检查。
+HTTP_ONLY="${HELPCAT_HEALTH_HTTP_ONLY:-0}"
+
 say "帮帮小猫探活 $(date '+%F %T')  base=$BASE_URL"
 
 check_json_ok "$BASE_URL$API_PREFIX/api/v1/health" '"status": *"ok"' "后端 liveness"
 # readiness 会真查一次库；带数据库故障时这里必须是 503 而不是 200。
 check_json_ok "$BASE_URL$API_PREFIX/api/v1/health/ready" '"database": *"ok"' "后端 readiness（含数据库）"
 check_status_200 "$BASE_URL/help-cat/rescue/index.html" "IP 入口 H5"
-check_status_200 "$BASE_URL/help-cat/admin/" "IP 入口后台"
+if [ "$HTTP_ONLY" = "1" ]; then
+  say "· 跳过 HTTPS 检查（HELPCAT_HEALTH_HTTP_ONLY=1，仅测试夹具用）"
+else
+  check_admin_https "$BASE_URL"
+fi
 check_status_200 "$BASE_URL/help-cat/welcome/" "IP 入口欢迎页"
 # 两个入口都提供 /help-cat/rescue/... 这份 alias，所以同一组路径两边都能探。
 check_static_assets "$BASE_URL" "/help-cat/rescue"
+if [ "$HTTP_ONLY" != "1" ]; then
+  check_status_200 "$(printf '%s' "$BASE_URL" | sed 's#^http://#https://#')/help-cat/rescue/" "IP 入口 H5（HTTPS）"
+fi
+
+# HTTPS 证书（IP 证书 6 天有效，这一条是续期的兜底监控）
+HTTPS_HOST="$(printf '%s' "$BASE_URL" | sed -e 's#^https*://##' -e 's#/.*$##' -e 's#:.*$##')"
+if [ -n "$HTTPS_HOST" ] && [ "$HTTP_ONLY" != "1" ]; then
+  check_https_cert "${HTTPS_HOST}" "HTTPS 证书（${HTTPS_HOST}）"
+fi
 
 # 域名入口：ICP 备案没下来之前解析会被拦，所以默认只告警不计数都难，这里只在
 # 显式换 base 时才检查，避免每天固定误报。

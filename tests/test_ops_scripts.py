@@ -194,6 +194,15 @@ class UptimeWorkflowTests(unittest.TestCase):
 
 
 class OpsScriptTests(unittest.TestCase):
+    def test_health_check_watches_the_https_certificate(self):
+        """IP 证书只有 6 天，续期出问题必须能被体检发现，而不是等用户打不开后台。"""
+        source = (REPO_ROOT / "scripts" / "health_check.sh").read_text(encoding="utf-8")
+        self.assertIn("openssl x509 -checkend", source)
+        self.assertIn("86400", source, "按天数换算秒，别做日期差（macOS 与 Linux 的 date 不一样）")
+        self.assertIn('check_https_cert "${HTTPS_HOST}"', source, "检查要真的接进主流程")
+        # 后台强制 HTTPS 之后，体检必须验"HTTPS 能开 + HTTP 会跳"，否则密码可能被明文传
+        self.assertIn("check_admin_https", source)
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
@@ -217,6 +226,8 @@ class OpsScriptTests(unittest.TestCase):
             HELPCAT_BASE_URL=base,
             HELPCAT_HEALTH_LOG=str(self.root / "health.log"),
             HELPCAT_DB_PATH=str(self.root / "missing.db"),
+            # 夹具只有 HTTP，没有 TLS 端口：显式跳过 HTTPS 相关检查
+            HELPCAT_HEALTH_HTTP_ONLY="1",
         )
         environment.pop("HELPCAT_ALERT_WEBHOOK", None)
         return subprocess.run(
