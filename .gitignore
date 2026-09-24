@@ -42,3 +42,7 @@ tests/test_rescue_models.py
 tests/test_rescue_service.py
 tests/test_volcengine_*.py
 tests/test_workflow.py
+
+# 本地对比用的实验页（不是产品内容，绝不能随发布上线）
+app/rescue/_lab-*.html
+app/rescue/_lab-*.webp
