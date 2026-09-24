@@ -5,7 +5,22 @@
   var TOKEN_KEY = "help_cat_admin_token";
   var H5_TOKEN_KEY = "help_cat_token";
   var communityReview = window.HelpCatCommunityReview;
-  var token = sessionStorage.getItem(TOKEN_KEY) || "";
+  // 令牌优先读 localStorage：勾了"记住这台设备"就存在那里，关掉浏览器也还在；
+  // 没勾的临时登录放在 sessionStorage（关标签页即失效）。
+  function readToken() {
+    try { return localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY) || ""; }
+    catch (error) { return sessionStorage.getItem(TOKEN_KEY) || ""; }
+  }
+  function writeToken(value, remember) {
+    clearToken();
+    try { (remember ? localStorage : sessionStorage).setItem(TOKEN_KEY, value); }
+    catch (error) { sessionStorage.setItem(TOKEN_KEY, value); }
+  }
+  function clearToken() {
+    try { localStorage.removeItem(TOKEN_KEY); } catch (error) {}
+    sessionStorage.removeItem(TOKEN_KEY);
+  }
+  var token = readToken();
   var profile = null;
   var state = { cats: [], communities: [], users: [], messages: [], feeding: [], tasks: [], impact: [], newMessageCount: 0, messageFilter: "", taskFilter: "", counts: { tasks: 0 }, cursors: { cats: null, communities: null, users: null, messages: null, feeding: null, tasks: null, impact: null }, section: "overview", busy: false, selectedCats: {}, selectedCommunities: {} };
 
@@ -87,8 +102,11 @@
   function clearSession(clearSharedToken) {
     token = "";
     profile = null;
-    sessionStorage.removeItem(TOKEN_KEY);
-    if (clearSharedToken) sessionStorage.removeItem(H5_TOKEN_KEY);
+    clearToken();
+    if (clearSharedToken) {
+      try { localStorage.removeItem(H5_TOKEN_KEY); } catch (error) {}
+      sessionStorage.removeItem(H5_TOKEN_KEY);
+    }
   }
   function showLogin(message) {
     document.title = "帮帮小猫 · 管理员登录";
@@ -110,10 +128,10 @@
     byId("user-summary").hidden = !isSuper;
     if (!isSuper && state.section === "users") switchSection("overview");
   }
-  function authenticate(username, password) {
-    return request("/api/v1/auth/login", { method: "POST", body: { username: username, password: password } }).then(function (body) {
+  function authenticate(username, password, remember) {
+    return request("/api/v1/auth/login", { method: "POST", body: { username: username, password: password, remember: !!remember } }).then(function (body) {
       token = body.access_token;
-      sessionStorage.setItem(TOKEN_KEY, token);
+      writeToken(token, remember);
       return restoreSession();
     });
   }
@@ -921,7 +939,7 @@
     state.busy = true;
     byId("login-submit").disabled = true;
     byId("login-message").textContent = "正在验证账号…";
-    authenticate(byId("login-username").value.trim(), byId("login-password").value).then(function () {
+    authenticate(byId("login-username").value.trim(), byId("login-password").value, byId("login-remember").checked).then(function () {
       byId("login-form").reset();
       byId("login-message").textContent = "";
     }).catch(function () {}).finally(function () {

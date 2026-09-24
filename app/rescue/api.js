@@ -6,30 +6,52 @@
   var USER_KEY = "help_cat_user";
 
   function token() {
-    return sessionStorage.getItem("help_cat_token") || "";
+    try { return localStorage.getItem("help_cat_token") || sessionStorage.getItem("help_cat_token") || ""; }
+    catch (error) { return sessionStorage.getItem("help_cat_token") || ""; }
   }
 
   function user() {
     try {
-      return JSON.parse(sessionStorage.getItem(USER_KEY) || "null");
+      try { return JSON.parse(localStorage.getItem(USER_KEY) || sessionStorage.getItem(USER_KEY) || "null"); }
+      catch (error) { return null; }
     } catch (error) {
       return null;
     }
   }
 
+  // 勾了"记住这台设备"就写 localStorage（关掉浏览器也还在），
+  // 否则写 sessionStorage（关标签页即失效）—— 共用设备时默认是后者。
+  function store(remember) {
+    try { return remember ? localStorage : sessionStorage; } catch (error) { return sessionStorage; }
+  }
+
+  function setToken(value, remember) {
+    clearStore();
+    store(remember).setItem(TOKEN_KEY, value);
+  }
+
+  function setUser(value, remember) {
+    store(remember).setItem(USER_KEY, JSON.stringify(value));
+  }
+
+  function clearStore() {
+    try { localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(USER_KEY); } catch (error) {}
+    sessionStorage.removeItem(TOKEN_KEY);
+    sessionStorage.removeItem(USER_KEY);
+  }
+
   function saveSession(payload) {
     if (payload && payload.access_token) {
-      sessionStorage.setItem(TOKEN_KEY, payload.access_token);
+      setToken(payload.access_token, payload.remember);
     }
     if (payload && payload.user) {
-      sessionStorage.setItem(USER_KEY, JSON.stringify(payload.user));
+      setUser(payload.user, payload.remember);
     }
     return payload && payload.user ? payload.user : null;
   }
 
   function clearSession() {
-    sessionStorage.removeItem(TOKEN_KEY);
-    sessionStorage.removeItem(USER_KEY);
+    clearStore();
   }
 
   function request(path, options) {
@@ -67,10 +89,10 @@
     });
   }
 
-  function login(username, password) {
+  function login(username, password, remember) {
     return request("/api/v1/auth/login", {
       method: "POST",
-      body: { username: username, password: password }
+      body: { username: username, password: password, remember: !!remember }
     }).then(saveSession);
   }
 

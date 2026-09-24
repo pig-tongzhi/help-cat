@@ -1669,7 +1669,10 @@
     state.submitting = true;
     byId("auth-submit").disabled = true;
     byId("auth-message").textContent = state.authMode === "register" ? "正在创建账户…" : "正在登录…";
-    var action = state.authMode === "register" ? api.register(username, password) : api.login(username, password);
+    var remember = byId("auth-remember") ? byId("auth-remember").checked : false;
+    var action = state.authMode === "register"
+      ? api.register(username, password)
+      : api.login(username, password, remember);
     action.then(function (user) {
       state.user = user;
       byId("auth-form").reset();

@@ -385,6 +385,28 @@ class ProductH5ContractTests(unittest.TestCase):
         self.assertIn('list.hidden = total === 0', script)
         self.assertIn('byId("today-week-empty").hidden = total !== 0', script)
 
+    def test_remember_this_device_uses_persistent_storage(self):
+        """勾了「记住这台设备」要写 localStorage（关浏览器还在），没勾只写 sessionStorage。
+        这条是"我的手机自动登录管理员"的实现口径 —— 存错了就等于没记住。"""
+        html, script, styles = self.h5(), self.script(), self.styles()
+        api = (ROOT / "app" / "rescue" / "api.js").read_text(encoding="utf-8")
+        self.assertIn('id="auth-remember"', html)
+        self.assertIn(".remember-device", styles)
+        self.assertIn("byId(\"auth-remember\")", script)
+        self.assertIn("remember: !!remember", api, "登录请求要带上这个开关")
+        self.assertIn("remember ? localStorage : sessionStorage", api, "按勾选决定存哪")
+        self.assertIn("function clearStore", api, "退出要两边都清掉")
+
+    def test_admin_console_can_remember_the_device(self):
+        """后台登录页同样要有勾选框，而且令牌要优先从 localStorage 读。"""
+        html = (ROOT / "admin" / "index.html").read_text(encoding="utf-8")
+        script = (ROOT / "admin" / "app.js").read_text(encoding="utf-8")
+        self.assertIn('id="login-remember"', html)
+        self.assertIn("function readToken", script)
+        self.assertIn("localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY)", script)
+        self.assertIn("remember: !!remember", script)
+        self.assertIn('byId("login-remember").checked', script)
+
     def test_metric_count_up_always_lands_on_the_real_number(self):
         """数字动不动画都行，但绝不能停在中间值 —— 那等于显示错数据。"""
         script = self.script()

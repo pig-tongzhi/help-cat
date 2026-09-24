@@ -1134,6 +1134,18 @@ button, a, label, select, .nav-item, .quick-action, .primary-action,
 
 /* 文案必须在草之上：桌面草带有 300px 高，最长的草叶能顶到脚注那一行 */
 
+/* 「记住这台设备」勾选框（H5 登录弹层与后台登录页共用命名） */
+.remember-device {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 2px;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.remember-device input { width: 16px; height: 16px; accent-color: var(--brand); }
+
 .reference-hero .editorial-hero-copy { z-index: 4; }
 
 /* 近景草：盖在猫的前面，猫才像"站在草里"而不是"贴在草地上" */
