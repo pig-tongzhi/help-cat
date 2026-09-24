@@ -105,8 +105,9 @@ check_asset() {
 
 check_static_assets() {
   local base="$1" prefix="$2"
-  check_asset "$base$prefix/assets/77/hero-desktop.webp" "$prefix 首页主图(桌面)" "image/*"
-  check_asset "$base$prefix/assets/77/hero-mobile.webp" "$prefix 首页主图(手机)" "image/*"
+  check_asset "$base$prefix/assets/77/cat-cutout.webp" "$prefix 首页主图(77 抠像)" "image/*"
+  check_asset "$base$prefix/assets/scenery/meadow-far.svg" "$prefix 草坪远景" "image/svg*"
+  check_asset "$base$prefix/assets/scenery/meadow-near.svg" "$prefix 草坪近景" "image/svg*"
   check_asset "$base$prefix/assets/77/rescue-day.webp" "$prefix 77故事·初见" "image/*"
   check_asset "$base$prefix/assets/77/grown-up.webp" "$prefix 77故事·长大" "image/*"
   check_asset "$base$prefix/assets/77/portrait.webp" "$prefix 77故事·正脸" "image/*"
