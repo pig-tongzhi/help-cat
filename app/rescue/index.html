@@ -1,17 +1,17 @@
 <!doctype html>
-<html lang="zh-CN" data-app-version="20260923-product-r21">
+<html lang="zh-CN" data-app-version="20260923-product-r22">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#F7F5F1">
   <meta name="description" content="帮帮小猫 Help Cat，记录社区猫咪档案，协作完成救助任务。">
   <title>帮帮小猫 Help Cat</title>
-  <link rel="icon" href="assets/brand/favicon.svg?v=20260923-product-r21">
-  <link rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png?v=20260923-product-r21">
-  <link rel="manifest" href="manifest.webmanifest?v=20260923-product-r21">
-  <link rel="stylesheet" href="styles.css?v=20260923-product-r21">
+  <link rel="icon" href="assets/brand/favicon.svg?v=20260923-product-r22">
+  <link rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png?v=20260923-product-r22">
+  <link rel="manifest" href="manifest.webmanifest?v=20260923-product-r22">
+  <link rel="stylesheet" href="styles.css?v=20260923-product-r22">
   <style>
-    .brand-logo.brand-logo-77 { background: transparent url("assets/brand/helpcat-77-mark.svg?v=20260923-product-r21") center / contain no-repeat; border-radius: 0; box-shadow: none; }
+    .brand-logo.brand-logo-77 { background: transparent url("assets/brand/helpcat-77-mark.svg?v=20260923-product-r22") center / contain no-repeat; border-radius: 0; box-shadow: none; }
     .brand-logo.brand-logo-77::before, .brand-logo.brand-logo-77::after { content: none; }
   </style>
 </head>
@@ -52,12 +52,35 @@
               <button class="editorial-story-link" type="button" data-nav="story-77">77 的故事</button>
               <a class="editorial-story-link welcome-entry" href="../welcome/index.html">欢迎页</a>
             </div>
+            <button class="hero-today" type="button" id="hero-today" data-nav="feeding" hidden>
+              <span class="hero-today-dot" aria-hidden="true"></span>
+              <span id="hero-today-text"></span>
+              <span aria-hidden="true">›</span>
+            </button>
             <p class="hero-footnote">初见 77 · 2025 年 6 月 2 日，名字来自农历五月初七</p>
           </div>
           <picture class="editorial-hero-visual">
-            <img src="assets/77/cat-cutout.webp?v=20260923-product-r21" alt="77，一只白底黑斑的猫咪" width="760" height="851" decoding="async">
+            <img src="assets/77/cat-cutout.webp?v=20260923-product-r22" alt="77，一只白底黑斑的猫咪" width="760" height="851" decoding="async">
           </picture>
           <span class="hero-meadow-front" aria-hidden="true"></span>
+        </section>
+
+        <section class="today-section" aria-labelledby="today-title">
+          <article class="today-card" id="today-card" data-metric-state="loading" data-reveal>
+            <div class="today-main">
+              <span class="section-kicker" id="today-kicker">今天</span>
+              <h2 class="today-headline" id="today-title">正在看看今天需要什么…</h2>
+              <p class="today-detail" id="today-detail" hidden></p>
+              <button class="today-action" type="button" id="today-action" data-nav="feeding" hidden>
+                <span id="today-action-label">去看看</span><span aria-hidden="true">→</span>
+              </button>
+            </div>
+            <div class="today-week" id="today-week" hidden>
+              <span class="today-week-kicker">本周</span>
+              <ul class="today-week-list" id="today-week-list"></ul>
+              <p class="today-week-empty" id="today-week-empty" hidden>本周还没有记录，你可以是第一个。</p>
+            </div>
+          </article>
         </section>
 
         <section class="pillar-section" data-product-section="primary-actions" aria-labelledby="pillar-title">
@@ -383,10 +406,10 @@
     <button id="reload-version" type="button">立即刷新</button>
   </aside>
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
-  <script src="api.js?v=20260923-product-r21"></script>
-  <script src="community-form.js?v=20260923-product-r21"></script>
-  <script src="version.js?v=20260923-product-r21"></script>
-  <script src="story-77.js?v=20260923-product-r21"></script>
-  <script src="app.js?v=20260923-product-r21"></script>
+  <script src="api.js?v=20260923-product-r22"></script>
+  <script src="community-form.js?v=20260923-product-r22"></script>
+  <script src="version.js?v=20260923-product-r22"></script>
+  <script src="story-77.js?v=20260923-product-r22"></script>
+  <script src="app.js?v=20260923-product-r22"></script>
 </body>
 </html>

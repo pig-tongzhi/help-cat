@@ -169,6 +169,9 @@
   // 3) 系统开了"减少动效"就完全不启用（reducedMotion 里已经判过）。
   var motion = { observer: null, enabled: false };
 
+  // 首页「今天就一件事 + 本周小结」，数据源 /api/v1/public/today
+  var todayState = { status: "loading", data: null };
+
   function motionEnabled() {
     return motion.enabled;
   }
@@ -447,6 +450,82 @@
       state.metrics.values = null;
       state.metrics.status = "error";
       renderMetrics();
+      return null;
+    });
+  }
+
+  // 首页两张卡：今天最值得做的一件事 + 本周小结。
+  // 拿不到数据就把整张卡藏起来（首页不该出现一块"加载失败"的空白）。
+  function renderToday() {
+    var card = byId("today-card");
+    if (!card) return;
+    card.dataset.metricState = todayState.status;
+    var action = byId("today-action");
+    var hint = byId("hero-today");
+    if (todayState.status !== "ready" || !todayState.data) {
+      if (todayState.status === "loading") {
+        byId("today-title").textContent = "正在看看今天需要什么…";
+        byId("today-detail").hidden = true;
+        action.hidden = true;
+        byId("today-week").hidden = true;
+      }
+      return;
+    }
+    var data = todayState.data;
+    var headline = data.headline || {};
+    byId("today-kicker").textContent = (data.date || "").slice(5).replace("-", " / ") + " 今天";
+    byId("today-title").textContent = headline.text || "";
+    var detail = byId("today-detail");
+    detail.textContent = headline.detail || "";
+    detail.hidden = !headline.detail;
+    // 按钮的跳转目标由接口给：没人认领->投喂、有任务->救助、都有人管->猫咪档案
+    action.dataset.nav = headline.action || "cats";
+    byId("today-action-label").textContent = headline.action_label || "去看看";
+    action.hidden = false;
+    // 首屏那一行同步显示同一句话（第一屏就要能看见今天该做什么）
+    byId("hero-today-text").textContent = headline.text || "";
+    hint.dataset.nav = headline.action || "cats";
+    hint.hidden = !headline.text;
+
+    var week = data.week || {};
+    var definitions = [
+      { label: "投喂", value: week.feeding },
+      { label: "新档案", value: week.new_cats },
+      { label: "救助", value: week.rescued },
+      { label: "找到新家", value: week.adopted }
+    ];
+    var total = definitions.reduce(function (sum, item) { return sum + (item.value || 0); }, 0);
+    var list = byId("today-week-list");
+    list.innerHTML = "";
+    definitions.forEach(function (item) {
+      var li = document.createElement("li");
+      var strong = document.createElement("strong");
+      strong.textContent = formatMetric(item.value || 0);
+      var small = document.createElement("small");
+      small.textContent = item.label;
+      li.appendChild(strong);
+      li.appendChild(small);
+      list.appendChild(li);
+    });
+    // 四个数字全是 0 时，"0 0 0 0"比一句人话难看
+    list.hidden = total === 0;
+    byId("today-week-empty").hidden = total !== 0;
+    byId("today-week").hidden = false;
+  }
+
+  function loadToday() {
+    todayState.status = "loading";
+    renderToday();
+    return api.request("/api/v1/public/today").then(function (data) {
+      if (!data || !data.headline || !data.week) throw { code: "invalid_today", message: "公开数据响应无效" };
+      todayState.data = data;
+      todayState.status = "ready";
+      renderToday();
+      return data;
+    }).catch(function () {
+      todayState.data = null;
+      todayState.status = "error";
+      renderToday();
       return null;
     });
   }
@@ -1949,6 +2028,7 @@
   window.addEventListener("resize", function () { syncNavIndicator(); });
   checkForUpdate();
   var initialMetrics = loadPublicMetrics();
+  var initialToday = loadToday();
   api.restoreSession().then(function (user) {
     state.user = user;
     renderAccount();

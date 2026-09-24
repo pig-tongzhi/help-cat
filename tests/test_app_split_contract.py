@@ -30,6 +30,7 @@ DOMAIN_MODULES = {
     "public_profiles",
     "reviews",
     "tasks",
+    "today",
 }
 
 SHARED_MODULES = {"errors", "media", "pagination", "serializers", "domain", "dependencies", "auto_review", "reviews", "login_guard"}

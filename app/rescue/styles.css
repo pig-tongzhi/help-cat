@@ -1133,6 +1133,7 @@ button, a, label, select, .nav-item, .quick-action, .primary-action,
 .reference-hero .editorial-hero-copy { background: transparent; }
 
 /* 文案必须在草之上：桌面草带有 300px 高，最长的草叶能顶到脚注那一行 */
+
 .reference-hero .editorial-hero-copy { z-index: 4; }
 
 /* 近景草：盖在猫的前面，猫才像"站在草里"而不是"贴在草地上" */
@@ -1343,6 +1344,82 @@ button, a, label, select, .nav-item, .quick-action, .primary-action,
   .impact-strip .metric-card small { font-size: 11px; }
 }
 
+/* ==========================================================================
+   首页「今天就一件事 + 本周小结」
+   数据来自 /api/v1/public/today（见 server/helpcat/routers/today.py）。
+   首页原来只有静态文案和累计数字，生产上累计值是 0，看起来像没人用；
+   这两块把"现在能做什么"和"这周发生了什么"直接摆出来。
+   ========================================================================== */
+
+.today-section { padding: 22px clamp(28px, 6.4vw, 92px) 0; }
+.today-card {
+  display: grid;
+  gap: 18px;
+  padding: 22px 20px;
+  border-radius: 24px;
+  background: linear-gradient(158deg, #FFFFFF 0%, #FFFDF9 62%, #FFF6EC 100%);
+  box-shadow: 0 20px 46px rgba(29, 29, 31, .07);
+}
+.today-card[data-metric-state="error"] { display: none; }
+.today-main { display: grid; gap: 8px; justify-items: start; }
+.today-headline { margin: 2px 0 0; font-size: clamp(19px, 2.4vw, 24px); font-weight: 700; letter-spacing: -.03em; line-height: 1.25; }
+.today-detail { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.today-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  margin-top: 6px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--brand);
+  color: #171717;
+  font-family: inherit;
+  font-size: 14.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.today-action:hover { background: var(--brand-dark); color: #fff; }
+.today-action:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+.today-week { display: grid; gap: 8px; padding-top: 16px; border-top: 1px solid rgba(29, 29, 31, .07); }
+.today-week-kicker { color: var(--muted); font-size: 10.5px; font-weight: 800; letter-spacing: .16em; }
+.today-week-list { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 0; padding: 0; list-style: none; }
+.today-week-list li { display: grid; gap: 2px; }
+.today-week-list strong { font-size: clamp(17px, 2vw, 22px); font-weight: 700; letter-spacing: -.03em; }
+.today-week-list small { color: var(--muted); font-size: 11px; }
+.today-week-empty { margin: 0; color: var(--muted); font-size: 12.5px; }
+
+/* 首屏里的一行"今天"提示：第一屏就要能看见今天该做什么。
+   它只占一行（约 22px），代价是猫的舞台矮一点。 */
+.hero-today {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 14px 0 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--brand-dark);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.hero-today:hover { text-decoration: underline; }
+.hero-today:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+.hero-today-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--brand); }
+
+@media (max-width: 720px) {
+  /* 手机上 .app-shell 已经有 16px 内边距，这里再加就变成 32px、比其它卡片更缩进 */
+  .today-section { padding: 16px 0 0; }
+  .hero-today { font-size: 12.5px; margin-top: 12px; }
+  .today-card { gap: 14px; padding: 18px 16px; border-radius: 22px; }
+  .today-week-list { gap: 6px; }
+  .today-week-list strong { font-size: 17px; }
+  .today-week-list small { font-size: 10.5px; }
+}
+
 /* ---------- 去线：页面级的横线全部撤掉 ----------
    浅底上 1px 灰线最显眼，也最"廉价"。苹果的做法是：不用线，用
    ①毛玻璃 + 柔和阴影（顶栏/底栏）②淡填充块（卡片）③留白（区块之间）。 */
@@ -1426,6 +1503,7 @@ button, a, label, select, .nav-item, .quick-action, .primary-action,
 .has-motion .editorial-hero-copy.is-in > *:nth-child(4) { transition-delay: 330ms; }
 .has-motion .editorial-hero-copy.is-in > *:nth-child(5) { transition-delay: 420ms; }
 .has-motion .editorial-hero-copy.is-in > *:nth-child(6) { transition-delay: 510ms; }
+.has-motion .editorial-hero-copy.is-in > *:nth-child(7) { transition-delay: 600ms; }
 
 /* 首屏大图：从略近处退到正常比例，时长拉长到 1.4s —— 像产品页那样"缓缓站定" */
 .has-motion .editorial-hero-visual img,

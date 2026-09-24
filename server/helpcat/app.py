@@ -32,6 +32,7 @@ from .routers import (
     public_profiles,
     reviews,
     tasks,
+    today,
 )
 
 ROUTERS = (
@@ -47,6 +48,7 @@ ROUTERS = (
     tasks,
     feeding,
     media,
+    today,
 )
 
 

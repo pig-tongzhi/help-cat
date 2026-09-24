@@ -362,6 +362,29 @@ class ProductH5ContractTests(unittest.TestCase):
         # 但"我还在跑"不能是永久免死金牌：卡住的过渡超过上限仍要落到终态
         self.assertIn("< 1600", script)
 
+    def test_home_shows_todays_one_thing_and_the_week_summary(self):
+        """首页要有"今天做什么 + 本周小结"，数据源是 /api/v1/public/today。
+        两条口径要钉住：①跳转目标由接口给（data-nav）；②拿不到数据时整张卡隐藏，
+        不能在首页留一块"加载失败"的空白。"""
+        html, script, styles = self.h5(), self.script(), self.styles()
+        for marker in (
+            'id="today-card"', 'id="today-title"', 'id="today-detail"', 'id="today-action"',
+            'id="today-action-label"', 'id="today-week"', 'id="today-week-list"',
+            'id="today-week-empty"', 'id="hero-today"', 'id="hero-today-text"',
+        ):
+            self.assertIn(marker, html)
+        self.assertIn('"/api/v1/public/today"', script)
+        self.assertIn("function loadToday", script)
+        self.assertIn("function renderToday", script)
+        # 首屏那一行与卡片共用同一份数据、同一个跳转目标
+        self.assertIn("action.dataset.nav = headline.action", script)
+        self.assertIn("hint.dataset.nav = headline.action", script)
+        # 接口挂了就藏卡，首页不留空白
+        self.assertIn('.today-card[data-metric-state="error"] { display: none; }', styles)
+        # 四个数字全 0 时说人话，不摆一排 0
+        self.assertIn('list.hidden = total === 0', script)
+        self.assertIn('byId("today-week-empty").hidden = total !== 0', script)
+
     def test_metric_count_up_always_lands_on_the_real_number(self):
         """数字动不动画都行，但绝不能停在中间值 —— 那等于显示错数据。"""
         script = self.script()
