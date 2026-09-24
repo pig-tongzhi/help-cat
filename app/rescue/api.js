@@ -104,7 +104,9 @@
   }
 
   function restoreSession() {
-    if (!token()) return Promise.resolve(null);
+    // 刻意**不**判断"本地有没有令牌"：会话也可能来自服务端下发的 HttpOnly Cookie
+    // （微信内置浏览器会清 JS 存储，免登录就是靠它活下来的）。有没有会话由服务端说了算，
+    // 这里是"问一句"，不是"自己下结论" —— 之前就是在这里提前 return 导致 Cookie 形同虚设。
     return request("/api/v1/auth/me").then(function (profile) {
       sessionStorage.setItem(USER_KEY, JSON.stringify(profile));
       return profile;

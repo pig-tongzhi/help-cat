@@ -385,6 +385,15 @@ class ProductH5ContractTests(unittest.TestCase):
         self.assertIn('list.hidden = total === 0', script)
         self.assertIn('byId("today-week-empty").hidden = total !== 0', script)
 
+    def test_h5_asks_the_server_instead_of_trusting_local_storage(self):
+        """微信会清 JS 存储，所以"本地没令牌"不等于"没登录"。
+        H5 必须照常去问 /auth/me（服务端会看 HttpOnly Cookie），不能在本地提前 return。"""
+        api = (ROOT / "app" / "rescue" / "api.js").read_text(encoding="utf-8")
+        self.assertIn("function restoreSession", api)
+        self.assertNotIn("if (!token()) return Promise.resolve(null);", api,
+                         "这一行会让 Cookie 完全失效：本地被清空时就再也不问服务端了")
+        self.assertIn('request("/api/v1/auth/me")', api)
+
     def test_remember_this_device_uses_persistent_storage(self):
         """勾了「记住这台设备」要写 localStorage（关浏览器还在），没勾只写 sessionStorage。
         这条是"我的手机自动登录管理员"的实现口径 —— 存错了就等于没记住。"""
