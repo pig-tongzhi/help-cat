@@ -1123,15 +1123,9 @@ button, a, label, select, .nav-item, .quick-action, .primary-action,
     linear-gradient(180deg, #FFFFFF 0%, #FBFAF8 42%, #F5F1EB 100%);
 }
 .hero-atmosphere:after { content: none; }
-.hero-atmosphere:before {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 40px;
-  height: 1px;
-  background: #E4E2DE;
-}
+/* 首屏底部那条发丝线撤掉了：浅底上它是最扎眼的一条"分割线"，
+   苹果页面靠留白和渐变收边，不画线。 */
+.hero-atmosphere:before { content: none; }
 
 /* 照片列让出底色，氛围层才透得上来（transparent 是契约允许的取值） */
 .reference-hero .editorial-hero-visual { background: transparent; }
@@ -1255,6 +1249,39 @@ button, a, label, select, .nav-item, .quick-action, .primary-action,
   line-height: 1.6;
   letter-spacing: -.005em;
 }
+
+/* ---------- 去线：页面级的横线全部撤掉 ----------
+   浅底上 1px 灰线最显眼，也最"廉价"。苹果的做法是：不用线，用
+   ①毛玻璃 + 柔和阴影（顶栏/底栏）②淡填充块（卡片）③留白（区块之间）。 */
+.app-header {
+  border-bottom: 0;
+  background: rgba(251, 251, 253, .78);
+  -webkit-backdrop-filter: saturate(180%) blur(22px);
+  backdrop-filter: saturate(180%) blur(22px);
+}
+/* 滚动后只留一道极淡的投影做分界，不画线 */
+.is-scrolled .app-header { box-shadow: 0 1px 0 rgba(29, 29, 31, .05), 0 12px 32px rgba(29, 29, 31, .05); }
+.bottom-nav {
+  border-top: 0;
+  border-color: transparent;
+  background: rgba(255, 255, 255, .82);
+  -webkit-backdrop-filter: saturate(180%) blur(22px);
+  backdrop-filter: blur(22px);
+  box-shadow: 0 -10px 34px rgba(29, 29, 31, .08);
+}
+/* 卡片：描边换成淡填充。1px 灰框在近白底上像线框稿，淡块才有"内容"的实感 */
+.quick-action,
+.cat-card,
+.feeding-teaser,
+.trust-panel,
+.trust-grid article,
+.empty-state,
+.task-card {
+  border-color: transparent;
+  background: #F5F5F7;
+}
+.button.secondary { border: 0; background: #F5F5F7; }
+.button.secondary:hover { background: #ECECEF; }
 
 /* ---------- 深色数据带：一节亮一节暗的节奏，成果数字成为第二个重心 ---------- */
 
