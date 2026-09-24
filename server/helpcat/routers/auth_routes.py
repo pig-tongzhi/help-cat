@@ -11,7 +11,7 @@ from ..schemas import PasswordLoginRequest, RegisterRequest, SessionRevokeReques
 from ..serializers import audit, auth_payload, session_device_label
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter
-from fastapi import Depends, Header, Request
+from fastapi import Depends, Header, Request, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session as DbSession
 from typing import Optional
@@ -35,20 +35,22 @@ def wechat_login(request: Request, payload: WechatLoginRequest, db: DbSession = 
     return {"access_token": token, "token_type": "bearer", "user": {"id": user.id, "role": user.role}}
 
 @router.post("/api/v1/auth/register", status_code=201)
-def register(request: Request, payload: RegisterRequest, db: DbSession = Depends(get_db)):
+def register(request: Request, response: Response, payload: RegisterRequest, db: DbSession = Depends(get_db)):
     username = payload.username.strip()
     if db.scalar(select(User).where(User.username == username)):
         error(409, "username_exists")
     user = User(openid="local:" + username, username=username, password_hash=hash_password(payload.password), role="USER", nickname=username)
     db.add(user)
     db.flush()
-    result = auth_payload(db, user, request.app.state.settings.session_days)
+    days = request.app.state.settings.session_days
+    result = auth_payload(db, user, days)
     db.commit()
+    _set_session_cookie(response, request, result["access_token"], days)
     return result
 
 
 @router.post("/api/v1/auth/login")
-def password_login(request: Request, payload: PasswordLoginRequest, db: DbSession = Depends(get_db)):
+def password_login(request: Request, response: Response, payload: PasswordLoginRequest, db: DbSession = Depends(get_db)):
     settings = request.app.state.settings
     username = payload.username.strip()
     client_ip = request.client.host if request.client else ""
@@ -74,7 +76,27 @@ def password_login(request: Request, payload: PasswordLoginRequest, db: DbSessio
         "remember": payload.remember,
     })
     db.commit()
+    _set_session_cookie(response, request, result["access_token"], days)
     return result
+
+
+COOKIE_NAME = "helpcat_session"
+
+
+def _set_session_cookie(response: Response, request: Request, token: str, days: int) -> None:
+    """把会话也写进 HttpOnly Cookie。
+
+    为什么需要它：微信内置浏览器（以及 iOS 的 Safari 内核）会清掉页面 JS 写入的存储，
+    令牌放 localStorage 就会出现"退出微信再进来又要登录"。Cookie 由浏览器网络层管理，
+    不受这个影响；HttpOnly 还让 XSS 偷不走它。Secure 只在真的走 HTTPS 时才加，
+    免得本地 HTTP 调试时 Cookie 直接被丢掉。
+    """
+    scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
+    response.set_cookie(
+        COOKIE_NAME, token,
+        max_age=days * 86400,
+        httponly=True, secure=(scheme == "https"), samesite="lax", path="/",
+    )
 
 
 def _session_rows(db: DbSession, user_id: str):
@@ -163,12 +185,13 @@ def revoke_session(payload: SessionRevokeRequest, authorization: Optional[str] =
 
 
 @router.post("/api/v1/auth/logout")
-def logout(actor=Depends(get_current_user), authorization: Optional[str] = Header(default=None), db: DbSession = Depends(get_db)):
+def logout(response: Response, actor=Depends(get_current_user), authorization: Optional[str] = Header(default=None), db: DbSession = Depends(get_db)):
     token = authorization[7:].strip() if authorization and authorization.startswith("Bearer ") else ""
     session = db.get(AuthSession, token)
     if session:
         session.revoked_at = datetime.now(timezone.utc)
         db.commit()
+    response.delete_cookie(COOKIE_NAME, path="/")
     return {"status": "ok"}
 
 

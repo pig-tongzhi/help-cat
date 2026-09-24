@@ -27,6 +27,7 @@ def days_until(value):
 
 class DeviceSessionApiTests(unittest.TestCase):
     def setUp(self):
+        self.last_cookie = ""
         self.tmp = tempfile.TemporaryDirectory()
         self.app = create_app("sqlite://", Path(self.tmp.name), fake_admin_openids={"admin-openid"})
         self.admin = self.register("zack", "99bu88ZZK..")
@@ -56,9 +57,11 @@ class DeviceSessionApiTests(unittest.TestCase):
             "client": client, "server": ("testserver", 80), "scheme": "http",
         }
         await app(scope, receive, send)
-        status = next(item["status"] for item in messages if item["type"] == "http.response.start")
+        start = next(item for item in messages if item["type"] == "http.response.start")
         content = b"".join(item.get("body", b"") for item in messages if item["type"] == "http.response.body")
-        return status, (json.loads(content.decode()) if content else {})
+        cookies = [value.decode() for key, value in start.get("headers", []) if key.lower() == b"set-cookie"]
+        self.last_cookie = cookies[0] if cookies else ""
+        return start["status"], (json.loads(content.decode()) if content else {})
 
     def request_on(self, method, path, token=None, payload=None, user_agent=None):
         headers = {}
@@ -92,13 +95,37 @@ class DeviceSessionApiTests(unittest.TestCase):
 
     # ---- 有效期 ---------------------------------------------------------
 
-    def test_remember_issues_a_ninety_day_session(self):
+    def test_sessions_live_thirty_days_either_way(self):
+        """勾不勾"记住设备"都是 30 天：差别在存在哪（localStorage/Cookie vs sessionStorage），
+        不在活多久。"""
         plain = self.login(remember=False)
         long_lived = self.login(remember=True)
         with self.app.state.session_factory() as db:
             rows = {item.token: days_until(item.expires_at) for item in db.query(AuthSession).all()}
         self.assertAlmostEqual(30, rows[plain["access_token"]], delta=1)
-        self.assertAlmostEqual(90, rows[long_lived["access_token"]], delta=1)
+        self.assertAlmostEqual(30, rows[long_lived["access_token"]], delta=1)
+
+    def test_session_cookie_alone_authenticates(self):
+        """微信内置浏览器会清 JS 存储，所以登录必须同时下发 HttpOnly Cookie，
+        而且**只带 Cookie、不带 Authorization** 也要能认出用户。"""
+        status, body = self.request_on(
+            "POST", "/api/v1/auth/login",
+            payload={"username": "zack", "password": "99bu88ZZK..", "remember": True},
+            user_agent="Mozilla/5.0 (iPhone; CPU iPhone OS 17_0)",
+        )
+        self.assertEqual(200, status, body)
+        cookie = self.last_cookie
+        self.assertTrue(cookie, "登录响应里必须有 Set-Cookie")
+        self.assertIn("httponly", cookie.lower())
+        self.assertIn("samesite=lax", cookie.lower())
+        token = cookie.split("helpcat_session=", 1)[1].split(";", 1)[0]
+        # 只带 Cookie（用 Header 模拟浏览器自动携带）
+        status, me = asyncio.run(self.asgi_request(
+            self.app, "GET", "/api/v1/auth/me",
+            {"cookie": "helpcat_session=" + token}, None,
+        ))
+        self.assertEqual(200, status, me)
+        self.assertEqual("zack", me["username"])
 
     # ---- 设备列表 -------------------------------------------------------
 
@@ -125,7 +152,7 @@ class DeviceSessionApiTests(unittest.TestCase):
             payload = json.loads(row.after_json)
         self.assertEqual("Android 手机", payload["device"])
         self.assertTrue(payload["remember"])
-        self.assertEqual(90, payload["days"])
+        self.assertEqual(30, payload["days"])
 
     # ---- 撤销 -----------------------------------------------------------
 

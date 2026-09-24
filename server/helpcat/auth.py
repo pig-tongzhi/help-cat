@@ -3,12 +3,12 @@ import hmac
 import json
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Annotated, Optional
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import urlopen
 
-from fastapi import Depends, Header, HTTPException
+from fastapi import Cookie, Depends, Header, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session as DbSession
 
@@ -73,10 +73,19 @@ def issue_session(db: DbSession, user: User, days: int) -> str:
 
 
 def current_user_factory(session_factory, settings: Settings):
-    def current_user(authorization: Optional[str] = Header(default=None)):
-        if not authorization or not authorization.startswith("Bearer "):
+    # 用 Annotated 写法：旧式 `Cookie(default=...)` 在当前 FastAPI 上不会被识别成
+    # Cookie 参数，参数拿到的会是 Cookie 标记对象本身（实测报 'Cookie' object has no
+    # attribute 'strip'）。
+    def current_user(authorization: Optional[str] = None, helpcat_session: Optional[str] = None):
+        # 优先 Bearer（后台与旧客户端），其次 HttpOnly Cookie。Cookie 是给微信内置浏览器
+        # 用的：那里的 JS 存储会被平台清掉，而服务端下发的 Cookie 不会，所以 H5 靠它免登录。
+        token = ""
+        if authorization and authorization.startswith("Bearer "):
+            token = authorization[7:].strip()
+        elif helpcat_session:
+            token = helpcat_session.strip()
+        if not token:
             raise HTTPException(status_code=401, detail={"code": "unauthorized"})
-        token = authorization[7:].strip()
         with session_factory() as db:
             session = db.scalar(select(Session).where(Session.token == token))
             expires_at = session.expires_at.replace(tzinfo=timezone.utc) if session and session.expires_at.tzinfo is None else (session.expires_at if session else None)
