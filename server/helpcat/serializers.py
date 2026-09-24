@@ -65,9 +65,40 @@ def media_payload(asset):
     return {"id": asset.id, "object_key": asset.object_key, "content_type": asset.content_type, "byte_size": asset.byte_size}
 
 
-def auth_payload(db, user, session_days):
-    """注册/登录共用的响应体。"""
+def session_device_label(user_agent):
+    """把 User-Agent 压成一句人话。
+
+    「登录的设备」面板要的是"这台是不是我的手机"，不是一串 UA。
+    """
+    ua = str(user_agent or "").lower()
+    if "iphone" in ua or "ipad" in ua:
+        return "iPhone / iPad"
+    if "android" in ua:
+        return "Android 手机"
+    if "macintosh" in ua or "mac os" in ua:
+        return "Mac"
+    if "windows" in ua:
+        return "Windows"
+    if "linux" in ua:
+        return "Linux"
+    return "未知设备"
+
+
+def auth_payload(db, user, session_days, audit_meta=None):
+    """注册/登录共用的响应体。
+
+    audit_meta 里有 device/ip/remember 时，额外写一条 SESSION_ISSUE 审计：
+    会话表本身只有 token/expires_at/revoked_at（不动表结构），设备信息就落在审计里，
+    「登录的设备」列表靠令牌前 8 位把两边对上。
+    """
     token = issue_session(db, user, session_days)
+    if audit_meta is not None:
+        audit(db, user.id, "SESSION_ISSUE", "session", token[:8], after={
+            "device": session_device_label(audit_meta.get("user_agent")),
+            "ip": audit_meta.get("ip") or "",
+            "remember": bool(audit_meta.get("remember")),
+            "days": session_days,
+        })
     return {"access_token": token, "token_type": "bearer",
             "user": {"id": user.id, "username": user.username, "role": user.role}}
 

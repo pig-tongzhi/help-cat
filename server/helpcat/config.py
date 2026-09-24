@@ -18,6 +18,9 @@ class Settings:
         # 投稿自动预检：off（默认，全部进待审）/ shadow（只写审计，不改状态）/ on（通过即公开）
         self.auto_review = os.getenv("HELPCAT_AUTO_REVIEW", "off").strip().lower() or "off"
         self.session_days = int(os.getenv("HELPCAT_SESSION_DAYS", "30"))
+        # 「记住这台设备」签发的长期会话。管理员在自己手机上想免登录就靠它，
+        # 所以配套必须有设备列表 + 一键撤销（见 /api/v1/auth/sessions）。
+        self.session_days_remember = int(os.getenv("HELPCAT_SESSION_DAYS_REMEMBER", "90"))
         self.fake_admin_openids = set(fake_admin_openids or filter(None, os.getenv("HELPCAT_FAKE_ADMIN_OPENIDS", "").split(",")))
         # 测试用的"假微信登录"（code 以 fake: 开头直接换 openid）。默认关闭：
         # 线上没配微信凭据时它等于一个万能登录后门，任何人都能用任意 openid 建号。

@@ -205,7 +205,9 @@ class HelpCatQaSeedIntegrationTests(unittest.TestCase):
             self.assertEqual(supers, [("zack",)])
             self.assertEqual(
                 {row[0] for row in connection.execute("SELECT DISTINCT action FROM audit_logs")},
-                {"ROLE_CHANGE", "CREATE", "UPLOAD", "REVIEW", "VISIBILITY", "ARCHIVE", "CLAIM"},
+                # SESSION_ISSUE 是登录时写下的设备审计（"登录的设备"面板要用），
+                # 播种流程里管理员登录过，所以它必然出现。
+                {"ROLE_CHANGE", "CREATE", "UPLOAD", "REVIEW", "VISIBILITY", "ARCHIVE", "CLAIM", "SESSION_ISSUE"},
             )
             active_zack_seed_sessions = connection.execute(
                 "SELECT COUNT(*) FROM sessions WHERE user_id = (SELECT id FROM users WHERE username = 'zack') AND revoked_at IS NULL"

@@ -17,6 +17,13 @@ class RegisterRequest(BaseModel):
 class PasswordLoginRequest(BaseModel):
     username: str = Field(min_length=1, max_length=80)
     password: str = Field(min_length=1, max_length=128)
+    # 勾了「记住这台设备」就签发长期会话（默认 90 天），否则用常规 30 天。
+    remember: bool = False
+
+
+class SessionRevokeRequest(BaseModel):
+    # 会话 id 用令牌前 8 位表示：既够唯一，又不会把完整令牌发给前端。
+    id: str = Field(min_length=8, max_length=16)
 
 
 class CommunityCreate(BaseModel):
