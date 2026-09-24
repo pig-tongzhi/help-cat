@@ -839,7 +839,7 @@
   function switchSection(section) {
     if (section === "users" && (!profile || profile.role !== "SUPER_ADMIN")) return;
     state.section = section;
-    var titles = { overview: "管理总览", cats: "猫咪档案", communities: "小区管理", feeding: "投喂点管理", tasks: "救助任务", messages: "留言板", impact: "救助记录", users: "用户与权限" };
+    var titles = { overview: "管理总览", cats: "猫咪档案", communities: "小区管理", feeding: "投喂点管理", tasks: "救助任务", messages: "留言板", impact: "救助记录", users: "用户与权限", devices: "登录的设备" };
     byId("page-title").textContent = titles[section] || "管理总览";
     document.querySelectorAll("[data-admin-section]").forEach(function (panel) {
       var active = panel.dataset.adminSection === section;
@@ -848,6 +848,72 @@
     });
     document.querySelectorAll(".side-nav").forEach(function (button) { button.classList.toggle("active", button.dataset.section === section); });
     window.location.hash = section;
+    if (section === "devices") loadDevices();
+  }
+
+  // ---- 登录的设备：长期免登录的安全兜底（手机丢了要能一键切断）------------
+  function deviceLine(label, value) {
+    var wrap = document.createElement("span");
+    wrap.className = "device-line";
+    var strong = document.createElement("strong");
+    strong.textContent = label;
+    var span = document.createElement("span");
+    span.textContent = value;
+    wrap.appendChild(strong);
+    wrap.appendChild(span);
+    return wrap;
+  }
+  function renderDevices(items) {
+    var list = byId("device-list");
+    list.innerHTML = "";
+    byId("device-message").textContent = items.length ? "" : "没有其它设备在登录。";
+    items.forEach(function (item) {
+      var li = document.createElement("li");
+      li.className = "device-item";
+      li.appendChild(deviceLine(item.device, item.ip || "IP 未知"));
+      li.appendChild(deviceLine("登录时间", String(item.created_at || "").replace("T", " ").slice(0, 16)));
+      li.appendChild(deviceLine("有效期到", String(item.expires_at || "").replace("T", " ").slice(0, 16)));
+      if (item.remember) {
+        var tag = document.createElement("span");
+        tag.className = "device-tag";
+        tag.textContent = "记住设备";
+        li.appendChild(tag);
+      }
+      if (item.current) {
+        var current = document.createElement("span");
+        current.className = "device-tag current";
+        current.textContent = "本机";
+        li.appendChild(current);
+      } else {
+        var button = document.createElement("button");
+        button.className = "button secondary";
+        button.type = "button";
+        button.dataset.revokeSession = item.id;
+        button.textContent = "踢出这台设备";
+        li.appendChild(button);
+      }
+      list.appendChild(li);
+    });
+  }
+  function loadDevices() {
+    byId("device-message").textContent = "正在读取…";
+    return request("/api/v1/auth/sessions").then(function (body) {
+      renderDevices((body && body.items) || []);
+      return body;
+    }).catch(function (error) {
+      byId("device-message").textContent = errorText(error);
+      throw error;
+    });
+  }
+  function revokeDevice(button) {
+    if (state.busy) return;
+    state.busy = true;
+    button.disabled = true;
+    byId("device-message").textContent = "正在踢出…";
+    request("/api/v1/auth/sessions/revoke", { method: "POST", body: { id: button.dataset.revokeSession } })
+      .then(function () { byId("device-message").textContent = "那台设备已经被踢下线。"; return loadDevices(); })
+      .catch(function (error) { byId("device-message").textContent = errorText(error); })
+      .then(function () { state.busy = false; });
   }
   function changeRole(button) {
     if (state.busy || !profile || profile.role !== "SUPER_ADMIN") return;
@@ -933,6 +999,10 @@
     return window.HelpCatAdminSession.logout(request, clearSession, showLogin, state);
   }
 
+  byId("device-list").addEventListener("click", function (event) {
+    var button = event.target.closest("[data-revoke-session]");
+    if (button) revokeDevice(button);
+  });
   byId("login-form").addEventListener("submit", function (event) {
     event.preventDefault();
     if (state.busy) return;

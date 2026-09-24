@@ -407,6 +407,21 @@ class ProductH5ContractTests(unittest.TestCase):
         self.assertIn("remember: !!remember", script)
         self.assertIn('byId("login-remember").checked', script)
 
+    def test_admin_console_lists_and_revokes_devices(self):
+        """长期免登录必须有出口：后台要能列出登录中的设备并一键踢掉。"""
+        html = (ROOT / "admin" / "index.html").read_text(encoding="utf-8")
+        script = (ROOT / "admin" / "app.js").read_text(encoding="utf-8")
+        self.assertIn('data-section="devices"', html)
+        self.assertIn('data-admin-section="devices"', html)
+        self.assertIn('id="device-list"', html)
+        self.assertIn("function loadDevices", script)
+        self.assertIn('"/api/v1/auth/sessions"', script)
+        self.assertIn('"/api/v1/auth/sessions/revoke"', script)
+        self.assertIn("button.dataset.revokeSession = item.id", script)
+        # 本机不给"踢出"按钮：本机要走退出登录，否则刚踢完自己又不用重新登录
+        self.assertIn('device-tag current', script)
+        self.assertIn("if (item.current)", script)
+
     def test_metric_count_up_always_lands_on_the_real_number(self):
         """数字动不动画都行，但绝不能停在中间值 —— 那等于显示错数据。"""
         script = self.script()
