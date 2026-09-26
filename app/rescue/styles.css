@@ -1363,7 +1363,9 @@ button, a, label, select, .nav-item, .quick-action, .primary-action,
    这两块把"现在能做什么"和"这周发生了什么"直接摆出来。
    ========================================================================== */
 
-.today-section { padding: 22px clamp(28px, 6.4vw, 92px) 0; }
+/* 通栏：和数据带一样占满整页宽度。之前这里是 clamp(28px, 6.4vw, 92px)（对齐猫咪卡片），
+   但上下相邻的数据带是全宽的，卡片就看着"小一圈"。 */
+.today-section { padding: 22px 0 0; }
 .today-card {
   display: grid;
   gap: 18px;
