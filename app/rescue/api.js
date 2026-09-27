@@ -54,6 +54,16 @@
     clearStore();
   }
 
+  // 浏览量上报：fire-and-forget，失败静默（统计绝不能影响访客）。
+  // kind 由后端白名单校验（home / story / welcome）。
+  function reportVisit(kind) {
+    try {
+      return request("/api/v1/public/visit", { method: "POST", body: { kind: kind } }).catch(function () { return null; });
+    } catch (error) {
+      return Promise.resolve(null);
+    }
+  }
+
   function request(path, options) {
     var config = options || {};
     var headers = Object.assign({}, config.headers || {});
@@ -185,6 +195,7 @@
     login: login,
     register: register,
     restoreSession: restoreSession,
+    reportVisit: reportVisit,
     logout: logout,
     uploadImage: uploadImage,
     clearSession: clearSession

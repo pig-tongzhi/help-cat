@@ -416,6 +416,31 @@ class ProductH5ContractTests(unittest.TestCase):
         self.assertIn("remember: !!remember", script)
         self.assertIn('byId("login-remember").checked', script)
 
+    def test_dashboard_shows_today_week_and_system_numbers(self):
+        """后台看板：今天的状态 / 本周趋势 / 账户与安全。
+        它必须从 /admin/dashboard 取数，且"单人依赖度"这类判断要有文字提示。"""
+        html = (ROOT / "admin" / "index.html").read_text(encoding="utf-8")
+        script = (ROOT / "admin" / "app.js").read_text(encoding="utf-8")
+        styles = (ROOT / "admin" / "styles.css").read_text(encoding="utf-8")
+        for marker in ('id="dashboard-today"', 'id="dashboard-week"', 'id="dashboard-system"'):
+            self.assertIn(marker, html)
+        self.assertIn('"/api/v1/admin/dashboard"', script)
+        self.assertIn("function renderDashboard", script)
+        self.assertIn("function loadDashboard", script)
+        self.assertIn("单人依赖度", script)
+        self.assertIn(".dashboard-tile", styles)
+
+    def test_h5_reports_page_views_for_each_page(self):
+        """浏览量必须先埋点：首页 / 77 故事 / 欢迎页各上报一次，失败静默。"""
+        api = (ROOT / "app" / "rescue" / "api.js").read_text(encoding="utf-8")
+        script = (ROOT / "app" / "rescue" / "app.js").read_text(encoding="utf-8")
+        welcome = (ROOT / "app" / "welcome" / "welcome.js").read_text(encoding="utf-8")
+        self.assertIn("function reportVisit", api)
+        self.assertIn('"/api/v1/public/visit"', api)
+        self.assertIn('api.reportVisit("home")', script)
+        self.assertIn('api.reportVisit("story")', script)
+        self.assertIn('"welcome"', welcome)
+
     def test_admin_boot_asks_the_server_before_showing_login(self):
         """后台也不能因为"本机没有令牌"就直接弹登录框：会话可能来自 HttpOnly Cookie。
         （后台在 HTTPS、H5 在 HTTP 时是不同源，localStorage 不共享，只能靠 Cookie。）"""

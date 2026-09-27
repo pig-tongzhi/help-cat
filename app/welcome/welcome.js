@@ -13,6 +13,17 @@
 
   function byId(id) { return document.getElementById(id); }
 
+  // 欢迎页浏览量：fire-and-forget，失败静默
+  function reportVisit() {
+    try {
+      fetch(API_BASE + "/api/v1/public/visit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "welcome" })
+      }).catch(function () {});
+    } catch (error) {}
+  }
+
   function toast(message) {
     var target = byId("toast");
     if (!target) return;
@@ -185,4 +196,5 @@
       window.setTimeout(function () { byId("lead-contact").focus(); }, 320);
     });
   });
+  reportVisit();
 }());

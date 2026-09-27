@@ -127,6 +127,65 @@
     byId("users-nav").hidden = !isSuper;
     byId("user-summary").hidden = !isSuper;
     if (!isSuper && state.section === "users") switchSection("overview");
+    loadDashboard();
+  }
+
+  // ---- 数据看板：今天 / 本周 / 账户与安全 ----------------------------------
+  function tile(label, value, hint) {
+    var item = document.createElement("div");
+    item.className = "dashboard-tile";
+    var strong = document.createElement("strong");
+    strong.textContent = value === null || value === undefined ? "—" : String(value);
+    var span = document.createElement("span");
+    span.textContent = label;
+    item.appendChild(strong);
+    item.appendChild(span);
+    if (hint) {
+      var small = document.createElement("small");
+      small.textContent = hint;
+      item.appendChild(small);
+    }
+    return item;
+  }
+  function fill(targetId, tiles) {
+    var box = byId(targetId);
+    if (!box) return;
+    box.innerHTML = "";
+    tiles.forEach(function (item) { box.appendChild(item); });
+  }
+  function renderDashboard(data) {
+    var today = data.today || {}, week = data.week || {}, accounts = data.accounts || {}, devices = data.devices || {}, security = data.security || {};
+    var coverage = today.coverage_percent;
+    fill("dashboard-today", [
+      tile("今日投喂覆盖", coverage === null ? "无喂食点" : coverage + "%", today.feeding_points ? (today.covered + "/" + today.feeding_points + " 个点有人管") : ""),
+      tile("今天没人管", today.uncovered ? today.uncovered.length : 0, today.uncovered && today.uncovered.length ? today.uncovered.join("、") : "都有人管"),
+      tile("未来 7 天缺口", (today.gaps || []).length + " 天", (today.gaps || []).map(function (gap) { return gap.day.slice(5) + " 缺 " + gap.missing; }).join(" · ")),
+      tile("待审积压", (today.pending_cats || 0) + (today.pending_communities || 0), "最久等了 " + (today.oldest_pending_days || 0) + " 天"),
+      tile("未回复留言", today.new_leads || 0, "最久等了 " + (today.oldest_lead_days || 0) + " 天"),
+      tile("缺照片的公开档案", today.cats_without_photo || 0, "照片是公开页最重要的内容")
+    ]);
+    fill("dashboard-week", [
+      tile("本周浏览", (week.page_views || {}).total || 0, "首页 " + ((week.page_views || {}).home || 0) + " · 故事 " + ((week.page_views || {}).story || 0) + " · 欢迎页 " + ((week.page_views || {}).welcome || 0)),
+      tile("欢迎页转化", week.lead_conversion_percent === null || week.lead_conversion_percent === undefined ? "—" : week.lead_conversion_percent + "%", "留下联系方式 " + (week.leads || 0) + " 条"),
+      tile("投喂打卡", week.feeding_checkins || 0, "活跃志愿者 " + (week.active_volunteers || 0) + " 人"),
+      tile("单人依赖度", (week.top_volunteer_share_percent || 0) + "%", (week.top_volunteer_share_percent || 0) >= 70 ? "偏高：一个人停了就断" : "还算分散"),
+      tile("新增档案", week.new_cats || 0, "新增注册 " + (week.new_users || 0)),
+      tile("已认领班次", week.claimed_shifts || 0, "本周待完成的认领")
+    ]);
+    fill("dashboard-system", [
+      tile("账户总数", accounts.total || 0, "其中管理员 " + (accounts.admins || 0)),
+      tile("登录设备", devices.active || 0, devices.legacy ? (devices.legacy + " 条是升级前签发，建议清理") : "没有遗留会话"),
+      tile("登录失败（7 天）", security.login_failures_7d || 0, "有人试密码时会涨")
+    ]);
+  }
+  function loadDashboard() {
+    return request("/api/v1/admin/dashboard").then(function (body) {
+      byId("dashboard-message").textContent = "";
+      renderDashboard(body);
+      return body;
+    }).catch(function (error) {
+      byId("dashboard-message").textContent = errorText(error);
+    });
   }
   function authenticate(username, password, remember) {
     return request("/api/v1/auth/login", { method: "POST", body: { username: username, password: password, remember: !!remember } }).then(function (body) {

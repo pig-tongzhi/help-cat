@@ -6,11 +6,11 @@
   <meta name="theme-color" content="#F5F5F7">
   <meta name="description" content="帮帮小猫管理后台，用于猫咪、小区和用户权限治理。">
   <title>帮帮小猫 · 管理后台</title>
-  <link rel="stylesheet" href="styles.css?v=20260923-product-r27">
+  <link rel="stylesheet" href="styles.css?v=20260923-product-r28">
 </head>
 <body>
   <section class="login-view" id="login-view">
-    <div class="login-brand"><img class="brand-mark" src="/help-cat/rescue/assets/brand/helpcat-77-mark.svg?v=20260923-product-r27" alt=""><div><strong>帮帮小猫</strong><small>HELP CAT ADMIN</small></div></div>
+    <div class="login-brand"><img class="brand-mark" src="/help-cat/rescue/assets/brand/helpcat-77-mark.svg?v=20260923-product-r28" alt=""><div><strong>帮帮小猫</strong><small>HELP CAT ADMIN</small></div></div>
     <div class="login-card">
       <span class="eyebrow">SECURE CONSOLE</span>
       <h1>管理员登录</h1>
@@ -28,7 +28,7 @@
 
   <div class="admin-shell" id="admin-shell" hidden>
     <aside class="sidebar">
-      <a class="side-brand" href="/help-cat/rescue/index.html#home" aria-label="返回帮帮小猫首页" title="返回帮帮小猫首页"><img class="brand-mark" src="/help-cat/rescue/assets/brand/helpcat-77-mark.svg?v=20260923-product-r27" alt=""><span><strong>帮帮小猫</strong><small>管理后台</small></span></a>
+      <a class="side-brand" href="/help-cat/rescue/index.html#home" aria-label="返回帮帮小猫首页" title="返回帮帮小猫首页"><img class="brand-mark" src="/help-cat/rescue/assets/brand/helpcat-77-mark.svg?v=20260923-product-r28" alt=""><span><strong>帮帮小猫</strong><small>管理后台</small></span></a>
       <nav aria-label="后台导航">
         <button class="side-nav active" type="button" data-section="overview"><span class="nav-dot overview-dot"></span>总览</button>
         <button class="side-nav" type="button" data-section="cats"><span class="nav-dot cat-dot"></span>猫咪档案</button>
@@ -61,6 +61,13 @@
           <article><span class="metric-symbol task-symbol"></span><div><strong id="admin-task-count">0</strong><small>进行中任务</small></div></article>
           <article><span class="metric-symbol impact-symbol"></span><div><strong id="impact-count">0</strong><small>生效救助记录</small></div></article>
           <article id="user-summary" hidden><span class="metric-symbol user-symbol"></span><div><strong id="user-count">0</strong><small>平台注册用户</small></div></article>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>数据看板</h2><p>只看"现在要不要动手"：今天的状态、本周趋势、账户与安全。累计数字在公开首页，这里不重复。</p></div>
+          <p class="inline-message" id="dashboard-message" role="status"></p>
+          <div class="dashboard-grid" id="dashboard-today"></div>
+          <div class="dashboard-grid" id="dashboard-week"></div>
+          <div class="dashboard-grid" id="dashboard-system"></div>
         </div>
         <div class="welcome-panel"><div><span class="eyebrow">TODAY'S GOVERNANCE</span><h2>让每一条社区信息<br>都真实、清晰、可追溯</h2><p>优先处理待审核档案；隐藏和归档不会物理删除数据。</p></div><button class="button primary" type="button" data-section-link="cats">处理待审核档案</button></div>
       </section>
@@ -179,8 +186,8 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
   <input id="cat-photo-input" type="file" accept="image/*" hidden>
-  <script src="session.js?v=20260923-product-r27"></script>
-  <script src="community-review.js?v=20260923-product-r27"></script>
-  <script src="app.js?v=20260923-product-r27"></script>
+  <script src="session.js?v=20260923-product-r28"></script>
+  <script src="community-review.js?v=20260923-product-r28"></script>
+  <script src="app.js?v=20260923-product-r28"></script>
 </body>
 </html>

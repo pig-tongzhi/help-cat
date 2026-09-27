@@ -1428,6 +1428,7 @@
     var storyActive = state.view === "story-77";
     byId("floating-add-cat").hidden = storyActive || state.view === "profile";
     byId("bottom-nav").hidden = storyActive;
+    if (state.view === "story-77" && typeof api !== "undefined" && api.reportVisit) api.reportVisit("story");
     if (state.view === "feeding") ensureFeeding();
     if (state.view === "tasks") loadMyTasks();
     // 动效侧收尾：切换视图后补一次揭示，并把底部导航滑块移到新的选中项
@@ -2024,6 +2025,8 @@
   if (validViews.indexOf(initialView) >= 0) state.view = initialView;
   renderStory();
   renderApp();
+  // 首页浏览算一次；切到 77 故事再算一次（分开统计，看板里是两列）
+  if (typeof api !== "undefined" && api.reportVisit) api.reportVisit("home");
   initMotion();
   initFabClearance();
   initHeaderMotion();
