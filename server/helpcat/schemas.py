@@ -17,7 +17,9 @@ class RegisterRequest(BaseModel):
 class PasswordLoginRequest(BaseModel):
     username: str = Field(min_length=1, max_length=80)
     password: str = Field(min_length=1, max_length=128)
-    # 勾了「记住这台设备」就签发长期会话（默认 90 天），否则用常规 30 天。
+    # 勾了「记住这台设备」走 HELPCAT_SESSION_DAYS_REMEMBER，否则走 HELPCAT_SESSION_DAYS。
+    # 现在两者都是 30 天（最初把免登录设成 90 天，实测后收回来了），
+    # 但保留成两个开关：以后要区分"常用设备"和"临时会话"仍然只改环境变量。
     remember: bool = False
 
 

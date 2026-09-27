@@ -416,6 +416,38 @@ class ProductH5ContractTests(unittest.TestCase):
         self.assertIn("remember: !!remember", script)
         self.assertIn('byId("login-remember").checked', script)
 
+    def test_admin_navigation_is_a_side_drawer_on_phones(self):
+        """后台导航在手机上必须是侧边抽屉。
+        它原来是一条横向滚动的条，条目一多（"登录的设备"之类）就被挤出屏幕，
+        在手机上没有横滑的习惯，等于功能消失。"""
+        html = (ROOT / "admin" / "index.html").read_text(encoding="utf-8")
+        script = (ROOT / "admin" / "app.js").read_text(encoding="utf-8")
+        styles = (ROOT / "admin" / "styles.css").read_text(encoding="utf-8")
+        self.assertIn('id="sidebar-toggle"', html)
+        self.assertIn('id="sidebar-backdrop"', html)
+        self.assertIn("function setSidebar", script)
+        self.assertIn('classList.toggle("sidebar-open"', script)
+        self.assertIn('byId("sidebar-backdrop").addEventListener("click"', script, "点到遮罩要能收起来")
+        self.assertIn(".sidebar-open .sidebar", styles)
+        self.assertIn("translateX(-100%)", styles)
+        self.assertIn(".sidebar-open .sidebar-backdrop", styles)
+
+    def test_admin_html_is_not_cached_and_never_plain_http(self):
+        """后台 HTML 没有版本号参数，被缓存 7 天就会"改版永远看不到"；
+        而且 http 直连后台必须以 301 进 HTTPS，别把登录页明文发出去。
+        这两条只能靠精确匹配块保证（^~ 前缀块会被精确匹配抢先）。"""
+        conf = (ROOT / "deploy" / "nginx" / "purchase-system.conf").read_text(encoding="utf-8")
+        for path in ("/help-cat/admin/", "/help-cat/admin/index.html"):
+            anchor = f"location = {path} {{"
+            self.assertIn(anchor, conf, f"{path} 缺少精确匹配块")
+            window = conf.split(anchor, 1)[1][:420]
+            self.assertIn("no-cache, no-store, must-revalidate", window, f"{path} 不能长缓存")
+            self.assertIn(
+                "if ($scheme = http) { return 301 https://$host$request_uri; }",
+                window,
+                f"{path} 必须把 http 跳到 https",
+            )
+
     def test_dashboard_shows_today_week_and_system_numbers(self):
         """后台看板：今天的状态 / 本周趋势 / 账户与安全。
         它必须从 /admin/dashboard 取数，且"单人依赖度"这类判断要有文字提示。"""
