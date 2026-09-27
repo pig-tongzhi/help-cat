@@ -293,3 +293,58 @@ body { background: radial-gradient(circle at 88% 6%,rgba(226,220,255,.34),transp
   .action-list button { padding: 10px 12px; font-size: 13px; }
   .ledger summary { font-size: 12px; }
 }
+
+/* ---------- 手机端：导航从"顶部横条"改成"左侧抽屉" ----------
+   用户反馈：横条挤在标题下面、条目还横向滚动看不到。抽屉是后台的标准做法，
+   汉堡打开，点条目或点遮罩关闭。本块必须留在文件最后，才能压过前面的横条规则。 */
+.sidebar-toggle { display: none; }
+.sidebar-backdrop { display: none; }
+
+@media (max-width: 700px) {
+  .sidebar-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 14px;
+    padding: 9px 14px;
+    border: 1px solid rgba(29, 29, 31, .12);
+    border-radius: 11px;
+    background: #fff;
+    color: #1D1D1F;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 650;
+    cursor: pointer;
+  }
+  .sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    z-index: 60;
+    width: 236px;
+    height: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    padding: 18px 14px 24px;
+    overflow-y: auto;
+    transform: translateX(-100%);
+    transition: transform 260ms cubic-bezier(.22, .61, .36, 1);
+  }
+  .sidebar-open .sidebar { transform: none; }
+  .sidebar nav { display: grid; flex: none; gap: 6px; overflow: visible; }
+  .side-nav { width: 100%; min-width: 0; justify-content: flex-start; white-space: nowrap; }
+  .nav-dot { display: inline-block; }
+  .side-brand { margin: 0 0 18px; }
+  .side-brand > span:last-child { display: block; }
+  .sidebar-foot { display: block; }
+  .sidebar-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 55;
+    background: rgba(12, 18, 16, .45);
+  }
+  .sidebar-open .sidebar-backdrop { display: block; }
+  .admin-main { width: 100%; margin: 0; padding: 18px 14px 80px; }
+}

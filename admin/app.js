@@ -1098,6 +1098,17 @@
     return window.HelpCatAdminSession.logout(request, clearSession, showLogin, state);
   }
 
+  // 手机端导航是左侧抽屉：汉堡打开、点条目或遮罩关闭
+  function setSidebar(open) {
+    document.body.classList.toggle("sidebar-open", !!open);
+    byId("sidebar-toggle").setAttribute("aria-expanded", open ? "true" : "false");
+  }
+  byId("sidebar-toggle").addEventListener("click", function () { setSidebar(!document.body.classList.contains("sidebar-open")); });
+  byId("sidebar-backdrop").addEventListener("click", function () { setSidebar(false); });
+  document.querySelectorAll(".side-nav").forEach(function (button) {
+    button.addEventListener("click", function () { setSidebar(false); });
+  });
+
   byId("device-list").addEventListener("click", function (event) {
     var button = event.target.closest("[data-revoke-session]");
     if (button) revokeDevice(button);
