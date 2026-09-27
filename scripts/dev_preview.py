@@ -31,6 +31,9 @@ API_PREFIX = "/help-cat-api"
 # 相对路径解析到站点根而 404 —— 这是部署时最容易踩的坑。
 ROUTES = (
     ("/admin", ROOT / "admin"),
+    # 生产上后台走 /help-cat/admin/（H5 里的链接就是写死的这个），本地也得有同一路径，
+    # 否则点"管理后台"会 404 —— 落到 /help-cat 兜底后去找 app/admin/（那里没有）。
+    ("/help-cat/admin", ROOT / "admin"),
     ("/help-cat/rescue/assets", ROOT / "app" / "rescue" / "assets"),
     ("/help-cat/rescue", ROOT / "app" / "rescue"),
     ("/help-cat", ROOT / "app"),

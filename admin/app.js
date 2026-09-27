@@ -153,30 +153,70 @@
     box.innerHTML = "";
     tiles.forEach(function (item) { box.appendChild(item); });
   }
+  // 需要你处理：只列真的有积压的，每行都能点进对应页面（data-section-link 由全局委托处理）
+  function renderActions(today, week, devices) {
+    var rows = [];
+    if (today.uncovered && today.uncovered.length) {
+      rows.push({ text: "今天有 " + today.uncovered.length + " 个喂食点没人管：" + today.uncovered.join("、"), link: "feeding" });
+    }
+    if ((today.gaps || []).length) {
+      rows.push({ text: "未来 7 天有 " + today.gaps.length + " 天没人认领（" + today.gaps.map(function (gap) { return gap.day.slice(5) + " 缺 " + gap.missing; }).join("、") + "）", link: "feeding" });
+    }
+    var backlog = (today.pending_cats || 0) + (today.pending_communities || 0);
+    if (backlog) rows.push({ text: "待审 " + backlog + " 条，最久等了 " + (today.oldest_pending_days || 0) + " 天", link: "cats" });
+    if (today.new_leads) rows.push({ text: today.new_leads + " 条留言还没回复，最久等了 " + (today.oldest_lead_days || 0) + " 天", link: "messages" });
+    if (devices.legacy) rows.push({ text: devices.legacy + " 条登录会话是升级前签发的，建议清理", link: "devices" });
+    if (today.cats_without_photo) rows.push({ text: today.cats_without_photo + " 个已公开档案还没有照片", link: "cats" });
+    if (week.top_volunteer_share_percent >= 70 && week.active_volunteers) {
+      rows.push({ text: "本周 " + week.top_volunteer_share_percent + "% 的投喂靠一个人，建议再拉一位志愿者", link: "feeding" });
+    }
+    var panel = byId("action-panel"), list = byId("action-list");
+    list.innerHTML = "";
+    rows.forEach(function (row) {
+      var li = document.createElement("li");
+      var button = document.createElement("button");
+      button.type = "button";
+      button.dataset.sectionLink = row.link;
+      button.textContent = row.text;
+      var arrow = document.createElement("span");
+      arrow.setAttribute("aria-hidden", "true");
+      arrow.textContent = "→";
+      button.appendChild(arrow);
+      li.appendChild(button);
+      list.appendChild(li);
+    });
+    panel.hidden = rows.length === 0;
+  }
+
   function renderDashboard(data) {
     var today = data.today || {}, week = data.week || {}, accounts = data.accounts || {}, devices = data.devices || {}, security = data.security || {};
     var coverage = today.coverage_percent;
     fill("dashboard-today", [
-      tile("今日投喂覆盖", coverage === null ? "无喂食点" : coverage + "%", today.feeding_points ? (today.covered + "/" + today.feeding_points + " 个点有人管") : ""),
-      tile("今天没人管", today.uncovered ? today.uncovered.length : 0, today.uncovered && today.uncovered.length ? today.uncovered.join("、") : "都有人管"),
-      tile("未来 7 天缺口", (today.gaps || []).length + " 天", (today.gaps || []).map(function (gap) { return gap.day.slice(5) + " 缺 " + gap.missing; }).join(" · ")),
+      tile("今日投喂覆盖", coverage === null ? "无喂食点" : coverage + "%",
+        today.feeding_points
+          ? (today.covered + "/" + today.feeding_points + " 个点有人管" + ((today.uncovered || []).length ? " · 没人管：" + today.uncovered.join("、") : " · 都有人管"))
+          : ""),
+      tile("未来 7 天缺口", (today.gaps || []).length + " 天",
+        (today.gaps || []).length ? (today.gaps || []).map(function (gap) { return gap.day.slice(5) + " 缺 " + gap.missing; }).join(" · ") : "未来 7 天都有人认领"),
       tile("待审积压", (today.pending_cats || 0) + (today.pending_communities || 0), "最久等了 " + (today.oldest_pending_days || 0) + " 天"),
-      tile("未回复留言", today.new_leads || 0, "最久等了 " + (today.oldest_lead_days || 0) + " 天"),
-      tile("缺照片的公开档案", today.cats_without_photo || 0, "照片是公开页最重要的内容")
+      tile("未回复留言", today.new_leads || 0, "最久等了 " + (today.oldest_lead_days || 0) + " 天")
     ]);
     fill("dashboard-week", [
-      tile("本周浏览", (week.page_views || {}).total || 0, "首页 " + ((week.page_views || {}).home || 0) + " · 故事 " + ((week.page_views || {}).story || 0) + " · 欢迎页 " + ((week.page_views || {}).welcome || 0)),
-      tile("欢迎页转化", week.lead_conversion_percent === null || week.lead_conversion_percent === undefined ? "—" : week.lead_conversion_percent + "%", "留下联系方式 " + (week.leads || 0) + " 条"),
-      tile("投喂打卡", week.feeding_checkins || 0, "活跃志愿者 " + (week.active_volunteers || 0) + " 人"),
-      tile("单人依赖度", (week.top_volunteer_share_percent || 0) + "%", (week.top_volunteer_share_percent || 0) >= 70 ? "偏高：一个人停了就断" : "还算分散"),
-      tile("新增档案", week.new_cats || 0, "新增注册 " + (week.new_users || 0)),
-      tile("已认领班次", week.claimed_shifts || 0, "本周待完成的认领")
+      tile("本周浏览", (week.page_views || {}).total || 0,
+        "首页 " + ((week.page_views || {}).home || 0) + " · 故事 " + ((week.page_views || {}).story || 0) + " · 欢迎页 " + ((week.page_views || {}).welcome || 0)),
+      tile("欢迎页转化", week.lead_conversion_percent === null || week.lead_conversion_percent === undefined ? "—" : week.lead_conversion_percent + "%",
+        "留下联系方式 " + (week.leads || 0) + " 条"),
+      tile("投喂打卡", week.feeding_checkins || 0,
+        "活跃志愿者 " + (week.active_volunteers || 0) + " 人" + ((week.top_volunteer_share_percent || 0) >= 70 && week.active_volunteers ? " · 单人依赖 " + week.top_volunteer_share_percent + "%" : "")),
+      tile("本周新增", (week.new_cats || 0) + " 个档案",
+        "注册 " + (week.new_users || 0) + " 人 · 已认领班次 " + (week.claimed_shifts || 0))
     ]);
     fill("dashboard-system", [
       tile("账户总数", accounts.total || 0, "其中管理员 " + (accounts.admins || 0)),
       tile("登录设备", devices.active || 0, devices.legacy ? (devices.legacy + " 条是升级前签发，建议清理") : "没有遗留会话"),
       tile("登录失败（7 天）", security.login_failures_7d || 0, "有人试密码时会涨")
     ]);
+    renderActions(today, week, devices);
   }
   function loadDashboard() {
     return request("/api/v1/admin/dashboard").then(function (body) {

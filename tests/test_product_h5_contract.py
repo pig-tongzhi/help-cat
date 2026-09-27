@@ -427,7 +427,7 @@ class ProductH5ContractTests(unittest.TestCase):
         self.assertIn('"/api/v1/admin/dashboard"', script)
         self.assertIn("function renderDashboard", script)
         self.assertIn("function loadDashboard", script)
-        self.assertIn("单人依赖度", script)
+        self.assertIn("单人依赖", script, "单人依赖度是合并进投喂打卡那张卡的副标题里的")
         self.assertIn(".dashboard-tile", styles)
 
     def test_h5_reports_page_views_for_each_page(self):
