@@ -972,6 +972,12 @@
       li.appendChild(deviceLine(item.device, item.ip || "IP 未知"));
       li.appendChild(deviceLine("登录时间", String(item.created_at || "").replace("T", " ").slice(0, 16)));
       li.appendChild(deviceLine("有效期到", String(item.expires_at || "").replace("T", " ").slice(0, 16)));
+      if (item.link) {
+        var linkTag = document.createElement("span");
+        linkTag.className = "device-tag link";
+        linkTag.textContent = "免登录链接";
+        li.appendChild(linkTag);
+      }
       if (item.remember) {
         var tag = document.createElement("span");
         tag.className = "device-tag";
@@ -1013,6 +1019,36 @@
       .then(function () { byId("device-message").textContent = "那台设备已经被踢下线。"; return loadDevices(); })
       .catch(function (error) { byId("device-message").textContent = errorText(error); })
       .then(function () { state.busy = false; });
+  }
+  // ---- 免登录链接：给微信这种会清存储的浏览器留一条入口 ---------------
+  function deviceLinkUrl(token) {
+    // 用当前地址拼，而不是让服务端猜 host：手机从哪个入口进来的，链接就指向哪个入口。
+    return window.location.origin + window.location.pathname + "?k=" + encodeURIComponent(token);
+  }
+  function createDeviceLink(button) {
+    if (state.busy) return;
+    state.busy = true;
+    button.disabled = true;
+    byId("device-link-message").textContent = "正在生成…";
+    request("/api/v1/auth/device-links", { method: "POST", body: { label: byId("device-link-label").value || "" } })
+      .then(function (body) {
+        byId("device-link-url").value = deviceLinkUrl(body.token);
+        byId("device-link-result").hidden = false;
+        byId("device-link-message").textContent = "已生成，有效期 " + body.days + " 天。存进微信收藏，点开就能直接进后台。";
+        return loadDevices();
+      })
+      .catch(function (error) { byId("device-link-message").textContent = errorText(error); })
+      .finally(function () { button.disabled = false; state.busy = false; });
+  }
+  function copyDeviceLink() {
+    var field = byId("device-link-url");
+    function done() { toast("链接已复制"); }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(field.value).then(done, function () { field.select(); toast("请手动复制选中的链接"); });
+      return;
+    }
+    field.select();
+    toast("请手动复制选中的链接");
   }
   function changeRole(button) {
     if (state.busy || !profile || profile.role !== "SUPER_ADMIN") return;
@@ -1128,6 +1164,8 @@
     });
   });
   byId("logout").addEventListener("click", logout);
+  byId("create-device-link").addEventListener("click", function (event) { createDeviceLink(event.currentTarget); });
+  byId("copy-device-link").addEventListener("click", copyDeviceLink);
   byId("refresh").addEventListener("click", loadAll);
   byId("load-more-admin-cats").addEventListener("click", function (event) { loadMore("cats", event.currentTarget); });
   byId("load-more-admin-communities").addEventListener("click", function (event) { loadMore("communities", event.currentTarget); });
@@ -1298,11 +1336,32 @@
     }, 260);
   });
 
+  // ---- 免登录链接：?k=<令牌> ------------------------------------------------
+  // 微信内置浏览器退出后会把 Cookie 和 localStorage 一起清掉（线上实测每开一次微信
+  // 都要重登），链接里的令牌不依赖浏览器存储，收藏一次就能一直用。
+  // 用掉之后立刻把 k 从地址栏抹掉：不要留在历史记录、截图和别人看到的 URL 里。
+  function adoptDeviceLinkToken() {
+    var match = /[?&]k=([^&#]+)/.exec(window.location.search);
+    if (!match) return false;
+    var incoming = decodeURIComponent(match[1]);
+    if (!incoming) return false;
+    token = incoming;
+    writeToken(token, true);
+    try {
+      var clean = window.location.pathname + window.location.hash;
+      window.history.replaceState(null, "", clean);
+    } catch (error) { /* 老浏览器不支持就算了，不影响登录 */ }
+    return true;
+  }
+
   var initialSection = window.location.hash.replace("#", "");
   if (["overview", "cats", "communities", "feeding", "tasks", "messages", "impact", "users"].indexOf(initialSection) >= 0) state.section = initialSection;
+  var fromDeviceLink = adoptDeviceLinkToken();
   // 总是先问服务端，不要因为"本机没有令牌"就直接弹登录框：
   // 会话也可能来自 HttpOnly Cookie（H5 登录后同一个 host 共享），
   // 而且后台强制 HTTPS、H5 走 HTTP 时两者是**不同源**，localStorage 根本不共享。
   // 这里和 app/rescue/api.js 的 restoreSession 是同一个坑，别再改回去。
-  restoreSession().then(function () { switchSection(state.section); }).catch(function () {});
+  restoreSession().then(function () { switchSection(state.section); }).catch(function () {
+    if (fromDeviceLink) byId("login-message").textContent = "免登录链接已失效，请用账号密码登录后重新生成一条。";
+  });
 }());

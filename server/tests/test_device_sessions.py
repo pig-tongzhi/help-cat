@@ -189,5 +189,66 @@ class DeviceSessionApiTests(unittest.TestCase):
         self.assertEqual(200, status)
 
 
+class DeviceLinkApiTests(DeviceSessionApiTests):
+    """免登录链接：把一条长期会话的令牌放进 URL 的 ?k=，不依赖浏览器存储。
+
+    为什么需要它：iOS 微信的 WKWebView 退出微信后会把 Cookie 和 localStorage 一起丢掉
+    （线上实测同一台 iPhone 每次重开微信 /auth/me 都是 401），链接里的令牌不受影响。
+    这里钉死四条：只有管理员能生成、令牌能直接换回会话、列表里标成免登录链接、
+    踢下线之后立刻失效。
+    """
+
+    def admin_login(self, openid="admin-openid"):
+        status, body = self.request_on("POST", "/api/v1/auth/wechat-login", payload={"code": "fake:" + openid})
+        self.assertEqual(200, status, body)
+        return body
+
+    def create_link(self, token, label="我的 iPhone", days=None):
+        payload = {"label": label}
+        if days is not None:
+            payload["days"] = days
+        return self.request_on("POST", "/api/v1/auth/device-links", token=token, payload=payload)
+
+    def test_admin_link_logs_in_without_password(self):
+        admin = self.admin_login()
+        status, body = self.create_link(admin["access_token"], label="我的 iPhone")
+        self.assertEqual(201, status, body)
+        self.assertEqual(180, body["days"], "默认 180 天，够用又留了撤销的余地")
+        self.assertTrue(body["token"], "生成时必须回显完整令牌一次，前端才好拼进链接")
+
+        # 链接里的令牌就是会话令牌：不用密码、不用 Cookie 也能认出人
+        status, me = self.request_on("GET", "/api/v1/auth/me", token=body["token"])
+        self.assertEqual(200, status, me)
+        self.assertEqual(admin["user"]["id"], me["id"], "链接换回来的必须是生成它的那个账号")
+        self.assertEqual("ADMIN", me["role"])
+
+        # 「登录的设备」里要能认出哪条是免登录链接，否则撤销时无从下手
+        item = next(one for one in self.sessions(body["token"]) if one["id"] == body["id"])
+        self.assertTrue(item["link"])
+        self.assertEqual("我的 iPhone", item["device"])
+
+    def test_only_admins_can_create_links(self):
+        """免登录链接等于免密码进门，所以只有管理员能生成。
+        （令牌签给生成者自己，也就没有"替别人签一条"的口子。）"""
+        ordinary = self.register("volunteer", "volunteer-pass-123")
+        status, body = self.create_link(ordinary["access_token"])
+        self.assertEqual(403, status, body)
+        self.assertEqual("forbidden", body.get("code") or body.get("detail", {}).get("code"))
+
+    def test_link_days_are_bounded(self):
+        admin = self.admin_login()
+        self.assertEqual(422, self.create_link(admin["access_token"], days=0)[0])
+        self.assertEqual(422, self.create_link(admin["access_token"], days=3650)[0])
+
+    def test_revoking_a_link_kills_it(self):
+        admin = self.admin_login()
+        _, link = self.create_link(admin["access_token"], label="备用入口")
+        status, body = self.request_on("POST", "/api/v1/auth/sessions/revoke",
+                                       token=admin["access_token"], payload={"id": link["id"]})
+        self.assertEqual(200, status, body)
+        status, _ = self.request_on("GET", "/api/v1/auth/me", token=link["token"])
+        self.assertEqual(401, status, "踢下线后链接必须立刻失效")
+
+
 if __name__ == "__main__":
     unittest.main()

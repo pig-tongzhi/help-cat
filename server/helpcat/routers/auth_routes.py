@@ -7,7 +7,7 @@ from .. import login_guard
 from ..dependencies import get_current_user, get_db
 from ..errors import error
 from ..models import AuditLog, Session as AuthSession, User
-from ..schemas import PasswordLoginRequest, RegisterRequest, SessionRevokeRequest, WechatLoginRequest
+from ..schemas import DeviceLinkRequest, PasswordLoginRequest, RegisterRequest, SessionRevokeRequest, WechatLoginRequest
 from ..serializers import audit, auth_payload, session_device_label
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter
@@ -135,6 +135,7 @@ def _session_rows(db: DbSession, user_id: str):
                                    "ip": payload.get("ip") or "",
                                    "days": payload.get("days") or 0,
                                    "remember": bool(payload.get("remember")),
+                                   "link": bool(payload.get("link")),
                                    "created_at": row.created_at}
     return sessions, meta
 
@@ -163,6 +164,7 @@ def list_sessions(request: Request, authorization: Optional[str] = Header(defaul
             "device": extra.get("device") or "未知设备（升级前签发）",
             "ip": extra.get("ip") or "",
             "remember": bool(extra.get("remember")),
+            "link": bool(extra.get("link")),
             "current": bool(current) and item.token == current,
             "created_at": created_at.isoformat(),
             "expires_at": expires_at.isoformat(),
@@ -190,6 +192,43 @@ def revoke_session(payload: SessionRevokeRequest, authorization: Optional[str] =
           after={"device": session_device_label(None)})
     db.commit()
     return {"revoked": target.token[:8]}
+
+
+@router.post("/api/v1/auth/device-links", status_code=201)
+def create_device_link(request: Request, payload: DeviceLinkRequest,
+                       actor=Depends(get_current_user), db: DbSession = Depends(get_db)):
+    """签一条长期会话，交给前端塞进链接的 `?k=` 里，这就是"免登录链接"。
+
+    为什么不能只靠 Cookie：微信内置浏览器的 WKWebView 在退出微信后会把 Cookie 和
+    localStorage 一起丢掉（线上实测：同一台 iPhone 每次重开微信，`/auth/me` 都是 401），
+    服务端会话明明还有效。链接里的令牌不依赖浏览器存储，收藏一次就能一直用。
+
+    令牌等于这台设备的登录凭证，所以：只在生成时回显一次、可在这里一键撤销、
+    过期时间默认 180 天。审计仍写 SESSION_ISSUE（带 link 标记），这样「登录的设备」
+    列表不用改表结构就能把它标成"免登录链接"。
+    """
+    if actor[1] not in ("ADMIN", "SUPER_ADMIN"):
+        error(403, "forbidden")
+    user = db.get(User, actor[0])
+    days = payload.days
+    label = payload.label.strip()
+    token = issue_session(db, user, days)
+    audit(db, user.id, "SESSION_ISSUE", "session", token[:8], after={
+        "device": label or "免登录链接",
+        "ip": (request.client.host if request.client else ""),
+        "remember": True,
+        "days": days,
+        "link": True,
+    })
+    db.commit()
+    expires_at = datetime.now(timezone.utc) + timedelta(days=days)
+    return {
+        "id": token[:8],
+        "token": token,
+        "days": days,
+        "expires_at": expires_at.isoformat(),
+        "user": {"id": user.id, "username": user.username, "role": user.role},
+    }
 
 
 @router.post("/api/v1/auth/logout")

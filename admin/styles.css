@@ -348,3 +348,45 @@ body { background: radial-gradient(circle at 88% 6%,rgba(226,220,255,.34),transp
   .sidebar-open .sidebar-backdrop { display: block; }
   .admin-main { width: 100%; margin: 0; padding: 18px 14px 80px; }
 }
+
+/* ---- 免登录链接与设备列表 ------------------------------------------------
+   这两个类之前完全没有样式，「记住设备」「本机」几个标记会连成一行字；
+   生成链接后又需要一个能一眼看清链接本体、方便长按复制的地方。 */
+.device-item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid #EFEFF4;
+}
+.device-line { display: inline-flex; gap: 6px; font-size: 13px; }
+.device-line strong { color: #6e6e73; font-weight: 500; }
+.device-tag {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: #EFEFF4;
+  color: #6e6e73;
+  font-size: 12px;
+}
+.device-tag.current { background: #E4F2E6; color: #1f6b32; }
+.device-tag.link { background: #FFF1DC; color: #8a5a00; }
+.device-link-result {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  align-items: center;
+  margin-top: 12px;
+}
+.device-link-result .inline-message { flex: 1 1 100%; margin: 0; }
+.device-link-result input {
+  flex: 1 1 240px;
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid #d2d2d7;
+  border-radius: 11px;
+  background: #fff;
+  color: #1d1d1f;
+  font: inherit;
+  font-size: 13px;
+}

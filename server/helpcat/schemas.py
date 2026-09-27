@@ -28,6 +28,16 @@ class SessionRevokeRequest(BaseModel):
     id: str = Field(min_length=8, max_length=16)
 
 
+class DeviceLinkRequest(BaseModel):
+    """生成一条"免登录链接"。
+
+    只有管理员能生成（接口里按角色拦），且签出来的会话属于生成者本人，
+    所以拿不到"替别人签一条"的口子。days 上限 365，避免签出事实上的永久凭证。
+    """
+    label: str = Field(default="", max_length=40)
+    days: int = Field(default=180, ge=1, le=365)
+
+
 class CommunityCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     street: str = Field(min_length=1, max_length=80)

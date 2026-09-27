@@ -448,6 +448,31 @@ class ProductH5ContractTests(unittest.TestCase):
                 f"{path} 必须把 http 跳到 https",
             )
 
+    def test_admin_can_mint_a_passwordless_device_link(self):
+        """微信内置浏览器退出后会把 Cookie 和 localStorage 一起清掉，所以要有
+        「免登录链接」：令牌放在 ?k= 里，收藏一次就能一直用。
+        前端必须认这个参数、用掉之后把它从地址栏抹掉（别留在历史和截图里），
+        并且只在后台（管理员）里提供生成入口。"""
+        html = (ROOT / "admin" / "index.html").read_text(encoding="utf-8")
+        script = (ROOT / "admin" / "app.js").read_text(encoding="utf-8")
+        self.assertIn('id="create-device-link"', html)
+        self.assertIn('id="device-link-url"', html)
+        self.assertIn('id="copy-device-link"', html)
+        self.assertIn('"/api/v1/auth/device-links"', script)
+        self.assertIn("function adoptDeviceLinkToken", script)
+        self.assertIn("window.history.replaceState", script, "令牌不能留在地址栏里")
+        self.assertIn("免登录链接已失效", script, "链接过期要给人一句人话")
+        self.assertIn("item.link", script, "列表要标出哪条是免登录链接，否则撤销时找不到")
+
+    def test_only_admins_can_use_passwordless_links(self):
+        """免登录链接绕过了密码，所以生成接口必须按角色拦（后端），
+        并且令牌签给生成者本人 —— 拿不到"替别人签一条"的口子。"""
+        routes = (ROOT / "server" / "helpcat" / "routers" / "auth_routes.py").read_text(encoding="utf-8")
+        body = routes.split("def create_device_link", 1)[1].split("@router.post(\"/api/v1/auth/logout\")", 1)[0]
+        self.assertIn('if actor[1] not in ("ADMIN", "SUPER_ADMIN")', body)
+        self.assertIn('error(403, "forbidden")', body)
+        self.assertIn("issue_session(db, user, days)", body)
+
     def test_dashboard_shows_today_week_and_system_numbers(self):
         """后台看板：今天的状态 / 本周趋势 / 账户与安全。
         它必须从 /admin/dashboard 取数，且"单人依赖度"这类判断要有文字提示。"""
