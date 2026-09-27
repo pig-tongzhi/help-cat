@@ -302,3 +302,18 @@ class LeadMessage(Base):
     is_qa: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sql_text("0"), nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+class PageView(Base):
+    """按天聚合的浏览计数。
+
+    一天一个页面一行 —— 不会随访问量膨胀，也不写审计：audit_logs 的 actor_id 是
+    非空外键，匿名访客根本写不进去（这也是当初把登录失败单独建表的原因）。
+    """
+
+    __tablename__ = "page_views"
+    __table_args__ = (UniqueConstraint("day", "kind", name="uq_page_views_day_kind"),)
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    day: Mapped[str] = mapped_column(String(10), index=True)
+    kind: Mapped[str] = mapped_column(String(24), index=True)
+    count: Mapped[int] = mapped_column(Integer, default=0)

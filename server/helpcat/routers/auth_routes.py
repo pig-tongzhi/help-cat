@@ -30,7 +30,15 @@ def wechat_login(request: Request, payload: WechatLoginRequest, db: DbSession = 
         db.add(user)
         db.flush()
     user.last_login_at = datetime.now(timezone.utc)
-    token = issue_session(db, user, request.app.state.settings.session_days)
+    days = request.app.state.settings.session_days
+    token = issue_session(db, user, days)
+    # 和账号密码登录一样留一条设备审计，否则这条会话在「登录的设备」里显示成"升级前签发"
+    audit(db, user.id, "SESSION_ISSUE", "session", token[:8], after={
+        "device": session_device_label(request.headers.get("user-agent", "")),
+        "ip": (request.client.host if request.client else ""),
+        "remember": False,
+        "days": days,
+    })
     db.commit()
     return {"access_token": token, "token_type": "bearer", "user": {"id": user.id, "role": user.role}}
 

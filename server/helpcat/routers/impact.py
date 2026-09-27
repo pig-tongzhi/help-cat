@@ -3,11 +3,12 @@
 from ..auth import require_admin
 from ..dependencies import get_current_user, get_db
 from ..errors import error
-from ..models import ImpactEvent
+from ..models import ImpactEvent, PageView
 from ..pagination import paginated_items
 from ..schemas import ImpactEventCreate
 from ..serializers import audit, impact_event_payload
 from datetime import datetime, timezone
+from ..domain import shanghai_today
 from fastapi import APIRouter
 from fastapi import Depends, Query
 from sqlalchemy import func, select
@@ -70,3 +71,27 @@ def reverse_impact_event(event_id: str, actor=Depends(get_current_user), db: DbS
         }, after={"reversed_at": event.reversed_at.isoformat()})
         db.commit()
     return impact_event_payload(event)
+
+
+# 允许上报的页面。白名单是必要的：否则任何人可以往表里塞任意 kind，把看板撑成一堆垃圾行。
+VISIT_KINDS = ("home", "story", "welcome")
+
+
+@router.post("/api/v1/public/visit")
+def record_visit(payload: dict, db: DbSession = Depends(get_db)):
+    """H5 每次加载上报一次，按天累加。
+
+    刻意做得极轻：一天一个页面只有一行，更新时自增，不做去重（看板看的是 PV）。
+    失败也不影响访客，前端是 fire-and-forget。
+    """
+    kind = str((payload or {}).get("kind") or "").strip()
+    if kind not in VISIT_KINDS:
+        error(400, "unknown_visit_kind")
+    day = shanghai_today()
+    row = db.scalar(select(PageView).where(PageView.day == day, PageView.kind == kind))
+    if row is None:
+        row = PageView(day=day, kind=kind, count=0)
+        db.add(row)
+    row.count += 1
+    db.commit()
+    return {"day": day, "kind": kind, "count": row.count}
