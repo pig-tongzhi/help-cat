@@ -279,3 +279,17 @@ body { background: radial-gradient(circle at 88% 6%,rgba(226,220,255,.34),transp
 .ledger { margin-top: 18px; }
 .ledger summary { color: #6E6E73; font-size: 12.5px; cursor: pointer; }
 .ledger .summary { margin-top: 12px; }
+
+/* ---------- 手机端后台 ---------- */
+@media (max-width: 720px) {
+  /* 看板卡片在手机上原来是一行一张（366px 宽）→ 11 张卡要滚很久。
+     两列之后 11 张 = 6 行，数字和副标题仍然读得清。 */
+  .dashboard-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .dashboard-tile { padding: 11px 12px; border-radius: 12px; }
+  .dashboard-tile strong { font-size: 19px; }
+  .dashboard-tile span { font-size: 12px; }
+  .dashboard-tile small { font-size: 11px; line-height: 1.45; }
+  .dashboard-heading { margin: 14px 0 6px; }
+  .action-list button { padding: 10px 12px; font-size: 13px; }
+  .ledger summary { font-size: 12px; }
+}
