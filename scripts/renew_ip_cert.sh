@@ -14,22 +14,32 @@
 set -u
 
 LINEAGE="175.178.41.19"
-CONF_DIR="/etc/letsencrypt"
-CERT="$CONF_DIR/live/$LINEAGE/cert.pem"
-CERTBOT="/opt/certbot-venv/bin/certbot"
+CONF_DIR="${HELPCAT_CERT_CONF_DIR:-/etc/letsencrypt}"
+CERT="${HELPCAT_CERT_FILE:-$CONF_DIR/live/$LINEAGE/cert.pem}"
+CERTBOT="${HELPCAT_CERTBOT:-/opt/certbot-venv/bin/certbot}"
 FORCE_DAYS="${HELPCAT_CERT_FORCE_DAYS:-3}"
 WARN_HOURS="${HELPCAT_CERT_WARN_HOURS:-24}"
-LOG="/var/log/helpcat-cert-renew.log"
-ENV_FILE="/etc/help-cat/healthcheck.env"
-HOOK="systemctl reload nginx"
+LOG="${HELPCAT_CERT_LOG:-/var/log/helpcat-cert-renew.log}"
+ENV_FILE="${HELPCAT_CERT_ENV_FILE:-/etc/help-cat/healthcheck.env}"
+HOOK="${HELPCAT_CERT_HOOK:-systemctl reload nginx}"
 
 log() { printf '%s %s\n' "$(date '+%F %T')" "$*" | tee -a "$LOG"; }
 
-remaining_seconds() {
-  local end
-  end="$(openssl x509 -enddate -noout -in "$CERT" 2>/dev/null | cut -d= -f2)"
-  [ -n "$end" ] || { echo 0; return; }
-  echo $(( $(date -d "$end" +%s) - $(date +%s) ))
+# 用 openssl 的 -checkend 判断剩余时间，不做日期差：GNU 才有 `date -d`，
+# 开发机（macOS）没有，而这个脚本在两边都要能跑（测试就是在本机跑的）。
+# -checkend N 的退出码：0 = 至少还能用 N 秒，1 = 会在 N 秒内过期。
+expires_within() { ! openssl x509 -checkend "$1" -noout -in "$CERT" >/dev/null 2>&1; }
+
+# 完整的剩余天数（不足一天算 0，已过期算 -1），只用于日志和阈值判断
+full_days_left() {
+  local d
+  for d in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 20 25 30; do
+    if expires_within $(( d * 86400 )); then
+      echo $(( d - 1 ))
+      return
+    fi
+  done
+  echo 30
 }
 
 # 告警复用监控那套 webhook 配置（同一个文件，不额外存密钥）
@@ -51,18 +61,18 @@ alert() {
 
 [ -r "$CERT" ] || { log "找不到证书 ${CERT}，无法判断是否续期"; alert "找不到证书文件 ${CERT}"; exit 1; }
 
-BEFORE="$(remaining_seconds)"
-DAYS_LEFT=$(( BEFORE / 86400 ))
-HOURS_LEFT=$(( BEFORE / 3600 ))
-log "续期前：剩余 ${HOURS_LEFT} 小时（${DAYS_LEFT} 天）"
+DAYS_LEFT="$(full_days_left)"
+EXPIRES_AT="$(openssl x509 -enddate -noout -in "$CERT" 2>/dev/null | cut -d= -f2)"
+log "续期前：到期时间 ${EXPIRES_AT}，剩余约 ${DAYS_LEFT} 天"
 
-if [ "$BEFORE" -le 0 ]; then
+if expires_within 0; then
   log "证书已经过期，强制续期"
   FORCE="--force-renewal"
-elif [ "$BEFORE" -le $(( FORCE_DAYS * 86400 )) ]; then
+elif expires_within $(( FORCE_DAYS * 86400 )); then
   log "剩余不足 ${FORCE_DAYS} 天，强制续期（不依赖 certbot 自己的到期判断）"
   FORCE="--force-renewal"
 else
+  log "剩余 ${DAYS_LEFT} 天，按 ARI 常规续期"
   FORCE=""
 fi
 
@@ -72,20 +82,20 @@ if ! "$CERTBOT" renew --cert-name "$LINEAGE" $FORCE \
       --no-random-sleep-on-renew --non-interactive \
       --deploy-hook "$HOOK" >>"$LOG" 2>&1; then
   log "certbot 返回失败，见 $LOG"
-  alert "certbot 续期失败（证书剩余 ${HOURS_LEFT} 小时），详见服务器 $LOG"
+  alert "certbot 续期失败（证书剩余 ${DAYS_LEFT} 天），详见服务器 $LOG"
   exit 1
 fi
 
-AFTER="$(remaining_seconds)"
-log "续期后：剩余 $(( AFTER / 3600 )) 小时（$(( AFTER / 86400 )) 天）"
+AFTER_DAYS="$(full_days_left)"
+log "续期后：剩余约 ${AFTER_DAYS} 天"
 
 # 续期"成功"但时间没往前走，说明拿到的还是旧证书 —— 也要喊出来
-if [ "$AFTER" -le 0 ]; then
+if expires_within 0; then
   alert "续期后证书仍然过期，后台 HTTPS 会不可用"
   exit 1
 fi
-if [ "$AFTER" -le $(( WARN_HOURS * 3600 )); then
-  alert "续期后证书只剩 $(( AFTER / 3600 )) 小时，请人工检查续期通道"
+if expires_within $(( WARN_HOURS * 3600 )); then
+  alert "续期后证书只剩不到 $(( WARN_HOURS / 24 )) 天，请人工检查续期通道"
   exit 1
 fi
 

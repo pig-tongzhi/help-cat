@@ -536,5 +536,56 @@ class CertificateAndProbeResilienceTests(unittest.TestCase):
         self.assertFalse((self.root / "last-alert").exists(), "恢复后要清掉告警状态")
 
 
+    # ---- 续期脚本的两个分支（真的跑，不只看源码）----------------------
+
+    def make_cert(self, days):
+        """造一张真的自签证书，让脚本的剩余时间计算有东西可算。"""
+        cert = self.root / ("cert-%s.pem" % days)
+        subprocess.run(
+            ["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes",
+             "-keyout", str(self.root / "key.pem"), "-out", str(cert),
+             "-days", str(days), "-subj", "/CN=175.178.41.19"],
+            capture_output=True, check=True,
+        )
+        return cert
+
+    def run_renewal(self, cert, *, force_days=3, warn_hours=24):
+        """用假的 certbot 跑脚本：只验证判断逻辑和日志，不碰真 ACME。"""
+        calls = self.root / "certbot-calls.txt"
+        stub = self.root / "certbot"
+        stub.write_text('#!/bin/bash\necho "$@" >> %s\n' % calls, encoding="utf-8")
+        stub.chmod(0o755)
+        log = self.root / "renew.log"
+        environment = dict(
+            os.environ,
+            HELPCAT_CERT_FILE=str(cert),
+            HELPCAT_CERTBOT=str(stub),
+            HELPCAT_CERT_LOG=str(log),
+            HELPCAT_CERT_FORCE_DAYS=str(force_days),
+            HELPCAT_CERT_WARN_HOURS=str(warn_hours),
+            HELPCAT_CERT_ENV_FILE=str(self.root / "no-webhook.env"),
+        )
+        result = subprocess.run(["/bin/bash", str(REPO_ROOT / "scripts" / "renew_ip_cert.sh")],
+                                cwd=REPO_ROOT, env=environment, capture_output=True, text=True)
+        return result, log.read_text(encoding="utf-8"), calls
+
+    def test_renewal_forces_a_renewal_when_time_is_short(self):
+        result, log, calls = self.run_renewal(self.make_cert(2))
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertIn("强制续期", log)
+        self.assertIn("--force-renewal", calls.read_text(encoding="utf-8"))
+        # 这里的 `[ ... $(( ... )) ]` 曾经少了一个 `]`，脚本不报错、只是静默跳过告警，
+        # 所以必须断言 stderr 干净，而不是只看退出码。
+        self.assertNotIn("missing `]'", result.stderr)
+        self.assertEqual("", result.stderr)
+
+    def test_renewal_leaves_a_fresh_certificate_alone(self):
+        result, log, calls = self.run_renewal(self.make_cert(6))
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertIn("剩余", log)
+        self.assertNotIn("--force-renewal", calls.read_text(encoding="utf-8"))
+        self.assertNotIn("--force-renewal", log)
+
+
 if __name__ == "__main__":
     unittest.main()
