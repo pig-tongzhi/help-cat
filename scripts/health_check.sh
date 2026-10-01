@@ -18,6 +18,8 @@
 #   HELPCAT_API_PREFIX           默认 /help-cat-api
 #   HELPCAT_ALERT_WEBHOOK        失败时 POST 的地址（不设只记日志）
 #   HELPCAT_ALERT_WEBHOOK_FORMAT wecom(默认) | feishu | slack
+#   HELPCAT_ALERT_COOLDOWN_MIN   同一故障重复告警的最小间隔（分钟），默认 60；0 = 每次都发
+#   HELPCAT_ALERT_STATE          记录上次告警时间的状态文件，默认 /var/lib/help-cat/last-alert
 #   HELPCAT_MIN_FREE_MB          数据库盘最低剩余空间，默认 1024
 #   HELPCAT_HEALTH_LOG           默认 /var/log/help-cat/health.log（不可写则跳过）
 #
@@ -29,6 +31,8 @@ MIN_FREE_MB="${HELPCAT_MIN_FREE_MB:-1024}"
 HEALTH_LOG="${HELPCAT_HEALTH_LOG:-/var/log/help-cat/health.log}"
 DB_PATH="${HELPCAT_DB_PATH:-/opt/help-cat/data/help-cat.db}"
 TIMEOUT="${HELPCAT_HEALTH_TIMEOUT:-8}"
+ALERT_COOLDOWN_MIN="${HELPCAT_ALERT_COOLDOWN_MIN:-60}"
+ALERT_STATE="${HELPCAT_ALERT_STATE:-/var/lib/help-cat/last-alert}"
 
 QUIET=0
 while [ $# -gt 0 ]; do
@@ -47,6 +51,9 @@ FAIL_COUNT=0
 PASSES=0
 
 say() { [ "$QUIET" -eq 1 ] || printf '%s\n' "$*"; }
+# 告警相关的决策（发了/被冷却压掉/恢复通知）必须落进日志文件：
+# --quiet 下 stdout 是空的，事后只能翻日志，看不到就等于没发生过。
+note() { printf '%s %s\n' "$(date '+%F %T')" "$1" >> "$HEALTH_LOG" 2>/dev/null || true; }
 pass() { PASSES=$(( PASSES + 1 )); say "✓ $1"; }
 fail() {
   FAIL_COUNT=$(( FAIL_COUNT + 1 ))
@@ -227,8 +234,9 @@ if mkdir -p "$(dirname "$HEALTH_LOG")" 2>/dev/null; then
   printf '%s %s\n' "$(date '+%F %T')" "$(printf '%s' "$SUMMARY" | tr '\n' ' ')" >> "$HEALTH_LOG" 2>/dev/null || true
 fi
 
-if [ "$FAIL_COUNT" -gt 0 ] && [ -n "${HELPCAT_ALERT_WEBHOOK:-}" ]; then
-  escaped="$(printf '%s' "$SUMMARY" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' | tr '\n' ' ')"
+send_alert() {
+  local text="$1" escaped payload
+  escaped="$(printf '%s' "$text" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' | tr '\n' ' ')"
   case "${HELPCAT_ALERT_WEBHOOK_FORMAT:-wecom}" in
     feishu) payload="{\"msg_type\":\"text\",\"content\":{\"text\":\"$escaped\"}}" ;;
     slack|discord|text) payload="{\"text\":\"$escaped\"}" ;;
@@ -237,8 +245,34 @@ if [ "$FAIL_COUNT" -gt 0 ] && [ -n "${HELPCAT_ALERT_WEBHOOK:-}" ]; then
   if curl -sS --max-time "$TIMEOUT" -X POST -H 'Content-Type: application/json' \
       -d "$payload" "$HELPCAT_ALERT_WEBHOOK" >/dev/null 2>&1; then
     say "· 已发出告警"
-  else
-    say "· 告警发送失败（webhook 不可达）"
+    note "已发出告警"
+    mkdir -p "$(dirname "$ALERT_STATE")" 2>/dev/null || true
+    date +%s > "$ALERT_STATE" 2>/dev/null || true
+    return 0
+  fi
+  say "· 告警发送失败（webhook 不可达）"
+  note "告警发送失败（webhook 不可达）"
+  return 1
+}
+
+# 告警要能一直开着，所以必须防刷屏：这个探针每 5 分钟跑一次，同一个故障
+# 冷却期内只发第一条；恢复时补发一条，否则群里会只剩下坏消息、看不出已经好了。
+if [ -n "${HELPCAT_ALERT_WEBHOOK:-}" ]; then
+  if [ "$FAIL_COUNT" -gt 0 ]; then
+    LAST_ALERT=0
+    [ -r "$ALERT_STATE" ] && LAST_ALERT="$(cat "$ALERT_STATE" 2>/dev/null || echo 0)"
+    case "$LAST_ALERT" in ''|*[!0-9]*) LAST_ALERT=0 ;; esac
+    WAIT=$(( ALERT_COOLDOWN_MIN * 60 ))
+    if [ "$ALERT_COOLDOWN_MIN" -gt 0 ] && [ $(( $(date +%s) - LAST_ALERT )) -lt "$WAIT" ]; then
+      say "· 上次告警在冷却期内，本次只记日志"
+      note "故障持续，告警在冷却期内未重复发送"
+    else
+      send_alert "$SUMMARY"
+    fi
+  elif [ -r "$ALERT_STATE" ]; then
+    say "· 故障已恢复，发出恢复通知"
+    send_alert "帮帮小猫：探活已恢复正常（全部通过）。"
+    rm -f "$ALERT_STATE" 2>/dev/null || true
   fi
 fi
 

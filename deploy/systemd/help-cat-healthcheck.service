@@ -11,5 +11,8 @@ Type=oneshot
 #   HELPCAT_ALERT_WEBHOOK_FORMAT=wecom|feishu|slack
 #   HELPCAT_MIN_FREE_MB=1024
 EnvironmentFile=-/etc/help-cat/healthcheck.env
-ExecStart=/opt/help-cat/current/scripts/health_check.sh --quiet
+# 用 /bin/bash 显式调用，不要依赖脚本的执行位：发布/人工激活时如果用了
+# `find . -type f -exec chmod 644`，脚本会变成不可执行，systemd 报 203/EXEC，
+# 监控就此静默失效 —— 2026-10-01 的 IP 证书过期没人知道就是这个原因。
+ExecStart=/bin/bash /opt/help-cat/current/scripts/health_check.sh --quiet
 User=root

@@ -1,0 +1,13 @@
+[Unit]
+Description=Six-hourly renewal check for the help-cat IP certificate
+
+[Timer]
+# 证书只有 6 天，续期必须比它短得多。脚本自己判断剩余时间，所以跑勤一点没有副作用
+# （不需要续期时它只写一行日志）。原来每天两次，配合 certbot 自己的到期判断漏过一次，
+# 结果证书过期、后台 HTTPS 打不开。
+OnCalendar=*-*-* 00,06,12,18:17:00
+RandomizedDelaySec=300
+Persistent=true
+
+[Install]
+WantedBy=timers.target

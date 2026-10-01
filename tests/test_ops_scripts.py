@@ -411,5 +411,130 @@ class OpsScriptTests(unittest.TestCase):
         self.assertTrue(uploaded.name.startswith("20"), uploaded.name)
 
 
+class WebhookSink(http.server.BaseHTTPRequestHandler):
+    """收 webhook 的替身，只记下收到的正文。"""
+
+    payloads: list = []
+
+    def do_POST(self):  # noqa: N802 - BaseHTTPRequestHandler 的接口
+        length = int(self.headers.get("Content-Length") or 0)
+        type(self).payloads.append(self.rfile.read(length).decode("utf-8"))
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(b"{}")
+
+    def log_message(self, *args):  # 别把测试输出弄脏
+        pass
+
+
+class CertificateAndProbeResilienceTests(unittest.TestCase):
+    """2026-10-01 的事故复盘：IP 证书过期，后台 HTTPS 打不开，而监控根本没在跑。
+
+    两个互相独立的原因，各配一条测试：
+      1. 探活单元直接执行脚本路径，发布时用 `chmod 644` 抹掉执行位 → systemd 203/EXEC
+         （状态是 "Failed"，不是 "证书过期"）→ 监控静默失效，谁都不知道；
+      2. IP 证书续期既被续期配置里的 `autorenew = False` 拦住，又不能只靠 certbot
+         自己的"是否到期"判断（实测到期前 2 小时仍报 not yet due），最后就真的过期了。
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    # ---- 单元文件 -------------------------------------------------------
+
+    def test_units_call_scripts_through_bash(self):
+        """执行位不可靠（发布流程会 chmod），所以单元必须用 /bin/bash 调脚本。"""
+        for name in ("help-cat-healthcheck.service", "certbot-ip-renew.service"):
+            text = (REPO_ROOT / "deploy" / "systemd" / name).read_text(encoding="utf-8")
+            self.assertRegex(
+                text, r"ExecStart=/bin/bash /opt/help-cat/current/scripts/\S+",
+                f"{name} 必须用 /bin/bash 调用脚本，否则执行位一丢监控就静默失效",
+            )
+
+    def test_shell_scripts_are_tracked_as_executable(self):
+        result = subprocess.run(["git", "ls-files", "-s", "scripts"], cwd=REPO_ROOT,
+                                capture_output=True, text=True)
+        self.assertEqual(0, result.returncode, result.stderr)
+        not_executable = [line.split()[-1] for line in result.stdout.splitlines()
+                          if line.split()[-1].endswith(".sh") and line.split()[0] != "100755"]
+        self.assertEqual([], not_executable, "这些脚本在 git 里没有执行位")
+
+    # ---- 证书续期 -------------------------------------------------------
+
+    def test_renewal_script_does_not_trust_certbot_alone(self):
+        source = (REPO_ROOT / "scripts" / "renew_ip_cert.sh").read_text(encoding="utf-8")
+        self.assertIn("openssl x509 -enddate", source, "要自己算剩余时间")
+        self.assertIn("--force-renewal", source, "临近到期必须强制续，不等 certbot 判断")
+        self.assertIn("--no-random-sleep-on-renew", source,
+                      "certbot 默认随机等最多 8 分钟，定时任务和人工都看不出是在跑还是卡住")
+        self.assertIn("alert ", source, "续期失败要复用监控的 webhook 喊人")
+
+    def test_renewal_timer_runs_well_inside_the_six_day_lifetime(self):
+        text = (REPO_ROOT / "deploy" / "systemd" / "certbot-ip-renew.timer").read_text(encoding="utf-8")
+        match = re.search(r"OnCalendar=\S+ (\S+)", text)
+        self.assertIsNotNone(match, "定时器必须有 OnCalendar")
+        hours = match.group(1).split(":")[0].split(",")
+        self.assertGreaterEqual(len(hours), 4, "6 天的证书一天只查两次太稀")
+
+    def test_only_the_ip_renewal_script_writes_the_renewal_audit_log(self):
+        """续期日志必须落在固定文件里，否则事后无从判断"它到底跑没跑"。"""
+        source = (REPO_ROOT / "scripts" / "renew_ip_cert.sh").read_text(encoding="utf-8")
+        self.assertIn("/var/log/helpcat-cert-renew.log", source)
+
+    # ---- 告警冷却与恢复 -------------------------------------------------
+
+    def serve(self, *, posts):
+        handler = type("Sink", (WebhookSink,), {"payloads": posts})
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.shutdown)
+        return "http://127.0.0.1:%d/webhook" % server.server_address[1]
+
+    def run_health(self, base, webhook):
+        environment = dict(
+            os.environ,
+            HELPCAT_BASE_URL=base,
+            HELPCAT_HEALTH_LOG=str(self.root / "health.log"),
+            HELPCAT_DB_PATH=str(self.root / "missing.db"),
+            HELPCAT_HEALTH_HTTP_ONLY="1",
+            HELPCAT_ALERT_WEBHOOK=webhook,
+            HELPCAT_ALERT_WEBHOOK_FORMAT="wecom",
+            HELPCAT_ALERT_COOLDOWN_MIN="60",
+            HELPCAT_ALERT_STATE=str(self.root / "last-alert"),
+        )
+        return subprocess.run(["bash", str(HEALTH_SCRIPT), "--quiet"], cwd=REPO_ROOT,
+                              env=environment, capture_output=True, text=True)
+
+    def serve_site(self):
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), FakeSite)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.shutdown)
+        return "http://127.0.0.1:%d" % server.server_address[1]
+
+    def test_alerts_once_per_outage_and_reports_recovery(self):
+        """告警不冷却就会被每 5 分钟刷一次群，最后只能关掉 —— 又回到"没人知道"。"""
+        posts = []
+        webhook = self.serve(posts=posts)
+        bad = "http://127.0.0.1:1"  # 关着的端口：探活必然失败
+
+        self.assertEqual(1, self.run_health(bad, webhook).returncode)
+        self.assertEqual(1, self.run_health(bad, webhook).returncode)
+        self.assertEqual(1, len(posts), "同一个故障在冷却期内只该发一条告警")
+        log = (self.root / "health.log").read_text(encoding="utf-8")
+        self.assertIn("冷却", log, "被压掉的那次要在日志里留痕")
+
+        # 恢复后补一条通知并清掉状态，否则群里只剩坏消息，看不出已经好了
+        result = self.run_health(self.serve_site(), webhook)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertEqual(2, len(posts), "恢复要补一条通知")
+        self.assertIn("恢复", posts[1])
+        self.assertFalse((self.root / "last-alert").exists(), "恢复后要清掉告警状态")
+
+
 if __name__ == "__main__":
     unittest.main()

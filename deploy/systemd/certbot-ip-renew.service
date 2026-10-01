@@ -1,0 +1,14 @@
+[Unit]
+Description=Renew the Let's Encrypt IP certificate for help-cat (6-day shortlived)
+Documentation=https://github.com/pig-tongzhi/help-cat
+After=network-online.target nginx.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# 走脚本而不是直接调 certbot：脚本会自己算剩余时间（不足 3 天强制续），
+# 关掉 certbot 那个最多 8 分钟的随机等待，并在失败时用监控同一个 webhook 告警。
+# 用 /bin/bash 显式调用：发布时如果不小心把执行位抹掉（真的发生过，
+# health_check.sh 变成 644 导致监控 203/EXEC 静默失败），这里也不会失效。
+ExecStart=/bin/bash /opt/help-cat/current/scripts/renew_ip_cert.sh
+User=root
