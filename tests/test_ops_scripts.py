@@ -168,6 +168,37 @@ printf 'corrupt' > "$last/help-cat.db"
         remaining = sorted(path.name for path in self.dest.iterdir())
         self.assertEqual(["20250102-000000", "20260101-000000"], remaining)
 
+    def test_an_interrupted_download_never_becomes_a_snapshot(self):
+        """拉一半断掉（机器睡眠、网络掉）不能留下一个"看着有目录"的假副本。
+
+        2026-10-07 真实发生过：本地那份只有 help-cat.db、缺 uploads.tar.gz，
+        而服务器上同一份是完整的；脚本只拉最新那份，所以它永远不会被自动修。
+        现在先落 .incoming-* 临时目录，校验通过才改名。
+        """
+        self._write_stub("rsync", "#!/usr/bin/env bash\nexit 1\n")  # 传输中断
+        result = self.run_pull()
+        self.assertNotEqual(0, result.returncode)
+        leftovers = [p.name for p in self.dest.iterdir()] if self.dest.exists() else []
+        self.assertEqual([], [n for n in leftovers if n.startswith("20")], "不能留下快照目录")
+        self.assertEqual([], [n for n in leftovers if n.startswith(".incoming-")], "临时目录要清掉")
+
+    def test_a_half_downloaded_older_copy_gets_repaired(self):
+        """以前留下的坏副本要在收尾体检时被发现并重新拉好。"""
+        broken = self.dest / "20250101-000000"
+        broken.mkdir(parents=True)
+        (broken / "help-cat.db").write_text("snapshot")
+        (broken / "META.txt").write_text("meta")
+        # 清单里列了 uploads.tar.gz，但文件根本没拉下来 —— 真实事故的样子
+        (broken / "SHA256SUMS").write_text("deadbeef  uploads.tar.gz\n")
+
+        result = self.run_pull()
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertIn("已修复", result.stdout)
+        # 修复后必须能被校验通过（靠服务器的 SHA256SUMS 对得上）
+        self.assertEqual(0, subprocess.run(
+            ["shasum", "-a", "256", "-c", "SHA256SUMS"],
+            cwd=str(broken), capture_output=True, text=True).returncode)
+
 
 class UptimeWorkflowTests(unittest.TestCase):
     """外部探针必须真的在 GitHub 侧跑，且不需要任何密钥。"""
