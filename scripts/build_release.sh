@@ -42,7 +42,8 @@ copy_tracked() {
 # systemd 用 PYTHONPATH=/opt/help-cat/current 导入 server 包，alembic 的
 # script_location 也是相对路径 server/helpcat/migrations。
 # 所以发布目录必须长得像仓库，不能重排成 rescue/ + backend/ 那种自定义结构。
-# 注意 app/welcome/ 是站点文档根（`/` 直接指向它），目录名同样不能改。
+# 注意 app/rescue/ 是站点文档根（`/` 直接指向它，2026-10-08 起），目录名同样不能改；
+# app/welcome/ 已下线但文件保留，目录名同样不要动。
 for entry in app admin server scripts tests miniprogram deploy; do
   copy_tracked "$entry" "$entry"
 done

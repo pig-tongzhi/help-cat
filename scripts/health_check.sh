@@ -131,12 +131,8 @@ check_static_assets() {
   check_asset "$base$prefix/assets/77/cat-cutout.webp" "$prefix 首页主图(77 抠像)" "image/*"
   check_asset "$base$prefix/assets/scenery/meadow-far.svg" "$prefix 草坪远景" "image/svg*"
   check_asset "$base$prefix/assets/scenery/meadow-near.svg" "$prefix 草坪近景" "image/svg*"
-  check_asset "$base$prefix/assets/77/rescue-day.webp" "$prefix 77故事·初见" "image/*"
-  check_asset "$base$prefix/assets/77/grown-up.webp" "$prefix 77故事·长大" "image/*"
-  check_asset "$base$prefix/assets/77/portrait.webp" "$prefix 77故事·正脸" "image/*"
   check_asset "$base$prefix/assets/brand/favicon.svg" "$prefix 站点图标" "image/*"
   check_asset "$base$prefix/styles.css" "$prefix 样式表" "text/css*"
-  check_asset "$base$prefix/story-77.js" "$prefix 77故事脚本" "*javascript*"
 }
 
 # IP 证书用的是 Let's Encrypt 的 shortlived 配置，只有 6 天。续期一旦没跑起来，
@@ -175,7 +171,6 @@ if [ "$HTTP_ONLY" = "1" ]; then
 else
   check_admin_https "$BASE_URL"
 fi
-check_status_200 "$BASE_URL/help-cat/welcome/" "IP 入口欢迎页"
 # 两个入口都提供 /help-cat/rescue/... 这份 alias，所以同一组路径两边都能探。
 check_static_assets "$BASE_URL" "/help-cat/rescue"
 if [ "$HTTP_ONLY" != "1" ]; then
@@ -191,7 +186,7 @@ fi
 # 域名入口：ICP 备案没下来之前解析会被拦，所以默认只告警不计数都难，这里只在
 # 显式换 base 时才检查，避免每天固定误报。
 if [ "$BASE_URL" != "http://175.178.41.19" ]; then
-  check_status_200 "$BASE_URL/" "域名入口欢迎页（站点根）"
+  check_status_200 "$BASE_URL/" "域名入口站点根（2026-10-08 起是 H5）"
   check_status_200 "$BASE_URL/rescue/index.html" "域名入口 H5"
   check_status_200 "$BASE_URL/admin/" "域名入口后台"
   check_static_assets "$BASE_URL" "/rescue"

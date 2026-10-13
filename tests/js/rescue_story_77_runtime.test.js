@@ -148,18 +148,5 @@ test("77 story loads and links the stable public profile", async () => {
   assert.deepEqual(opened, ["cat-77"]);
 });
 
-test("hash Back traversal keeps the original home scroll after visiting cats from the story", () => {
-  const { window, route } = loadRouteRuntime();
-  window.scrollY = 247;
-  window.pageYOffset = 247;
-
-  route.navigate("story-77");
-  route.navigate("cats");
-  window.location.hash = "#story-77";
-  route.syncRouteFromHash();
-  window.location.hash = "#home";
-  route.syncRouteFromHash();
-
-  assert.equal(route.state.homeScrollY, 247);
-  assert.equal(window.scrollY, 247);
-});
+// 说明：「从故事页返回首页恢复滚动位置」那条用例随 77 故事页在 2026-10-08 下线一起删除了，
+// 对应的 homeScrollY / restoreHomeScroll 代码也已移除（没有调用方）。恢复故事页时把它们一起加回来。

@@ -267,7 +267,8 @@ class RescueH5ContractTests(unittest.TestCase):
         copy_start = html.index('class="product-hero-copy editorial-hero-copy"')
         copy_end = html.index('<picture class="editorial-hero-visual">')
         self.assertIn("hero-footnote", html[copy_start:copy_end], "脚注要在文案块内（跟着分层入场）")
-        self.assertGreater(html.index("hero-footnote"), html.index("editorial-hero-actions"))
+        # 故事入口 2026-10-08 已下线，脚注现在排在"地点"一行之后
+        self.assertGreater(html.index("hero-footnote"), html.index("product-region"))
         # 首屏只保留两个装饰层，且都对读屏器隐身
         self.assertEqual(2, len(re.findall(r'class="hero-(?:atmosphere|meadow-front)" aria-hidden="true"', html)))
 
@@ -280,14 +281,13 @@ class RescueH5ContractTests(unittest.TestCase):
         self.assertNotIn("#0B0B0C", styles, "深色数据带的覆盖必须清干净")
         self.assertNotIn("color: #FFFFFF", all_rules(styles, ".impact-band .metric-card strong"))
 
-    def test_rescue_home_has_editorial_hero_and_story_entry(self):
+    def test_rescue_home_has_editorial_hero(self):
         html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
         styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
         for marker in (
             'class="reference-hero editorial-hero"',
             '<h1 id="home-title">让每一只小猫，<br>都被认真看见</h1>',
             '<picture class="editorial-hero-visual">',
-            'data-nav="story-77"',
             'id="metric-rescued"',
             'id="metric-adopted"',
             'id="metric-medical"',
@@ -356,19 +356,21 @@ class RescueH5ContractTests(unittest.TestCase):
         self.assertIn(".bottom-nav { display: none; }", styles)
         self.assertIn("padding-bottom: calc(78px + env(safe-area-inset-bottom))", styles)
 
-    def test_rescue_story_route_is_shareable_and_actionable(self):
+    def test_rescue_story_page_is_offline_but_files_kept(self):
+        """77 故事页 2026-10-08 先下线：路由、入口、脚本加载都不该再有。
+
+        但 story-77.js 与三张故事图**保留在仓库里**（方便以后恢复），
+        所以模块自身的契约测试依然保留 —— 恢复时不用重新找图、重新写页面。
+        """
         html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
         script = (ROOT / "app" / "rescue" / "app.js").read_text(encoding="utf-8")
-        story = (ROOT / "app" / "rescue" / "story-77.js").read_text(encoding="utf-8")
-        styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
-        for marker in ('id="story-77"', 'data-view="story-77"', 'story-77.js?v='):
-            self.assertIn(marker, html)
-        for marker in ('"story-77"', "window.addEventListener(\"hashchange\", syncRouteFromHash)", "window.history.pushState", "homeScrollY"):
-            self.assertIn(marker, script)
-        for marker in ("返回首页", 'data-story-action="cats"', 'data-story-action="create-cat"'):
-            self.assertIn(marker, story)
-        for selector in (".story-timeline", ".story-chapter:nth-child(even)", ".story-back"):
-            self.assertIn(selector, styles)
+        for marker in ('id="story-77"', 'data-view="story-77"', 'data-nav="story-77"', "story-77.js?v="):
+            self.assertNotIn(marker, html)
+        self.assertNotIn("renderStory", script)
+        self.assertNotIn('state.view === "story-77"', script)
+        # 唯一允许保留的是"首页把 77 排第一"那处数据引用（profile_key），不是页面接线
+        self.assertEqual(1, script.count('"story-77"'), 'app.js 里只该剩首页排序用的 profile_key')
+        self.assertTrue((ROOT / "app" / "rescue" / "story-77.js").exists(), "文件要留着，方便恢复")
 
     def test_rescue_metrics_use_independent_public_endpoint_and_explicit_error_state(self):
         html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
@@ -564,7 +566,7 @@ class RescueH5ContractTests(unittest.TestCase):
     def test_rescue_assets_are_versioned_in_dependency_order(self):
         html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
         version = "20260923-product-r35"
-        for asset in ("styles.css", "api.js", "community-form.js", "version.js", "story-77.js", "app.js"):
+        for asset in ("styles.css", "api.js", "community-form.js", "version.js", "app.js"):
             self.assertIn(f'{asset}?v={version}', html)
         api_index = html.index(f'api.js?v={version}')
         version_index = html.index(f'version.js?v={version}')
@@ -601,7 +603,7 @@ class RescueH5ContractTests(unittest.TestCase):
         self.assertIn('<button class="story-back" type="button"', story)
         self.assertIn('<button class="button primary" type="button" data-story-action="cats">', story)
         self.assertIn('<button class="button secondary" type="button" data-story-action="create-cat">', story)
-        self.assertIn('story-77.js?v=20260923-product-r35', html)
+        self.assertNotIn('story-77.js?v=', html, "故事页已下线，不该再加载这个脚本")
 
     def test_primary_and_update_actions_meet_77_accessibility_contract(self):
         styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")

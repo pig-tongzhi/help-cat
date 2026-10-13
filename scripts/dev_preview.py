@@ -26,8 +26,8 @@ API_PREFIX = "/help-cat-api"
 
 # 顺序敏感：更具体的前缀放在前面，最后一条是兜底。
 #
-# 站点根目录就是欢迎页目录（`/` -> app/welcome/index.html）。这一点必须是“文档根”
-# 而不是单纯把 `/` 重写到那个文件，否则页面同级的 styles.css / welcome.js 会因为
+# 2026-10-08 起站点根是 H5（欢迎页下线，文件仍可用 /welcome/ 打开）。这一点必须是“文档根”
+# 而不是单纯把 `/` 重写到某个文件，否则页面同级的 css/js 会因为
 # 相对路径解析到站点根而 404 —— 这是部署时最容易踩的坑。
 ROUTES = (
     ("/admin", ROOT / "admin"),
@@ -40,7 +40,7 @@ ROUTES = (
     ("/welcome", ROOT / "app" / "welcome"),
     ("/rescue", ROOT / "app" / "rescue"),
     ("/assets", ROOT / "app" / "welcome" / "assets"),
-    ("", ROOT / "app" / "welcome"),
+    ("", ROOT / "app" / "rescue"),
 )
 
 

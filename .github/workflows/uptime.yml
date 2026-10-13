@@ -40,7 +40,7 @@ jobs:
       - name: 两套静态入口
         run: |
           set -euo pipefail
-          for path in /help-cat/rescue/index.html /help-cat/admin/ /help-cat/welcome/; do
+          for path in /help-cat/rescue/index.html /help-cat/admin/; do
             code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "http://175.178.41.19$path")"
             echo "$code $path"
             [ "$code" = "200" ] || { echo "::error::$path 返回 $code"; exit 1; }

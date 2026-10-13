@@ -213,8 +213,10 @@ class UptimeWorkflowTests(unittest.TestCase):
         self.assertIn("workflow_dispatch:", source)
         self.assertIn("/api/v1/health/ready", source)
         self.assertIn("database", source)
-        for path in ("/help-cat/rescue/index.html", "/help-cat/admin/", "/help-cat/welcome/"):
+        for path in ("/help-cat/rescue/index.html", "/help-cat/admin/"):
             self.assertIn(path, source)
+        # 欢迎页 2026-10-08 下线后不再探它
+        self.assertNotIn("/help-cat/welcome/", source)
 
     def test_it_needs_no_secrets(self):
         source = self.workflow()
@@ -294,7 +296,7 @@ class OpsScriptTests(unittest.TestCase):
         result = self.run_health(base)
         self.assertEqual(result.returncode, 1)
         log = (self.root / "health.log").read_text(encoding="utf-8")
-        self.assertIn("77故事", log)
+        self.assertIn("首页主图", log)
 
     def test_health_check_fails_when_an_asset_falls_back_to_html(self):
         """IP 入口曾经对缺失素材回 index.html(200)，这种静默失败要被抓住。"""

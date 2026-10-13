@@ -1407,7 +1407,10 @@ button, a, label, select, .nav-item, .quick-action, .primary-action,
 /* 首屏里的一行"今天"提示：第一屏就要能看见今天该做什么。
    它只占一行（约 22px），代价是猫的舞台矮一点。 */
 .hero-today {
-  display: inline-flex;
+  /* 故事/欢迎页入口下线后，这里前面不再有块级元素替它换行：
+     display:flex + fit-content 让它自己占一行，且宽度贴着内容。 */
+  display: flex;
+  width: fit-content;
   align-items: center;
   gap: 8px;
   margin: 14px 0 0;
@@ -1517,7 +1520,7 @@ button, a, label, select, .nav-item, .quick-action, .primary-action,
 .has-motion .editorial-hero-copy.is-in > *:nth-child(4) { transition-delay: 330ms; }
 .has-motion .editorial-hero-copy.is-in > *:nth-child(5) { transition-delay: 420ms; }
 .has-motion .editorial-hero-copy.is-in > *:nth-child(6) { transition-delay: 510ms; }
-.has-motion .editorial-hero-copy.is-in > *:nth-child(7) { transition-delay: 600ms; }
+/* 2026-10-08：故事/欢迎页入口下线后，文案块正好是注释里写的六层，第 7 条延迟随之移除 */
 
 /* 首屏大图：从略近处退到正常比例，时长拉长到 1.4s —— 像产品页那样"缓缓站定" */
 .has-motion .editorial-hero-visual img,

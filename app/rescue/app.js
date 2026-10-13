@@ -26,7 +26,6 @@
     myTasks: [],
     submissions: { cats: [], communities: [] },
     view: "home",
-    homeScrollY: 0,
     authMode: "login",
     catStep: 1,
     catCommunityMode: "existing",
@@ -1425,10 +1424,9 @@
     document.querySelectorAll(".nav-item, .desktop-nav button").forEach(function (button) {
       button.classList.toggle("active", button.dataset.nav === state.view);
     });
-    var storyActive = state.view === "story-77";
-    byId("floating-add-cat").hidden = storyActive || state.view === "profile";
-    byId("bottom-nav").hidden = storyActive;
-    if (state.view === "story-77" && typeof api !== "undefined" && api.reportVisit) api.reportVisit("story");
+    // 77 故事页已下线（2026-10-08）：底部导航在所有视图都显示，只在「我的」隐藏悬浮建档按钮
+    byId("floating-add-cat").hidden = state.view === "profile";
+    byId("bottom-nav").hidden = false;
     if (state.view === "feeding") ensureFeeding();
     if (state.view === "tasks") loadMyTasks();
     // 动效侧收尾：切换视图后补一次揭示，并把底部导航滑块移到新的选中项
@@ -1447,7 +1445,7 @@
     renderView();
   }
 
-  var validViews = ["home", "cats", "tasks", "feeding", "profile", "story-77"];
+  var validViews = ["home", "cats", "tasks", "feeding", "profile"];
 
   function normalizedView(view) {
     var route = String(view || "").split("?")[0];
@@ -1462,57 +1460,24 @@
     window.scrollTo({ top: 0, behavior: reducedMotion() ? "auto" : "smooth" });
   }
 
-  function restoreHomeScroll() {
-    window.scrollTo({ top: state.homeScrollY || 0, behavior: "auto" });
-  }
-
   function navigate(view, options) {
     var target = normalizedView(view);
     var previous = state.view;
-    if (target === "story-77" && previous === "home") {
-      state.homeScrollY = window.scrollY || window.pageYOffset || 0;
-    }
     state.view = target;
     renderView();
     if (options && options.replace) window.history.replaceState(null, "", "#" + state.view);
     else window.history.pushState(null, "", "#" + state.view);
-    if (options && options.restoreHomeScroll && target === "home") restoreHomeScroll();
-    else if (target !== previous) scrollToTop();
+    if (target !== previous) scrollToTop();
     if (state.view === "profile" && state.user) loadSubmissions();
   }
 
   function syncRouteFromHash() {
     var target = normalizedView(window.location.hash.replace("#", ""));
     var previous = state.view;
-    if (target === "story-77" && previous === "home") {
-      state.homeScrollY = window.scrollY || window.pageYOffset || 0;
-    }
     state.view = target;
     renderView();
-    if (target === "home" && previous === "story-77") restoreHomeScroll();
-    else if (target !== previous) scrollToTop();
+    if (target !== previous) scrollToTop();
     if (target === "profile" && state.user) loadSubmissions();
-  }
-
-  function renderStory() {
-    if (!window.HelpCatStory77) return;
-    window.HelpCatStory77.render(byId("story-77-root"), {
-      openCats: function () { navigate("cats"); },
-      loadProfile: function (profileKey) {
-        return api.request("/api/v1/public/profiles/" + encodeURIComponent(profileKey));
-      },
-      openProfile: function (profile) {
-        state.cats = [profile];
-        state.cursors.cats = null;
-        byId("cat-search").value = profile.nickname || "77";
-        byId("community-filter").value = "";
-        navigate("cats");
-        window.history.replaceState(null, "", "#cats?profile=" + encodeURIComponent(profile.profile_key));
-        renderCats();
-      },
-      openCreateCat: openCatSheet,
-      backHome: function () { navigate("home", { replace: true, restoreHomeScroll: true }); }
-    });
   }
 
   // 弹层打开时把背景从无障碍树和 Tab 顺序里摘掉：
@@ -2023,9 +1988,8 @@
 
   var initialView = window.location.hash.replace("#", "");
   if (validViews.indexOf(initialView) >= 0) state.view = initialView;
-  renderStory();
   renderApp();
-  // 首页浏览算一次；切到 77 故事再算一次（分开统计，看板里是两列）
+  // 首页浏览算一次（77 故事页已下线，原来的 story 计数不再上报）
   if (typeof api !== "undefined" && api.reportVisit) api.reportVisit("home");
   initMotion();
   initFabClearance();

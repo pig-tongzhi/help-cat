@@ -224,13 +224,18 @@ class ProductH5ContractTests(unittest.TestCase):
         self.assertIn('id="home-view-cats"', pillars)
         self.assertIn('id="home-view-tasks"', pillars)
 
-    def test_the_77_story_has_only_two_entries_on_the_home_page(self):
+    def test_the_77_story_page_and_welcome_entry_are_offline(self):
+        """2026-10-08 起「77 的故事」和「欢迎页」先下线：首页与导航都不该再有入口。
+
+        页面文件（story-77.js、三张故事图、app/welcome/）仍留在仓库里，只是不再被 H5 引用、
+        也不再对外提供入口 —— 「留联系方式」的后端能力（leads 接口 / 后台留言板）保持不动。
+        """
         html = self.h5()
-        # 首屏大按钮 + 顶部导航各一个就够了；此前还有一张重复的小卡片，同一屏出现三次
-        self.assertEqual(html.count('data-nav="story-77"'), 2, "首页只保留「首屏按钮 + 顶部导航」两个 77 入口")
-        self.assertNotIn('id="home-story-entry"', html)
-        quick = html[html.index('class="quick-action-grid"'):html.index("</section>", html.index('class="quick-action-grid"'))]
-        self.assertNotIn("77 的故事", quick, "小卡片行不该再有 77 的入口")
+        self.assertEqual(0, html.count('data-nav="story-77"'), "首页与顶部导航都不该再有 77 故事入口")
+        self.assertNotIn('data-view="story-77"', html)
+        self.assertNotIn("story-77.js?v=", html, "不该再加载故事脚本")
+        self.assertNotIn("欢迎页", html, "欢迎页入口一并下线")
+        self.assertNotIn("../welcome/", html)
 
     def test_hero_primary_action_is_a_filled_button(self):
         import re
@@ -488,14 +493,17 @@ class ProductH5ContractTests(unittest.TestCase):
         self.assertIn(".dashboard-tile", styles)
 
     def test_h5_reports_page_views_for_each_page(self):
-        """浏览量必须先埋点：首页 / 77 故事 / 欢迎页各上报一次，失败静默。"""
+        """浏览量埋点：首页与欢迎页各上报一次，失败静默。
+
+        （77 故事页 2026-10-08 下线，原来的 story 计数不再上报。）
+        """
         api = (ROOT / "app" / "rescue" / "api.js").read_text(encoding="utf-8")
         script = (ROOT / "app" / "rescue" / "app.js").read_text(encoding="utf-8")
         welcome = (ROOT / "app" / "welcome" / "welcome.js").read_text(encoding="utf-8")
         self.assertIn("function reportVisit", api)
         self.assertIn('"/api/v1/public/visit"', api)
         self.assertIn('api.reportVisit("home")', script)
-        self.assertIn('api.reportVisit("story")', script)
+        self.assertNotIn('api.reportVisit("story")', script, "故事页已下线，不该再上报")
         self.assertIn('"welcome"', welcome)
 
     def test_admin_boot_asks_the_server_before_showing_login(self):
@@ -543,15 +551,18 @@ class ProductH5ContractTests(unittest.TestCase):
             "动效层必须留在样式表最后，别被后面的基础规则吃掉",
         )
 
-    def test_home_has_a_small_entry_to_the_welcome_page(self):
-        """首页首屏要有一个固定位置的小入口回欢迎页（用户反馈"每次找不到"）。"""
+    def test_the_welcome_page_is_offline_from_the_h5(self):
+        """欢迎页 2026-10-08 先下线：H5 里不该再有它的入口。
+
+        页面文件（`app/welcome/`）与「留联系方式」的后端能力（leads 接口 / 后台留言板）都保留，
+        所以欢迎页自身的契约测试继续有效 —— 恢复入口时只要把链接加回来。
+        """
         html = self.h5()
-        self.assertIn('href="../welcome/index.html"', html)
-        self.assertIn('class="editorial-story-link welcome-entry"', html)
-        # 相对路径要在两个入口都对：/help-cat/rescue/ -> /help-cat/welcome/，/rescue/ -> /welcome/
+        self.assertNotIn('href="../welcome/index.html"', html)
+        self.assertNotIn("welcome-entry", html)
+        # 文件还在，随时能恢复
+        self.assertTrue((ROOT / "app" / "welcome" / "index.html").exists())
         self.assertIn('id="enter-help-cat"', (ROOT / "app" / "welcome" / "index.html").read_text(encoding="utf-8"))
-        styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
-        self.assertIn(".welcome-entry", styles)
 
 
 class AdminProductPanelContractTests(unittest.TestCase):
