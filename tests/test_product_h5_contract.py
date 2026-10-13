@@ -36,7 +36,7 @@ class ProductH5ContractTests(unittest.TestCase):
         """
         html = self.h5()
         for marker in (
-            "招同行人", 'id="home-view-feeding"', 'id="home-view-tasks"',
+            'id="home-view-feeding"', 'id="home-view-tasks"',
             'id="home-view-cats"', 'id="home-contact"', 'id="floating-add-cat"',
         ):
             self.assertIn(marker, html)

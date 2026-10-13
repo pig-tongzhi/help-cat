@@ -1618,7 +1618,8 @@ button, a, label, select, .nav-item, .quick-action, .primary-action,
 
 /* ---------- 首屏分层入场 ---------- */
 
-/* 首屏六层（标签 / 大标题 / 说明 / 区域 / 按钮 / 脚注）依次落位：模糊 → 清晰。
+/* 首屏五层（大标题 / 说明 / 区域 / 按钮 / 脚注）依次落位：模糊 → 清晰。
+   2026-10-08 去掉了"招同行人"标签，从六层变五层。
    苹果那种"字从虚到实"的做法，位移只有 10px、模糊 12px、时长 900ms，
    比上一版更长更稳（上一版是 620ms + 14px 硬位移，偏"跳"）。
    刻意不给 HTML 加标记：hero 的标签与标题被既有契约测试按精确字符串钉着，
@@ -1639,8 +1640,7 @@ button, a, label, select, .nav-item, .quick-action, .primary-action,
 .has-motion .editorial-hero-copy.is-in > *:nth-child(3) { transition-delay: 240ms; }
 .has-motion .editorial-hero-copy.is-in > *:nth-child(4) { transition-delay: 330ms; }
 .has-motion .editorial-hero-copy.is-in > *:nth-child(5) { transition-delay: 420ms; }
-.has-motion .editorial-hero-copy.is-in > *:nth-child(6) { transition-delay: 510ms; }
-/* 2026-10-08：故事/欢迎页入口下线后，文案块正好是注释里写的六层，第 7 条延迟随之移除 */
+.has-motion .editorial-hero-copy.is-in > *:nth-child(5) { transition-delay: 510ms; }
 
 /* 首屏大图：从略近处退到正常比例，时长拉长到 1.4s —— 像产品页那样"缓缓站定" */
 .has-motion .editorial-hero-visual img,
