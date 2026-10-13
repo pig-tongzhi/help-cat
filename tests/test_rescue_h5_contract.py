@@ -281,6 +281,29 @@ class RescueH5ContractTests(unittest.TestCase):
         self.assertNotIn("#0B0B0C", styles, "深色数据带的覆盖必须清干净")
         self.assertNotIn("color: #FFFFFF", all_rules(styles, ".impact-band .metric-card strong"))
 
+    def test_hero_cat_head_collage_stays_decorative_and_curated(self):
+        """首屏那几只"猫头"（2026-10-08 加）：必须是装饰性的、手挑的、且不挡点击。
+
+        踩过的坑都钉在这里：
+        1. 档案里的照片多是"整场景"，直接缩进圆里看不出脸 —— 所以优先用手挑过的
+           精选猫（`showcase-cat-*`，仓库 scripts/showcase_photos/ 里那套 CC0 特写）。
+        2. 档案里混着「流浪狗」这类记录 —— 首屏不能出现狗。
+        3. 它压在草层上，必须 pointer-events:none，否则会吃掉首屏的点击。
+        """
+        html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
+        script = (ROOT / "app" / "rescue" / "app.js").read_text(encoding="utf-8")
+        styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
+        self.assertIn('id="hero-catheads" aria-hidden="true" hidden', html)
+        self.assertIn("renderHeroCatHeads", script)
+        self.assertIn('photoUrl(cat, "thumb")', script, "圆头像用小缩略图，别拉原图")
+        for cat_id in ("showcase-cat-00", "showcase-cat-10", "showcase-cat-08"):
+            self.assertIn(cat_id, script, "手挑的三只要留着")
+        self.assertIn("/[狗犬]/", script, "档案里的狗不能出现在首屏")
+        heads = styles[styles.index(".hero-catheads {"):styles.index(".hero-cathead img {")]
+        self.assertIn("pointer-events: none", heads)
+        self.assertIn("z-index: 4", heads, "要高过 z-index:3 的草层")
+        self.assertIn("object-fit: cover", styles[styles.index(".hero-cathead img {"):])
+
     def test_rescue_home_has_editorial_hero(self):
         html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
         styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
@@ -369,8 +392,9 @@ class RescueH5ContractTests(unittest.TestCase):
             self.assertNotIn(marker, html)
         self.assertNotIn("renderStory", script)
         self.assertNotIn('state.view === "story-77"', script)
-        # 唯一允许保留的是"首页把 77 排第一"那处数据引用（profile_key），不是页面接线
-        self.assertEqual(1, script.count('"story-77"'), 'app.js 里只该剩首页排序用的 profile_key')
+        # 允许保留的只有数据引用（profile_key），不是页面接线：
+        # 首页把 77 排第一 + 首屏猫头挑图时排除 77。
+        self.assertEqual(2, script.count('"story-77"'), 'app.js 里只该剩这两处数据引用')
         self.assertTrue((ROOT / "app" / "rescue" / "story-77.js").exists(), "文件要留着，方便恢复")
 
     def test_rescue_metrics_use_independent_public_endpoint_and_explicit_error_state(self):

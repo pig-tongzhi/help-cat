@@ -57,6 +57,10 @@
           <picture class="editorial-hero-visual">
             <img src="assets/77/cat-cutout.webp?v=20260923-product-r35" alt="77，一只白底黑斑的猫咪" width="760" height="851" decoding="async">
           </picture>
+          <!-- 首屏「猫头」拼贴（2026-10-08）：从猫咪档案里再取几只猫，大小错落摆在草地上。
+               77 已经是首屏大图，所以这里不重复它；数据没回来或都没有照片时整块隐藏。
+               纯装饰：aria-hidden + pointer-events:none，不抢首屏的点击。 -->
+          <div class="hero-catheads" id="hero-catheads" aria-hidden="true" hidden></div>
           <span class="hero-meadow-front" aria-hidden="true"></span>
         </section>
 

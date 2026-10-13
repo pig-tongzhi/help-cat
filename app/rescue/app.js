@@ -621,6 +621,47 @@
     });
   }
 
+  // 首屏「猫头」拼贴：从档案里挑几只"有照片"的猫，大小错落地摆在草地上。
+  // 77 已经是首屏那张大图，这里跳过它；一张照片都没有时整块隐藏（不占位、不留空框）。
+  function renderHeroCatHeads() {
+    var target = byId("hero-catheads");
+    if (!target) return;
+    // 挑"好看的小猫"：优先档案里那批精选猫（`showcase-cat-*`，用的是仓库
+    // `scripts/showcase_photos/` 里挑过的 CC0 特写），它们的构图适合做成圆头像。
+    // 没有精选猫时（比如换了库）再退回任意有照片的猫，同样跳过首屏那只 77，
+    // 以及名字像狗的记录 —— 档案里确实混着「流浪狗」，数据模型还没有物种字段，
+    // 先用名字兜住，等加了 species 再换成正经过滤。
+    var usable = catsForDisplay(state.cats).filter(function (cat) {
+      var name = String(cat.nickname || "");
+      return cat.photo_asset_id && cat.profile_key !== "story-77" && name !== "77" && !/[狗犬]/.test(name);
+    });
+    // 手挑过的顺序（不是按数据顺序）：圆头像里得看清脸，且和首屏草坪搭。
+    //   showcase-cat-00 汤圆 —— 蓝眼睛脸部特写，当最大的那个"猫头"
+    //   showcase-cat-10 墨镜 —— 黑白正脸，中等
+    //   showcase-cat-08 年糕 —— 草丛里的长毛，背景和首屏草地一致，最小
+    var preferred = ["showcase-cat-00", "showcase-cat-10", "showcase-cat-08"];
+    var picks = preferred.map(function (id) {
+      return usable.filter(function (cat) { return cat.id === id; })[0];
+    }).filter(Boolean);
+    // 手挑的那几只不在（换库/删档）时，用其余精选猫补齐，再不行用任意有照片的猫
+    if (picks.length < 3) {
+      usable.forEach(function (cat) {
+        if (picks.length < 3 && picks.indexOf(cat) < 0) picks.push(cat);
+      });
+    }
+    if (!picks.length) {
+      target.hidden = true;
+      target.innerHTML = "";
+      return;
+    }
+    target.hidden = false;
+    target.innerHTML = picks.map(function (cat, index) {
+      return '<span class="hero-cathead hero-cathead-' + (index + 1) + '">' +
+        '<img src="' + escapeHtml(photoUrl(cat, "thumb")) + '" alt="" width="160" height="160" decoding="async">' +
+        '</span>';
+    }).join("");
+  }
+
   function catCard(cat) {
     var image = photoUrl(cat, "thumb");
     var originalImage = photoUrl(cat);
@@ -706,6 +747,7 @@
       : homeEmptyLine("还没有公开档案，提交第一只后会显示在这里。");
     byId("cat-list").innerHTML = cats.length ? cats.map(catCard).join("") : emptyCard("没有找到匹配档案", "试试更换名称或小区筛选条件。");
     byId("load-more-cats").hidden = !state.cursors.cats;
+    renderHeroCatHeads();
   }
 
   function renderTasks() {

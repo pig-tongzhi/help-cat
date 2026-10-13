@@ -1545,6 +1545,51 @@ button, a, label, select, .nav-item, .quick-action, .primary-action,
 }
 .home-empty-line .text-button { font-size: 13px; }
 
+/* ---------- 首屏「猫头」拼贴（2026-10-08）------------------------------------
+   猫档案里的几只猫，大小错落地摆在草地上（77 仍由首屏大图承担）。
+   z-index 4：必须高过 z-index 3 的草层，才像"从草里探出头"；
+   pointer-events: none：纯装饰，不挡首屏任何点击。 */
+.hero-catheads {
+  position: absolute;
+  left: 18px;
+  bottom: 42px;
+  z-index: 4;
+  display: flex;
+  align-items: flex-end;
+  gap: 7px;
+  pointer-events: none;
+}
+.hero-cathead {
+  display: block;
+  overflow: hidden;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, .96);
+  background: #fff;
+  box-shadow: 0 10px 22px rgba(24, 53, 45, .22);
+}
+.hero-cathead img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* 圆里要看到"脸"而不是整张照片：这些照片是竖构图的猫，脸通常在上三分之一。
+     适度放大把镜头推近，否则圆里是"一只远处的猫"而不是"猫头"。 */
+  object-fit: cover;
+  object-position: 50% 34%;
+  transform: scale(1.25);
+  transform-origin: 50% 30%;
+}
+.hero-cathead-1 { width: 76px; height: 76px; }
+.hero-cathead-2 { width: 52px; height: 52px; transform: translateY(-12px) rotate(-5deg); }
+.hero-cathead-3 { width: 38px; height: 38px; transform: translateY(8px) rotate(6deg); }
+/* 桌面：首屏是左右两栏，拼贴跟着右边那栏（图像）的右下角草地走 */
+@media (min-width: 721px) {
+  .hero-catheads { left: calc(50% + 26px); bottom: 54px; gap: 9px; }
+  .hero-cathead-1 { width: 92px; height: 92px; }
+  .hero-cathead-2 { width: 62px; height: 62px; }
+  .hero-cathead-3 { width: 44px; height: 44px; }
+}
+
 /* ==========================================================================
    动效层（2026-09-24）
    参考取向：Apple 产品页的首屏分层入场、Linear / Vercel 那种克制的滚动揭示、
