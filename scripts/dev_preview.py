@@ -39,7 +39,9 @@ ROUTES = (
     ("/help-cat", ROOT / "app"),
     ("/welcome", ROOT / "app" / "welcome"),
     ("/rescue", ROOT / "app" / "rescue"),
-    ("/assets", ROOT / "app" / "welcome" / "assets"),
+    # 站点根现在是 H5，所以 /assets/... 必须指到 rescue 的资源目录（欢迎页已下线）。
+    # 生产上这里没有 location，直接由 root app/rescue 兜住，效果一致。
+    ("/assets", ROOT / "app" / "rescue" / "assets"),
     ("", ROOT / "app" / "rescue"),
 )
 
@@ -170,7 +172,15 @@ def main():
     PreviewHandler.api_origin = args.api.rstrip("/")
     PreviewHandler.admin_token = args.admin_token
     socketserver.TCPServer.allow_reuse_address = True
-    with socketserver.TCPServer((args.host, args.port), PreviewHandler) as server:
+
+    # 必须用线程版：单线程的 TCPServer 一次只处理一个连接，而浏览器（尤其手机）
+    # 会同时开好几条 keep-alive 连接拉 css/js/图片 —— 结果是 HTML 能打开、图片全挂
+    # （表现为 BrokenPipe / 请求超时）。2026-10-08 手机连局域网时踩到过。
+    class ThreadingPreviewServer(socketserver.ThreadingTCPServer):
+        daemon_threads = True
+        allow_reuse_address = True
+
+    with ThreadingPreviewServer((args.host, args.port), PreviewHandler) as server:
         print("本地预览: http://%s:%d/   (API -> %s)" % (args.host, args.port, PreviewHandler.api_origin), flush=True)
         if args.host not in ("127.0.0.1", "localhost"):
             print("提示: 已监听 %s，同一局域网的手机可访问；/__dev_login 也一并暴露。" % args.host, flush=True)
