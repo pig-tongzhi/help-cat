@@ -141,7 +141,15 @@
   }
 
   function moduleMessage(status) {
-    return { loading: "正在加载…", error: "加载失败，稍后会自动重试。", empty: "暂时还没有内容。" }[status] || "";
+    // empty 刻意不再输出一行：每个模块自己就有空态（首页是一行、页面里是空卡）。
+    // 之前"暂时还没有内容。" + 空卡标题 + 空卡正文三层说同一句话，纯占地方。
+    return { loading: "正在加载…", error: "加载失败，稍后会自动重试。", empty: "" }[status] || "";
+  }
+
+  // 首页模块空态：一行说清（需要动作就带一个文字链）。
+  // 大空卡（.empty-state）留给各自的页面 —— 那里的空态需要把话说全。
+  function homeEmptyLine(text, actionHtml) {
+    return '<p class="home-empty-line">' + escapeHtml(text) + (actionHtml || '') + '</p>';
   }
 
   function renderHomeModuleState(module, status, message) {
@@ -693,7 +701,9 @@
       : pool.slice(0, 4);
     // 服务端只返回一页，因此这里说"已显示"而不是伪造总数。
     byId("cat-result-count").textContent = "已显示 " + cats.length + " 只已审核猫咪" + (state.cursors.cats ? "（还有更多，可加载下一页）" : "");
-    byId("home-cats").innerHTML = homeCats.length ? homeCats.map(catCard).join("") : emptyCard("还没有公开档案", "登录后可以提交第一只社区猫咪。");
+    byId("home-cats").innerHTML = homeCats.length
+      ? homeCats.map(catCard).join("")
+      : homeEmptyLine("还没有公开档案，提交第一只后会显示在这里。");
     byId("cat-list").innerHTML = cats.length ? cats.map(catCard).join("") : emptyCard("没有找到匹配档案", "试试更换名称或小区筛选条件。");
     byId("load-more-cats").hidden = !state.cursors.cats;
   }
@@ -702,7 +712,10 @@
     byId("open-task-count").textContent = formatMetric(uniqueCollectionCount(state.tasks));
     var content = state.tasks.length ? state.tasks.map(taskCard).join("") : taskEmptyCard();
     byId("task-list").innerHTML = content;
-    byId("home-tasks").innerHTML = state.tasks.length ? state.tasks.slice(0, 1).map(taskCard).join("") : taskEmptyCard();
+    byId("home-tasks").innerHTML = state.tasks.length
+      ? state.tasks.slice(0, 1).map(taskCard).join("")
+      : homeEmptyLine("暂时没有开放任务，有行动时会在这里发布",
+          '<button class="text-button" type="button" data-contact-open="1">留下联系方式<span aria-hidden="true"> →</span></button>');
     byId("load-more-tasks").hidden = !state.cursors.tasks;
     renderMyTasks();
   }

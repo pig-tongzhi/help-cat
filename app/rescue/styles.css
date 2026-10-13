@@ -398,6 +398,9 @@ body { background: radial-gradient(circle at 8% 2%, rgba(255,224,207,.42), trans
   .home-editorial-grid .compact-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .home-editorial-grid .section-title h2 { font-size: 22px; }
   .home-editorial-grid .text-button { display: none; }
+  /* 例外：空态那一行里的动作按钮（"留下联系方式 →"）是这条空态唯一的出口，必须留着。
+     上面那条只是想在手机上收起"查看全部 →"。 */
+  .home-editorial-grid .home-empty-line .text-button { display: inline-flex; }
   .privacy-banner { margin: 0 16px 28px; }
   .bottom-nav { bottom: max(10px, env(safe-area-inset-bottom)); }
 }
@@ -1523,6 +1526,24 @@ button, a, label, select, .nav-item, .quick-action, .primary-action,
   color: var(--brand-dark);
 }
 .trust-line p { margin: 0; font-size: 12.5px; line-height: 1.7; color: var(--muted); }
+
+/* 首页模块空态：一行说清（原来是"暂时还没有内容。" + 一张大空卡，三层重复）。
+   大空卡 .empty-state 仍留给各自的页面。 */
+.home-empty-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px dashed #dde3dc;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, .55);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+.home-empty-line .text-button { font-size: 13px; }
 
 /* ==========================================================================
    动效层（2026-09-24）
