@@ -296,8 +296,9 @@ class RescueH5ContractTests(unittest.TestCase):
         self.assertIn('id="hero-catheads" aria-hidden="true" hidden', html)
         self.assertIn("renderHeroCatHeads", script)
         self.assertIn('photoUrl(cat, "thumb")', script, "圆头像用小缩略图，别拉原图")
-        for cat_id in ("showcase-cat-00", "showcase-cat-10", "showcase-cat-08"):
-            self.assertIn(cat_id, script, "手挑的三只要留着")
+        for cat_id in ("showcase-cat-00", "showcase-cat-10", "showcase-cat-08",
+                       "showcase-cat-04", "showcase-cat-11"):
+            self.assertIn(cat_id, script, "手挑的五只要留着")
         self.assertIn("/[狗犬]/", script, "档案里的狗不能出现在首屏")
         heads = styles[styles.index(".hero-catheads {"):styles.index(".hero-cathead img {")]
         self.assertIn("pointer-events: none", heads)

@@ -1580,14 +1580,18 @@ button, a, label, select, .nav-item, .quick-action, .primary-action,
   transform-origin: 50% 30%;
 }
 .hero-cathead-1 { width: 76px; height: 76px; }
-.hero-cathead-2 { width: 52px; height: 52px; transform: translateY(-12px) rotate(-5deg); }
-.hero-cathead-3 { width: 38px; height: 38px; transform: translateY(8px) rotate(6deg); }
+.hero-cathead-2 { width: 54px; height: 54px; transform: translateY(-13px) rotate(-6deg); }
+.hero-cathead-3 { width: 46px; height: 46px; transform: translateY(6px) rotate(5deg); }
+.hero-cathead-4 { width: 38px; height: 38px; transform: translateY(-4px) rotate(-3deg); }
+.hero-cathead-5 { width: 32px; height: 32px; transform: translateY(10px) rotate(7deg); }
 /* 桌面：首屏是左右两栏，拼贴跟着右边那栏（图像）的右下角草地走 */
 @media (min-width: 721px) {
   .hero-catheads { left: calc(50% + 26px); bottom: 54px; gap: 9px; }
   .hero-cathead-1 { width: 92px; height: 92px; }
-  .hero-cathead-2 { width: 62px; height: 62px; }
-  .hero-cathead-3 { width: 44px; height: 44px; }
+  .hero-cathead-2 { width: 66px; height: 66px; }
+  .hero-cathead-3 { width: 54px; height: 54px; }
+  .hero-cathead-4 { width: 44px; height: 44px; }
+  .hero-cathead-5 { width: 36px; height: 36px; }
 }
 
 /* ==========================================================================

@@ -637,16 +637,18 @@
     });
     // 手挑过的顺序（不是按数据顺序）：圆头像里得看清脸，且和首屏草坪搭。
     //   showcase-cat-00 汤圆 —— 蓝眼睛脸部特写，当最大的那个"猫头"
-    //   showcase-cat-10 墨镜 —— 黑白正脸，中等
-    //   showcase-cat-08 年糕 —— 草丛里的长毛，背景和首屏草地一致，最小
-    var preferred = ["showcase-cat-00", "showcase-cat-10", "showcase-cat-08"];
+    //   showcase-cat-10 墨镜 —— 黑白正脸
+    //   showcase-cat-08 年糕 —— 草丛里的长毛，背景和首屏草地一致
+    //   showcase-cat-04 灰灰 —— 木地板上坐着的灰虎斑
+    //   showcase-cat-11 虎子 —— 草地里的灰白长毛（和年糕呼应）
+    var preferred = ["showcase-cat-00", "showcase-cat-10", "showcase-cat-08", "showcase-cat-04", "showcase-cat-11"];
     var picks = preferred.map(function (id) {
       return usable.filter(function (cat) { return cat.id === id; })[0];
     }).filter(Boolean);
     // 手挑的那几只不在（换库/删档）时，用其余精选猫补齐，再不行用任意有照片的猫
-    if (picks.length < 3) {
+    if (picks.length < 5) {
       usable.forEach(function (cat) {
-        if (picks.length < 3 && picks.indexOf(cat) < 0) picks.push(cat);
+        if (picks.length < 5 && picks.indexOf(cat) < 0) picks.push(cat);
       });
     }
     if (!picks.length) {
