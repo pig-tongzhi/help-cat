@@ -60,7 +60,22 @@
           <span class="hero-meadow-front" aria-hidden="true"></span>
         </section>
 
-        <section class="today-section" aria-labelledby="today-title">
+        <!-- 2026-10-08 首页收敛：原来这里是「今天」(258px) +「三件事」(523px) 两块，合计 781px，
+             现在合成一块「今天要做的」——顶部一行成果数字（原「社区救助成果」294px 压成一行），
+             中间是今天的状态卡，下面三件能立刻做的事。 -->
+        <section class="today-section today-do" aria-labelledby="today-title" data-product-section="today-actions">
+
+          <div class="today-line" data-reveal>
+            <span class="today-line-label">社区救助成果</span>
+            <span class="impact-inline" id="home-metrics-status" aria-label="社区救助成果">
+              <span><strong id="metric-rescued">0</strong> 已救助</span>
+              <span><strong id="metric-adopted">0</strong> 找到新家</span>
+              <span><strong id="metric-medical">0</strong> 医疗救助</span>
+              <span><strong id="metric-supporters">0</strong> 爱心支持</span>
+            </span>
+            <span class="module-status" id="home-metrics-note" hidden></span>
+          </div>
+
           <article class="today-card" id="today-card" data-metric-state="loading" data-reveal>
             <div class="today-main">
               <span class="section-kicker" id="today-kicker">今天</span>
@@ -76,51 +91,26 @@
               <p class="today-week-empty" id="today-week-empty" hidden>本周还没有记录，你可以是第一个。</p>
             </div>
           </article>
-        </section>
 
-        <section class="pillar-section" data-product-section="primary-actions" aria-labelledby="pillar-title">
-          <div class="pillar-heading" data-reveal>
-            <span class="section-kicker">HOW TO JOIN</span>
-            <h2 id="pillar-title">三件事，挑一件开始</h2>
-            <span class="section-rule" aria-hidden="true"></span>
-            <p>不用先注册，也不用承诺时间。看看哪一件你现在就能做。</p>
-          </div>
           <div class="primary-action-grid" data-reveal-group>
             <button class="primary-action pillar-card cat-pillar" id="home-view-cats" type="button" data-nav="cats">
               <span class="primary-action-icon cat-icon" aria-hidden="true">🐾</span>
-              <span class="primary-action-copy"><strong>查看猫咪档案</strong><small>社区里每只猫的照片、健康与时间线</small></span>
+              <span class="primary-action-copy"><strong>看猫咪档案</strong><small>照片、健康与时间线</small></span>
               <span class="pillar-go" aria-hidden="true">→</span>
             </button>
             <button class="primary-action pillar-card care-pillar" id="home-view-tasks" type="button" data-nav="tasks">
               <span class="primary-action-icon care-icon" aria-hidden="true">🩹</span>
-              <span class="primary-action-copy"><strong>查看救助任务</strong><small>看看现在需要什么帮助，领取一次行动</small></span>
+              <span class="primary-action-copy"><strong>领救助任务</strong><small>现在需要什么帮助</small></span>
               <span class="pillar-go" aria-hidden="true">→</span>
             </button>
             <button class="primary-action pillar-card feed-pillar" id="home-view-feeding" type="button" data-nav="feeding">
               <span class="primary-action-icon bowl-icon" aria-hidden="true">🍚</span>
-              <span class="primary-action-copy"><strong>定点投喂</strong><small>看看附近的喂食点，打卡记录今天的投喂</small></span>
+              <span class="primary-action-copy"><strong>去投喂打卡</strong><small>附近的喂食点</small></span>
               <span class="pillar-go" aria-hidden="true">→</span>
             </button>
           </div>
-          <div class="quick-action-grid" data-reveal-group>
-            <button class="quick-action" id="home-create-cat" type="button"><strong>为猫咪建档</strong><small>记录你遇见的小猫</small></button>
-            <button class="quick-action" id="home-contact" type="button"><strong>加入我们</strong><small>懂技术、有喂猫经验，或只是喜欢猫</small></button>
-            <button class="quick-action" id="home-my-submissions" type="button" data-nav="profile"><strong>我的提交</strong><small>查看审核进度</small></button>
-          </div>
-        </section>
 
-        <section class="impact-band" aria-labelledby="metrics-title">
-          <div class="impact-band-head" data-reveal>
-            <div><span class="section-kicker">OUR PROGRESS</span><h2 id="metrics-title">社区救助成果</h2><span class="section-rule" aria-hidden="true"></span></div>
-            <p class="impact-band-note">数字来自管理员逐条录入的真实记录，可追溯到审计日志。</p>
-          </div>
-          <div class="impact-strip metric-grid" id="home-metrics-status" data-reveal-group aria-label="社区救助成果">
-            <article class="metric-card" data-metric-state="loading"><span class="editorial-metric-icon heart-icon" aria-hidden="true">♡</span><div><strong id="metric-rescued">0</strong><small id="metric-rescued-label">已救助</small></div></article>
-            <article class="metric-card" data-metric-state="loading"><span class="editorial-metric-icon home-metric-icon" aria-hidden="true">⌂</span><div><strong id="metric-adopted">0</strong><small id="metric-adopted-label">找到新家</small></div></article>
-            <article class="metric-card" data-metric-state="loading"><span class="editorial-metric-icon rescue-icon" aria-hidden="true">♧</span><div><strong id="metric-medical">0</strong><small id="metric-medical-label">医疗救助</small></div></article>
-            <article class="metric-card" data-metric-state="loading"><span class="editorial-metric-icon support-icon" aria-hidden="true">◎</span><div><strong id="metric-supporters">0</strong><small id="metric-supporters-label">爱心支持</small></div></article>
-          </div>
-          <p class="module-status" id="home-metrics-note" hidden></p>
+          <p class="today-extra"><button class="text-button" type="button" id="home-contact">加入我们<span aria-hidden="true"> →</span></button><span class="today-extra-note">懂技术、有喂猫经验，或只是喜欢猫</span></p>
         </section>
 
         <div class="reference-content-grid home-editorial-grid">
@@ -137,23 +127,12 @@
           </section>
         </div>
 
-        <section class="feeding-teaser" aria-labelledby="home-feeding-title">
-          <div class="section-title">
-            <div><span class="section-kicker">DAILY FEEDING</span><h2 id="home-feeding-title">附近的喂食点</h2></div>
-            <button class="text-button" type="button" data-nav="feeding">全部喂食点 <span>→</span></button>
-          </div>
-          <p class="module-status" id="home-feeding-status" hidden></p>
-          <div class="feeding-list" id="home-feeding"><div class="skeleton row-skeleton"></div></div>
-        </section>
+        <!-- 2026-10-08 收敛：原「附近的喂食点」预览块（298px）删除。
+             投喂在底部导航有独立 tab，首页再放一份只是重复占屏。 -->
 
-        <section class="trust-panel" data-product-section="trust" aria-labelledby="trust-title">
-          <span class="section-kicker">WHY TRUST US</span>
-          <h2 id="trust-title">我们怎么保证真实</h2>
-          <div class="trust-grid">
-            <article><span class="trust-icon" aria-hidden="true">隐</span><h3>隐私保护</h3><p>精确坐标、联系方式和未经确认的医疗信息不会公开。</p></article>
-            <article><span class="trust-icon" aria-hidden="true">审</span><h3>社区审核</h3><p>居民提交的档案和小区建议，都由管理员人工审核后才公开。</p></article>
-            <article><span class="trust-icon" aria-hidden="true">溯</span><h3>来源可追溯</h3><p>每一次审核、公开、归档和赋权都写入审计日志。</p></article>
-          </div>
+        <section class="trust-line" aria-labelledby="trust-title">
+          <h2 id="trust-title">隐私保护 · 社区审核 · 来源可追溯</h2>
+          <p>精确坐标与联系方式不公开；居民提交的档案和小区建议由管理员人工审核后才公开；每次审核、公开、归档都写入审计日志。</p>
         </section>
 
       </section>

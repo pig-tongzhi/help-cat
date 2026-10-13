@@ -29,14 +29,21 @@ class ProductH5ContractTests(unittest.TestCase):
             self.assertIn("<span>%s</span>" % label, nav)
 
     def test_home_entry_cards_cover_the_three_pillars(self):
+        """2026-10-08 收敛后的首页入口：三件能立刻做的事 + 一条留资入口。
+
+        原来的 `quick-action-grid`（为猫咪建档 / 加入我们 / 我的提交）三张卡：
+        建档交给悬浮按钮、我的提交在「我的」页，只留「加入我们」一条文字链。
+        """
         html = self.h5()
         for marker in (
-            "招同行人", 'id="home-create-cat"', 'id="home-view-feeding"',
-            'id="home-view-tasks"', 'id="home-view-cats"', 'id="home-contact"',
+            "招同行人", 'id="home-view-feeding"', 'id="home-view-tasks"',
+            'id="home-view-cats"', 'id="home-contact"', 'id="floating-add-cat"',
         ):
             self.assertIn(marker, html)
-        for pillar in ("定点投喂", "查看救助任务", "加入我们"):
+        for pillar in ("去投喂打卡", "领救助任务", "看猫咪档案", "加入我们"):
             self.assertIn(pillar, html)
+        self.assertNotIn('id="home-create-cat"', html, "建档入口只剩悬浮按钮")
+        self.assertNotIn('class="quick-action-grid"', html, "三张快捷卡已收敛")
 
     def test_metrics_say_accumulating_instead_of_a_fake_zero(self):
         html, script = self.h5(), self.script()
@@ -215,14 +222,19 @@ class ProductH5ContractTests(unittest.TestCase):
         self.assertIn("button.dataset.nav === state.view", script)
 
     def test_archive_and_tasks_lead_above_the_cat_creation_form(self):
+        """猫咪档案与救助任务要排在任何「建档」入口之前。
+
+        2026-10-08 收敛：首页那三张快捷卡（建档 / 加入我们 / 我的提交）合并掉了，
+        建档入口只剩悬浮按钮 `floating-add-cat`，「我的提交」在「我的」页。
+        """
         html = self.h5()
-        # 猫咪档案与救助任务要是最显眼的两个入口，且必须排在「为猫咪建档」（表单入口）之前
-        form = html.index('id="home-create-cat"')
-        self.assertLess(html.index('id="home-view-cats"'), form, "查看猫咪档案要排在建档表单之前")
-        self.assertLess(html.index('id="home-view-tasks"'), form, "查看救助任务要排在建档表单之前")
-        pillars = html[html.index('class="primary-action-grid"'):html.index('class="quick-action-grid"')]
+        form = html.index('id="floating-add-cat"')
+        self.assertLess(html.index('id="home-view-cats"'), form, "看猫咪档案要排在建档入口之前")
+        self.assertLess(html.index('id="home-view-tasks"'), form, "领救助任务要排在建档入口之前")
+        pillars = html[html.index('class="primary-action-grid"'):html.index('id="home-contact"')]
         self.assertIn('id="home-view-cats"', pillars)
         self.assertIn('id="home-view-tasks"', pillars)
+        self.assertIn('id="home-view-feeding"', pillars)
 
     def test_the_77_story_page_and_welcome_entry_are_offline(self):
         """2026-10-08 起「77 的故事」和「欢迎页」先下线：首页与导航都不该再有入口。
@@ -330,14 +342,15 @@ class ProductH5ContractTests(unittest.TestCase):
 
     def test_motion_hooks_exist_on_the_home_view(self):
         html = self.h5()
-        for marker in ("data-reveal", "data-reveal-group", "section-rule"):
+        for marker in ("data-reveal", "data-reveal-group"):
             self.assertIn(marker, html)
         # 首屏入场刻意不写标记：hero 的标签与标题被别的契约测试按精确字符串钉着，
         # 依靠 .editorial-hero-copy 的子元素顺序（nth-child）分层，see styles.css
         self.assertEqual('<h1 id="home-title">让每一只小猫，<br>都被认真看见</h1>' in html, True)
         self.assertNotIn("data-enter", html)
-        # 三处卡片组逐个落位：主操作、快捷操作、数据条
-        self.assertEqual(3, html.count("data-reveal-group"))
+        # 2026-10-08 收敛后只剩一处卡片组（三件能立刻做的事）：
+        # 快捷卡组与数据条都并进了「今天要做的」，数据条改成一行文字不再逐张揭示
+        self.assertEqual(1, html.count("data-reveal-group"))
 
     def test_motion_reveal_trigger_does_not_shrink_the_viewport(self):
         """曾经的事故：观察器用了 rootMargin: "0px 0px -10% 0px"，

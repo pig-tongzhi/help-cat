@@ -312,11 +312,12 @@ class RescueH5ContractTests(unittest.TestCase):
         for marker in (
             'class="desktop-nav"',
             'class="mobile-menu-button"',
-            'class="editorial-metric-icon',
             'class="reference-content-grid home-editorial-grid"',
             '<h2>猫咪档案</h2>',
             '<h2>救助任务</h2>',
-            'class="metric-card"',
+            # 2026-10-08 收敛：数据条的卡片阵列换成一行 `.impact-inline`
+            'class="impact-inline"',
+            'class="today-line"',
         ):
             self.assertIn(marker, html)
         for marker in (
@@ -335,7 +336,7 @@ class RescueH5ContractTests(unittest.TestCase):
         script = (ROOT / "app" / "rescue" / "app.js").read_text(encoding="utf-8")
         styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
         for marker in (
-            'class="reference-hero editorial-hero"', 'class="impact-strip metric-grid"',
+            'class="reference-hero editorial-hero"', 'class="impact-inline"',
             'class="reference-content-grid home-editorial-grid"',
             'id="metric-rescued"', 'id="metric-adopted"', 'id="metric-medical"',
             'id="metric-supporters"', "已救助", "找到新家", "医疗救助", "爱心支持",
@@ -382,7 +383,11 @@ class RescueH5ContractTests(unittest.TestCase):
             'api.request("/api/v1/public/metrics")',
             'state.metrics.status = "ready"',
             'state.metrics.status = "error"',
-            'amount === 0 ? "正在积累" : formatMetric(amount)',
+            # 2026-10-08 首页收敛：数据条变成一行，0 的类别整格隐藏（不再逐格写"正在积累"，
+            # 否则一行里重复四遍）；全是 0 时整条隐藏，由下面那句 note 统一说明。
+            'value.textContent = formatMetric(amount)',
+            "数字正在积累",
+            'strip.hidden = state.metrics.status === "ready" && total === 0',
             'value.setAttribute("aria-label", definition.label + "暂时无法获取")',
             'new Intl.NumberFormat("zh-CN")',
             "return String(value)",
@@ -635,16 +640,15 @@ class RescueH5ContractTests(unittest.TestCase):
         script = (ROOT / "app" / "rescue" / "app.js").read_text(encoding="utf-8")
         for marker in (
             'data-product-section="home-hero"',
-            'data-product-section="primary-actions"',
+            'data-product-section="today-actions"',
             'data-product-section="cat-preview"',
             'data-product-section="task-preview"',
-            'data-product-section="trust"',
-            'id="home-create-cat"',
             'id="home-view-tasks"',
             'id="home-view-cats"',
             "让每一只小猫，",
-            "为猫咪建档",
-            "查看救助任务",
+            # 2026-10-08 收敛：建档入口只剩悬浮按钮（文案是「猫咪建档」，不再是快捷卡里的「为猫咪建档」）
+            "猫咪建档",
+            "领救助任务",
             "隐私保护",
             "社区审核",
         ):

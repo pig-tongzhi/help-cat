@@ -1470,6 +1470,60 @@ button, a, label, select, .nav-item, .quick-action, .primary-action,
 .button.secondary { border: 0; background: #F5F5F7; }
 .button.secondary:hover { background: #ECECEF; }
 
+/* ---------- 首页收敛（2026-10-08）------------------------------------------
+   原来「今天」+「三件事」+「成果」+「喂食点」+「信任」五块合计约 1880px，
+   现在压成：一行成果数字 + 今天的状态卡 + 三件能立刻做的事 + 一行信任说明。
+   这几条必须留在"动效层"之前 —— 动效层依赖级联顺序。 */
+
+.today-do { display: grid; gap: 16px; padding-top: 18px; }
+
+/* 成果数字：从 294px 的卡片阵列压成一行，跟着首屏走 */
+.today-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 12px;
+  padding: 2px 2px 0;
+}
+.today-line-label { font-size: 12px; letter-spacing: .08em; color: var(--muted); }
+.impact-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.impact-inline strong {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-right: 2px;
+}
+/* 数字还没回来时不要闪一排 0 */
+.impact-inline[data-module-state="loading"] { opacity: .45; }
+
+/* 「加入我们」保留成一行文字链（原来是三张快捷卡里的一张） */
+.today-extra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  padding: 0 2px;
+}
+.today-extra-note { font-size: 12.5px; color: var(--muted); }
+
+/* 信任说明：从 510px 的三张卡折成两行正文 */
+.trust-line { padding: 6px 2px 4px; }
+.trust-line h2 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  color: var(--brand-dark);
+}
+.trust-line p { margin: 0; font-size: 12.5px; line-height: 1.7; color: var(--muted); }
+
 /* ==========================================================================
    动效层（2026-09-24）
    参考取向：Apple 产品页的首屏分层入场、Linear / Vercel 那种克制的滚动揭示、

@@ -14,7 +14,6 @@
     metrics: { status: "loading", values: null },
     publicDataStatus: { cats: "loading", tasks: "loading", communities: "loading", metrics: "loading" },
     feedingPoints: [],
-    homeFeeding: [],
     myFeedingSummary: null,
     shifts: null,
     shiftIndex: {},
@@ -396,19 +395,20 @@
     var total = 0;
     definitions.forEach(function (definition) {
       var value = byId("metric-" + definition.key);
-      var label = byId("metric-" + definition.key + "-label");
-      value.closest(".metric-card").dataset.metricState = state.metrics.status;
-      label.textContent = definition.label;
+      if (!value) return;
       if (state.metrics.status === "ready") {
         var amount = state.metrics.values[definition.key];
         total += amount;
-        value.textContent = amount === 0 ? "正在积累" : formatMetric(amount);
+        // 紧凑的一行展示：只保留有数字的类别。0 的整格隐藏，避免一行里重复四遍"正在积累"；
+        // 全是 0 时整条隐藏，由下面那句 note 统一说明。
+        if (value.parentNode) value.parentNode.hidden = amount === 0;
+        value.textContent = formatMetric(amount);
         // 第一次拿到真实数字时从 0 跳上去；之后刷新直接给结果，避免每次轮询都跳
         if (amount > 0 && motionEnabled() && !state.metrics.counted) animateMetricNumber(value, amount);
-        // 占位文案用小字样式，避免和真实数字一样抢眼
-        value.classList.toggle("is-placeholder", amount === 0);
+        value.classList.remove("is-placeholder");
         value.setAttribute("aria-label", definition.label + " " + formatMetric(amount));
       } else {
+        if (value.parentNode) value.parentNode.hidden = false;
         value.textContent = "—";
         value.classList.toggle("is-placeholder", true);
         if (state.metrics.status === "error") value.setAttribute("aria-label", definition.label + "暂时无法获取");
@@ -417,6 +417,8 @@
     });
     if (state.metrics.status === "ready") state.metrics.counted = true;
     renderHomeModuleState("metrics", state.metrics.status);
+    var strip = byId("home-metrics-status");
+    if (strip) strip.hidden = state.metrics.status === "ready" && total === 0;
     var note = byId("home-metrics-note");
     if (!note) return;
     if (state.metrics.status === "error") {
@@ -424,7 +426,7 @@
       note.hidden = false;
       note.classList.add("error");
     } else if (state.metrics.status === "ready" && total === 0) {
-      note.textContent = "这些数字来自管理员录入的真实救助记录，目前还没有录入，所以先显示「正在积累」。";
+      note.textContent = "还没有录入救助记录，数字正在积累 —— 每一条都由管理员逐条录入。";
       note.hidden = false;
       note.classList.remove("error");
     } else {
@@ -538,7 +540,6 @@
 
   function loadPublicData() {
     ["cats", "tasks", "communities"].forEach(function (module) { renderHomeModuleState(module, "loading"); });
-    loadHomeFeeding();
     return Promise.all([
       api.request("/api/v1/communities?limit=24"),
       api.request("/api/v1/cats?limit=24"),
@@ -682,11 +683,14 @@
   function renderCats() {
     var cats = catsForDisplay(filteredCats());
     var ordered = catsForDisplay(state.cats);
-    var homeCats = ordered.slice(0, 4);
-    var storyIndex = ordered.findIndex(function (cat) { return cat.profile_key === "story-77"; });
-    if (storyIndex > 0) {
-      homeCats = [ordered[storyIndex]].concat(ordered.filter(function (_, index) { return index !== storyIndex; })).slice(0, 4);
-    }
+    // 首页预览只出「有照片」的猫：首屏最显眼的位置摆一排"暂无照片"最像没做完。
+    // 全都没照片时才退回原顺序，避免整块空掉。
+    var withPhoto = ordered.filter(function (cat) { return cat.photo_asset_id; });
+    var pool = withPhoto.length ? withPhoto : ordered;
+    var storyIndex = pool.findIndex(function (cat) { return cat.profile_key === "story-77"; });
+    var homeCats = storyIndex > 0
+      ? [pool[storyIndex]].concat(pool.filter(function (_, index) { return index !== storyIndex; })).slice(0, 4)
+      : pool.slice(0, 4);
     // 服务端只返回一页，因此这里说"已显示"而不是伪造总数。
     byId("cat-result-count").textContent = "已显示 " + cats.length + " 只已审核猫咪" + (state.cursors.cats ? "（还有更多，可加载下一页）" : "");
     byId("home-cats").innerHTML = homeCats.length ? homeCats.map(catCard).join("") : emptyCard("还没有公开档案", "登录后可以提交第一只社区猫咪。");
@@ -995,7 +999,6 @@
       state.shiftIndex = index;
       renderShiftGrid();
       renderFeeding();
-      renderHomeFeeding();
     }).catch(function () {
       state.shifts = null;
       state.shiftIndex = {};
@@ -1221,7 +1224,7 @@
     }).then(function () {
       toast("打卡成功，谢谢你的投喂");
       return Promise.all([
-        loadFeedingPoints(false), loadFeedingStats(), loadMyFeedingLogs(), loadHomeFeeding(),
+        loadFeedingPoints(false), loadFeedingStats(), loadMyFeedingLogs(),
         loadFeedingSummary(), loadShifts()
       ]);
     }).then(function () { return true; }).catch(function (error) {
@@ -1238,8 +1241,7 @@
   // 注意：后端对同一人同一点同一天只保留首次记录，所以详情必须在首次打卡时提交。
   function openFeedSheet(pointId) {
     if (!requireLogin()) return;
-    var point = (state.feedingPoints || []).find(function (item) { return item.id === pointId; }) ||
-                (state.homeFeeding || []).find(function (item) { return item.id === pointId; });
+    var point = (state.feedingPoints || []).find(function (item) { return item.id === pointId; });
     if (!point) return;
     state.activePoint = point;
     byId("feed-sheet-intro").textContent = point.name;
@@ -1315,29 +1317,6 @@
   }
 
   // 首页的喂食点速览：单独一份数据，避免与投喂页的分页列表互相覆盖
-  function loadHomeFeeding() {
-    // 与投喂页保持一致：今天还没人喂的排前面
-    return api.request("/api/v1/feeding-points?limit=3&sort=today").then(function (payload) {
-      state.homeFeeding = payload.items || [];
-      renderHomeFeeding();
-      renderHomeModuleState("feeding", state.homeFeeding.length ? "ready" : "empty");
-    }).catch(function () {
-      state.homeFeeding = [];
-      renderHomeFeeding();
-      renderHomeModuleState("feeding", "error");
-    });
-  }
-
-  function renderHomeFeeding() {
-    var target = byId("home-feeding");
-    if (!target) return;
-    target.innerHTML = state.homeFeeding.length
-      ? state.homeFeeding.slice(0, 3).map(feedingPointCard).join("")
-      : emptyCard("还没有喂食点", "管理员发布喂食点后，这里就能打卡记录投喂。");
-  }
-
-  // ---- 任务闭环 -------------------------------------------------------
-
   function loadMyTasks() {
     if (!state.user) { state.myTasks = []; renderMyTasks(); return Promise.resolve(); }
     return api.request("/api/v1/tasks/mine?limit=24").then(function (payload) {
@@ -1904,7 +1883,6 @@
   });
 
   // #profile-button 自带 data-nav="profile"，交给上面的委托统一处理，避免重复 pushState。
-  byId("home-create-cat").addEventListener("click", openCatSheet);
   byId("home-contact").addEventListener("click", openContactSheet);
   byId("contact-form").addEventListener("submit", submitContact);
   byId("task-form").addEventListener("submit", submitTaskReport);
