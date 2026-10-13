@@ -1576,19 +1576,20 @@ button, a, label, select, .nav-item, .quick-action, .primary-action,
   transform: scale(1.22);
   transform-origin: 50% 30%;
 }
-/* 手机：77 的脸在中上部，猫头一律贴左右边缘、往下放，别压到它的脸 */
-.hero-cathead-1 { width: 80px; height: 80px; left: 4%; top: 54%; transform: rotate(-6deg); }
-.hero-cathead-2 { width: 68px; height: 68px; right: 4%; top: 60%; transform: rotate(5deg); }
-.hero-cathead-3 { width: 60px; height: 60px; left: 6%; top: 74%; transform: rotate(-3deg); }
-.hero-cathead-4 { width: 52px; height: 52px; right: 8%; top: 82%; transform: rotate(4deg); }
-.hero-cathead-5 { width: 44px; height: 44px; left: 22%; top: 88%; transform: rotate(-8deg); }
+/* 手机：77 的脸在中上部，猫头一律贴左右边缘、往下放，别压到它的脸。
+   2026-10-14 用户要求"再大一点"，从 80/68/60/52/44 提到 96/84/74/64/54。 */
+.hero-cathead-1 { width: 96px; height: 96px; left: 2%; top: 52%; transform: rotate(-6deg); }
+.hero-cathead-2 { width: 84px; height: 84px; right: 2%; top: 58%; transform: rotate(5deg); }
+.hero-cathead-3 { width: 74px; height: 74px; left: 4%; top: 72%; transform: rotate(-3deg); }
+.hero-cathead-4 { width: 64px; height: 64px; right: 4%; top: 80%; transform: rotate(4deg); }
+.hero-cathead-5 { width: 54px; height: 54px; left: 16%; top: 88%; transform: rotate(-8deg); }
 /* 桌面是左右两栏：全部留在右边那一栏（图像）里，别压到左边的文案 */
 @media (min-width: 721px) {
-  .hero-cathead-1 { width: 104px; height: 104px; left: 53%; top: 8%; }
-  .hero-cathead-2 { width: 84px; height: 84px; right: 4%; top: 32%; }
-  .hero-cathead-3 { width: 76px; height: 76px; left: 54%; top: 60%; }
-  .hero-cathead-4 { width: 62px; height: 62px; right: 6%; top: 76%; }
-  .hero-cathead-5 { width: 54px; height: 54px; left: 68%; top: 86%; }
+  .hero-cathead-1 { width: 124px; height: 124px; left: 52%; top: 6%; }
+  .hero-cathead-2 { width: 104px; height: 104px; right: 3%; top: 30%; }
+  .hero-cathead-3 { width: 92px; height: 92px; left: 53%; top: 58%; }
+  .hero-cathead-4 { width: 78px; height: 78px; right: 4%; top: 74%; }
+  .hero-cathead-5 { width: 66px; height: 66px; left: 66%; top: 86%; }
 }
 
 /* ==========================================================================
