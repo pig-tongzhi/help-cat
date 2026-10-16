@@ -59,7 +59,7 @@ class RescueH5ContractTests(unittest.TestCase):
         html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
         self.assertIn("assets/77/cat-cutout.webp", html)
         self.assertIn(
-            '<img src="assets/77/cat-cutout.webp?v=20260923-product-r35" alt="77，一只白底黑斑的猫咪" width="760" height="851"',
+            '<img src="assets/77/cat-cutout.webp?v=20260923-product-r36" alt="77，一只白底黑斑的猫咪" width="760" height="851"',
             html,
         )
 
@@ -93,9 +93,9 @@ class RescueH5ContractTests(unittest.TestCase):
         page = (ROOT / "app/rescue/index.html").read_text()
         for marker in (
             '<meta name="theme-color" content="#F7F5F1">',
-            'rel="icon" href="assets/brand/favicon.svg?v=20260923-product-r35"',
-            'rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png?v=20260923-product-r35"',
-            'rel="manifest" href="manifest.webmanifest?v=20260923-product-r35"',
+            'rel="icon" href="assets/brand/favicon.svg?v=20260923-product-r36"',
+            'rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png?v=20260923-product-r36"',
+            'rel="manifest" href="manifest.webmanifest?v=20260923-product-r36"',
             'class="brand-logo brand-logo-77"',
         ):
             self.assertIn(marker, page)
@@ -109,7 +109,7 @@ class RescueH5ContractTests(unittest.TestCase):
     def test_brand_uses_one_77_master_across_all_surfaces(self):
         page = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
         manifest = json.loads((ROOT / "app" / "rescue" / "manifest.webmanifest").read_text(encoding="utf-8"))
-        version = "20260923-product-r35"
+        version = "20260923-product-r36"
         master = "assets/brand/helpcat-77-mark.svg?v=" + version
 
         self.assertRegex(
@@ -566,7 +566,7 @@ class RescueH5ContractTests(unittest.TestCase):
         version_script = (ROOT / "app" / "rescue" / "version.js").read_text(encoding="utf-8")
         styles = (ROOT / "app" / "rescue" / "styles.css").read_text(encoding="utf-8")
         for marker in (
-            'data-app-version="20260923-product-r35"',
+            'data-app-version="20260923-product-r36"',
             'id="version-update"',
             'id="reload-version"',
         ):
@@ -577,7 +577,7 @@ class RescueH5ContractTests(unittest.TestCase):
             'fetchPage(path, { cache: "no-store" })',
             "if (!response.ok)",
             "if (match && match[1] !== current)",
-            'CURRENT_VERSION = "20260923-product-r35"',
+            'CURRENT_VERSION = "20260923-product-r36"',
             "current: CURRENT_VERSION",
         ):
             self.assertIn(marker, version_script)
@@ -595,7 +595,7 @@ class RescueH5ContractTests(unittest.TestCase):
 
     def test_rescue_assets_are_versioned_in_dependency_order(self):
         html = (ROOT / "app" / "rescue" / "index.html").read_text(encoding="utf-8")
-        version = "20260923-product-r35"
+        version = "20260923-product-r36"
         for asset in ("styles.css", "api.js", "community-form.js", "version.js", "app.js"):
             self.assertIn(f'{asset}?v={version}', html)
         api_index = html.index(f'api.js?v={version}')
