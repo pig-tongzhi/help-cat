@@ -10,10 +10,18 @@ name: uptime
 #   * 高峰期会延迟几分钟到十几分钟，所以判定标准是「连续失败」而不是「准时」；
 #   * 仓库连续 60 天没有提交活动时，GitHub 会自动停掉 schedule 并提前发邮件提醒。
 #     真停了的话在 Actions 页面点一次 Enable 就能恢复。
+#
+# ⚠️ 2026-10-28 修：后台入口（/help-cat/admin/）在 HTTP 上**故意** 301 到 HTTPS
+#    （nginx：管理后台强制 HTTPS，密码只在加密链路里出现）。旧探针一律要求 200，
+#    于是每 15 分钟失败一次、GitHub 天天发失败邮件。现在按真实行为验：
+#      H5      HTTP 直接 200（不跳转）
+#      后台    HTTP 必须 301 且 Location 指向 https://（安全特性还在）
+#              跟随跳转后最终必须 200（页面真的能打开、证书能校验）
+#    顺手把频率从每 15 分钟降到每 30 分钟：外部探针没必要这么密，减少噪音与流量。
 
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "*/30 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -25,7 +33,7 @@ jobs:
     timeout-minutes: 5
     steps:
       # 只为比对「线上静态资源版本 vs 仓库里的版本」，探测本身不需要仓库内容。
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: 后端 readiness（含真实数据库查询）
         run: |
@@ -37,14 +45,35 @@ jobs:
           echo "$body" | grep -q '"database":"ok"' || {
             echo "::error::readiness 没有报告 database=ok"; exit 1; }
 
-      - name: 两套静态入口
+      - name: H5 入口（HTTP 应直接 200）
         run: |
           set -euo pipefail
-          for path in /help-cat/rescue/index.html /help-cat/admin/; do
-            code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "http://175.178.41.19$path")"
-            echo "$code $path"
-            [ "$code" = "200" ] || { echo "::error::$path 返回 $code"; exit 1; }
-          done
+          path=/help-cat/rescue/index.html
+          code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "http://175.178.41.19$path")"
+          echo "$code $path"
+          [ "$code" = "200" ] || { echo "::error::$path 返回 ${code}（期望 200）"; exit 1; }
+
+      - name: 后台入口（HTTP 必须 301 到 HTTPS，跟随跳转后 200）
+        run: |
+          set -euo pipefail
+          base="http://175.178.41.19"
+          path=/help-cat/admin/
+          headers="$(curl -sS -o /dev/null -D - --max-time 15 "$base$path")" || {
+            echo "::error::$base$path 请求失败"; exit 1; }
+          code="$(printf '%s' "$headers" | head -1 | awk '{print $2}')"
+          loc="$(printf '%s' "$headers" | tr -d '\r' | sed -n 's/^[Ll]ocation: *//p' | head -1)"
+          echo "HTTP 状态=$code Location=$loc"
+          [ "$code" = "301" ] || {
+            echo "::error::后台在 HTTP 上应 301 到 HTTPS，实际 $code —— 检查 nginx 的后台强制 HTTPS 规则是否还在"
+            exit 1; }
+          case "$loc" in
+            https://*) ;;
+            *) echo "::error::后台 301 的目标不是 https：$loc"; exit 1 ;;
+          esac
+          final="$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 20 "$base$path")"
+          echo "跟随跳转后=$final"
+          [ "$final" = "200" ] || {
+            echo "::error::后台跟随跳转后返回 ${final}（期望 200，含证书校验）"; exit 1; }
 
       - name: 静态版本号与仓库一致
         run: |
